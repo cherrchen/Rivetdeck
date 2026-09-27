@@ -44,7 +44,10 @@ describe('bundled Desktop plugin startup', () => {
       const runtime = discoverRuntimePluginDirectories(appPath)
       const npmRuntime = discoverRuntimePluginPackages(appPath)
       const ecosystem = discoverEcosystemPluginPackages(appPath)
-      expect(runtime.map(plugin => plugin.name)).toContain('@dsh-electron/dsh-electron-desktop-capabilities')
+      expect(runtime.map(plugin => plugin.name).sort()).toEqual([
+        '@dsh-electron/dsh-electron-desktop-capabilities',
+        '@dsh-electron/dsh-electron-network-subprocess',
+      ])
       expect(npmRuntime.map(plugin => plugin.name)).toEqual(['@dsh-electron/dsh-theme-studio'])
       expect(ecosystem.map(plugin => plugin.name)).toEqual(['@dsh-electron/dsh-plugin-git'])
       ensureRuntimePluginsLinked(appPath, harnessHome)
@@ -55,7 +58,8 @@ describe('bundled Desktop plugin startup', () => {
       const patch = readFileSync(join(appPath, 'runtime', 'host.patch.yml'), 'utf8')
       expect(patch).not.toContain('desktop-git')
       expect(patch).not.toContain("name: '@dsh-electron/dsh-plugin-git'")
-      expect(patch).toContain("name: '@dsh-electron/dsh-electron-ui-desktop-plugins'")
+      expect(patch).toContain("name: '@dsh-electron/dsh-electron-desktop-capabilities'")
+      expect(patch).not.toContain('desktop-ui-plugins')
       expect(patch).not.toContain('cordis:include')
     } finally {
       rmSync(harnessHome, { recursive: true, force: true })

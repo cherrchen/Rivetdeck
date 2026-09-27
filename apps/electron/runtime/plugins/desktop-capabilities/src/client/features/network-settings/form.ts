@@ -1,6 +1,6 @@
 import type {
   DesktopNetworkConfigInput, DesktopNetworkMode, DesktopNetworkState,
-} from '@dsh-electron/dsh-electron-desktop-capabilities/client'
+} from '../../contract.ts'
 
 /** Browser-only edit buffer; the saved password never enters it. */
 export interface NetworkDraft {

@@ -1,12 +1,18 @@
 // @vitest-environment jsdom
 import { Context } from '@deepseek-ai/cordis'
+import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { describe, expect, it } from 'vitest'
 import {
+  apply,
   createDesktopCapabilities,
   requireDesktopBridge,
   type DesktopCapabilitiesContract,
-} from '../runtime/plugins/desktop-capabilities/src/client/contract.ts'
+} from '../runtime/plugins/desktop-capabilities/src/client/index.ts'
 import { DesktopCapabilitiesService } from '../runtime/plugins/desktop-capabilities/src/client/service.ts'
+import {
+  apply as directoryPickerApply,
+  inject as directoryPickerInject,
+} from '../runtime/plugins/desktop-capabilities/src/client/features/directory-picker/index.ts'
 
 describe('desktop capability provider contract', () => {
   it('fails clearly when the preload bridge is unavailable', () => {
@@ -103,5 +109,41 @@ describe('desktop capability provider contract', () => {
     if (desktop === undefined) throw new Error('desktop capability service was not registered')
     await expect(desktop.dialog.pickDirectory()).rejects.toThrow(/window\.deepseekDesktop is unavailable/)
     await expect(desktop.app.relaunch()).rejects.toThrow(/window\.deepseekDesktop is unavailable/)
+  })
+
+  it('provides ctx.desktop from the composition root before feature injects settle', async () => {
+    const ctx = new Context()
+    await ctx.plugin({ apply }).await()
+    const desktop = ctx.get('desktop')
+    if (desktop === undefined) throw new Error('desktop capability service was not registered')
+    expect(ctx.get('slots')).toBeUndefined()
+  })
+})
+
+describe('directory-picker feature', () => {
+  it('registers both directory-flow slots and releases them on dispose', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SlotRegistry).await()
+    ctx.provide('desktop', {
+      dialog: { pickDirectory: async () => ({ path: '/tmp' }) },
+    })
+    const slots = ctx.get('slots')
+    if (slots === undefined) throw new Error('slot registry was not registered')
+    slots.register({
+      name: 'root',
+      children: {
+        'conversation.hero.workspace.directoryFlow': { kind: 'single', scope: 'root' },
+        'sidebar.workspaces.directoryFlow': { kind: 'single', scope: 'root' },
+      },
+    } as never, () => null)
+    const fiber = await ctx.plugin({
+      inject: [...directoryPickerInject],
+      apply: directoryPickerApply,
+    }).await()
+    expect(slots.entries('conversation.hero.workspace.directoryFlow')).toHaveLength(1)
+    expect(slots.entries('sidebar.workspaces.directoryFlow')).toHaveLength(1)
+    await fiber.dispose()
+    expect(slots.entries('conversation.hero.workspace.directoryFlow')).toHaveLength(0)
+    expect(slots.entries('sidebar.workspaces.directoryFlow')).toHaveLength(0)
   })
 })

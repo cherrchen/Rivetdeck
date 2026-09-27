@@ -343,15 +343,15 @@ src/ownership-overlay.ts   suppress foreign overlay rows then insert canonical n
 
 Startup validates and links every discovered plugin from those three sources into `$DSH_HOME/profiles/node_modules/<package-name>` and `$DSH_HOME/profiles/web/node_modules/<package-name>` before the supervised Host starts. `host.patch.yml` mounts required Desktop plugins. Ecosystem plugins such as Git are seeded into the web profile. The upstream Web profile manages enablement for those bundles and for subsequently installed plugins ([plugin lifecycle](plugin-lifecycle.md)).
 
-The Desktop Capability Provider (`@dsh-electron/dsh-electron-desktop-capabilities`) adapts `window.deepseekDesktop` into `ctx.desktop` for feature plugins. Only renderer infrastructure and the provider read the global bridge directly.
+The Desktop Capabilities package (`@dsh-electron/dsh-electron-desktop-capabilities`) is the Desktop Client composition root. It adapts `window.deepseekDesktop` into `ctx.desktop` and mounts internal feature plugins. Only renderer infrastructure and this package read the global bridge directly.
 
-The directory picker (`@dsh-electron/dsh-electron-ui-directory-picker`) is the first feature-plugin consumer: it fills workspace directory-flow slots and calls `ctx.desktop.dialog.pickDirectory()`.
+The directory-picker feature fills workspace directory-flow slots and calls `ctx.desktop.dialog.pickDirectory()`.
 
-The brand plugin (`@dsh-electron/dsh-electron-ui-brand`) always fills `sidebar.brand.mark`, `sidebar.brand.name`, and `conversation.hero.brand.mark` with DeepSeek Harness artwork, so Desktop does not depend on the upstream `DSH_CLIENT_BUILD_PROFILE=official` client build for product branding.
+The brand feature always fills `sidebar.brand.mark`, `sidebar.brand.name`, and `conversation.hero.brand.mark` with DeepSeek Harness artwork, so Desktop does not depend on the upstream `DSH_CLIENT_BUILD_PROFILE=official` client build for product branding.
 
 The upstream Web bundle provides plugin management in its Plugins UI and agent tool. Electron Main supplies bundled pnpm on the supervised Host `PATH`; package operations remain with the upstream profile manager.
 
-The [Network Settings page](network-settings.md) is a required Desktop client plugin. It contributes a top-level `settings.section` entry and uses `ctx.desktop.network` for configuration, sanitized diagnostics, and connection tests; Main owns the policy, secrets, and restart. The native failure dialog can open this section without changing the selected route.
+The [Network Settings page](network-settings.md) is an internal Desktop Client feature. It contributes a top-level `settings.section` entry and uses `ctx.desktop.network` for configuration, sanitized diagnostics, and connection tests; Main owns the policy, secrets, and restart. The native failure dialog can open this section without changing the selected route.
 
 Git (`@dsh-electron/dsh-plugin-git@0.2.3`) is a bundled ecosystem plugin installed only from npm. Its client occupies `ctx.sidebarRight` / `sidebarRightTabs` and is listed in `dshElectron.ecosystemPlugins`. Desktop seeds it into the shared web profile so the Plugins page shows it in Installed, where Enable and Disable persist.
 
@@ -618,9 +618,9 @@ Downstream plugin ownership is split by runtime requirement:
 
 ```text
 apps/electron/runtime/plugins/
-├─ desktop-capabilities/          infrastructure
-├─ ui-directory-picker-electron/  Desktop-required adapter
-└─ ui-brand-electron/             Electron carrier plugin
+├─ desktop-capabilities/            Client composition root
+│  └─ src/client/features/          directory-picker, brand, network-settings, plugin-manager
+└─ desktop-network-subprocess/      independent Host provider
 
 npm registry
 ├─ @dsh-electron/dsh-theme-studio  runtime plugin (dshElectron.runtimePlugins)
@@ -668,7 +668,7 @@ The main fiber declares only portable requirements. An optional `ctx.inject(['de
 
 ### Desktop-required Adapter
 
-A Desktop-required adapter declares `desktop` as a required service and belongs under `apps/electron/runtime/plugins/`, normally with an `@dsh-electron/dsh-electron-*` package name.
+A Desktop-required Client adapter is an internal Cordis feature of `@dsh-electron/dsh-electron-desktop-capabilities`. It injects `desktop` and occupies product slots from a child fiber. It is not a separate `@dsh-electron/dsh-electron-*` Loader package. A Host-only provider such as `@dsh-electron/dsh-electron-network-subprocess` remains an independent `runtime/plugins/` package and overlay row.
 
 ### Electron-required portable DSH UI infrastructure
 
@@ -767,7 +767,7 @@ architecture and regression tests
 
 Acceptance criterion (met):
 
-A developer can add a new independent Desktop feature without editing `apps/web`, upstream core packages, `renderer/main.ts`, generic IPC, or generic infrastructure — only by adding a plugin under `runtime/plugins/` or declaring a published runtime plugin in `dshElectron.runtimePlugins`, and mounting it in `host.patch.yml`.
+A developer can add a new independent Desktop Client feature without editing `apps/web`, upstream core packages, `renderer/main.ts`, generic IPC, or generic infrastructure — by adding an internal feature under `desktop-capabilities/src/client/features/`. A new Host-only provider still adds a `runtime/plugins/` directory or a published runtime plugin in `dshElectron.runtimePlugins`, and a Loader row in `host.patch.yml`.
 
 ## 24. Optional Milestone 4 — Transport Optimization
 

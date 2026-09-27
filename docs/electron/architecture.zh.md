@@ -343,15 +343,15 @@ src/ownership-overlay.ts   suppress foreign overlay rows then insert canonical n
 
 启动时先校验这三个来源发现的每个插件，再将其链接到 `$DSH_HOME/profiles/node_modules/<package-name>` 与 `$DSH_HOME/profiles/web/node_modules/<package-name>`，然后启动受监督 Host。`host.patch.yml` 挂载必需的 Desktop 插件。Git 等 ecosystem 插件被 seed 进 web profile。这些 bundle 以及之后安装的插件由上游 Web profile 管理启用状态（[插件生命周期](plugin-lifecycle.zh.md)）。
 
-Desktop Capability Provider（`@dsh-electron/dsh-electron-desktop-capabilities`）把 `window.deepseekDesktop` 适配为 feature 插件可用的 `ctx.desktop`。只有 Renderer 基础设施与该 provider 可直接读取全局 bridge。
+Desktop Capabilities 包（`@dsh-electron/dsh-electron-desktop-capabilities`）是 Desktop Client 的 composition root。它把 `window.deepseekDesktop` 适配为 `ctx.desktop`，并挂载内部 feature 插件。只有 Renderer 基础设施与该包可直接读取全局 bridge。
 
-目录选择器（`@dsh-electron/dsh-electron-ui-directory-picker`）是首个 feature 插件消费者：填充 workspace directory-flow slot，并调用 `ctx.desktop.dialog.pickDirectory()`。
+目录选择 feature 填充 workspace directory-flow slot，并调用 `ctx.desktop.dialog.pickDirectory()`。
 
-品牌插件（`@dsh-electron/dsh-electron-ui-brand`）始终用 DeepSeek Harness 视觉填充 `sidebar.brand.mark`、`sidebar.brand.name` 与 `conversation.hero.brand.mark`，因此 Desktop 产品品牌不依赖上游 `DSH_CLIENT_BUILD_PROFILE=official` client 构建。
+品牌 feature 始终用 DeepSeek Harness 视觉填充 `sidebar.brand.mark`、`sidebar.brand.name` 与 `conversation.hero.brand.mark`，因此 Desktop 产品品牌不依赖上游 `DSH_CLIENT_BUILD_PROFILE=official` client 构建。
 
 上游 Web bundle 在 Plugins UI 和 agent tool 中提供插件管理。Electron Main 将随包 pnpm 加入受监督 Host 的 `PATH`；package 操作由上游 profile manager 执行。
 
-[网络设置页面](network-settings.zh.md) 是必需的 Desktop Client 插件。它贡献顶层 `settings.section` 条目，并通过 `ctx.desktop.network` 配置网络、读取脱敏诊断及运行连接测试；Main 持有策略、密码和重启操作。原生故障对话框可以打开此分区，而不改变已选择的路由。
+[网络设置页面](network-settings.zh.md) 是内部 Desktop Client feature。它贡献顶层 `settings.section` 条目，并通过 `ctx.desktop.network` 配置网络、读取脱敏诊断及运行连接测试；Main 持有策略、密码和重启操作。原生故障对话框可以打开此分区，而不改变已选择的路由。
 
 Git（`@dsh-electron/dsh-plugin-git@0.2.3`）是仅从 npm 安装的 bundled ecosystem 插件。其 Client 占用 `ctx.sidebarRight` / `sidebarRightTabs`，并列入 `dshElectron.ecosystemPlugins`。Desktop 把它 seed 进共享 web profile，因此 Plugins 页在 Installed 中展示它，Enable 与 Disable 在此持久保存。
 
@@ -618,9 +618,9 @@ desktop.rawIpc
 
 ```text
 apps/electron/runtime/plugins/
-├─ desktop-capabilities/          infrastructure
-├─ ui-directory-picker-electron/  Desktop-required adapter
-└─ ui-brand-electron/             Electron carrier plugin
+├─ desktop-capabilities/            Client composition root
+│  └─ src/client/features/          directory-picker, brand, network-settings, plugin-manager
+└─ desktop-network-subprocess/      independent Host provider
 
 npm registry
 ├─ @dsh-electron/dsh-theme-studio  runtime plugin (dshElectron.runtimePlugins)
@@ -668,7 +668,7 @@ Desktop
 
 ### Desktop-required Adapter
 
-Desktop-required adapter 把 `desktop` 声明为 required service，归属 `apps/electron/runtime/plugins/`，通常使用 `@dsh-electron/dsh-electron-*` package name。
+Desktop-required Client adapter 是 `@dsh-electron/dsh-electron-desktop-capabilities` 的内部 Cordis feature。它 inject `desktop`，并从子 fiber 占用产品 slot。它不是独立的 `@dsh-electron/dsh-electron-*` Loader 包。Host-only provider（如 `@dsh-electron/dsh-electron-network-subprocess`）仍是独立的 `runtime/plugins/` 包和 overlay 行。
 
 ### Electron 必需的 portable DSH UI 基础设施
 
@@ -767,7 +767,7 @@ architecture and regression tests
 
 验收标准（已满足）：
 
-开发者可在不修改 `apps/web`、上游核心包、`renderer/main.ts`、通用 IPC 或通用基础设施的情况下添加新的独立 Desktop 功能——只需在 `runtime/plugins/` 添加插件，或在 `dshElectron.runtimePlugins` 中声明一个已发布的 runtime 插件，并在 `host.patch.yml` 挂载。
+开发者可在不修改 `apps/web`、上游核心包、`renderer/main.ts`、通用 IPC 或通用基础设施的情况下添加新的独立 Desktop Client 功能——在 `desktop-capabilities/src/client/features/` 下增加内部 feature。新的 Host-only provider 仍在 `runtime/plugins/` 增加目录，或在 `dshElectron.runtimePlugins` 中声明已发布 runtime 插件，并在 `host.patch.yml` 增加 Loader 行。
 
 ## 24. 可选里程碑 4 — 传输优化
 

@@ -16,7 +16,19 @@ Desktop 按谁拥有启用权来分类插件。Profile-managed 插件走上游 P
 
 **Profile-managed。** `dsh plugin` 与官方 Plugins 页只是同一 web profile 的不同入口，最终都写入 `$DSH_HOME/profiles/web`。安装、启用、禁用与卸载由上游 Plugin Manager 完整管理。
 
-**Desktop-required。** `runtime/plugins/` 目录、`dshElectron.runtimePlugins` 中的包，以及 overlay 必需 adapter（含 `directory-picker-browse` 与 Theme Studio）属于应用组合。Electron overlay 始终挂载它们。Plugins 页把每个包列为 `plugins.item` 卡片，文案为 Built into Desktop / Required by Desktop。该卡片是 roster，不是正在运行插件的实时清单；挂载失败时卡片可能根本不出现。这些插件不能关闭。
+**Desktop-required。** `runtime/plugins/` 目录、`dshElectron.runtimePlugins` 中的包，以及 overlay 必需 adapter（含 `directory-picker-browse` 与 Theme Studio）属于应用组合。Electron overlay 始终挂载它们。这些插件不能关闭。
+
+Desktop-required 不等于每个包一张 Official 卡。四件事分开：composition package、internal feature、独立 Host adapter、以及 portable runtime / ecosystem 插件。
+
+**Composition package。** `@dsh-electron/dsh-electron-desktop-capabilities` 是一个 Loader/npm 包，只有一个 `lib/client.js`。它提供 `ctx.desktop`，并通过 Cordis `ctx.plugin()` 挂载内部 feature。它不是 `immediately: true`；`ctx.desktop` 随 application batch 激活。
+
+**Internal features。** 目录选择、品牌、网络设置与 plugin-manager 位于 `desktop-capabilities/src/client/features/`。它们是带有自己的 `name` / `inject` / `apply` 的子 fiber，不是 Loader 行，也不是 npm 包。
+
+**Independent Host adapters。** `desktop-network-subprocess` 与上游 `directory-picker-browse` 仍是各自的 Loader 行。网络子进程保持 Host-only provider。
+
+**Portable runtime / ecosystem。** Theme Studio 是带有自己 Official 卡的必需 npm runtime 插件。Git 是 Installed 分组中的 ecosystem bundle。
+
+Plugins 页仅为 Desktop Capabilities 与 Theme Studio 注册 Official `plugins.item` 卡片，文案为 Built into Desktop / Required by Desktop。Capabilities 详情页列出产品 Components（网络子进程、目录选择后端、目录选择、品牌、网络设置）。该 roster 不是 live Loader inventory；挂载失败时卡片可能根本不出现。条目不能 Enable、Disable 或 Uninstall。
 
 **Desktop-preinstalled ecosystem。** `dshElectron.ecosystemPlugins` 中的包（当前为 Git）写入 web profile 的 pinned `dependencies`，并在首次 seed 时写入 `dsh.profile.bundles`。它们出现在 Installed/Bundle 卡片中，而不是 Official/`plugins.item`。Enable 与 Disable 持久保存在 `dsh.profile.bundles`。Uninstall 会去掉 dependency；下次 Desktop 启动会再次 seed 并默认启用。Git 是 portable bundle，同一 `$DSH_HOME` 下 CLI `dsh web` 也会看到它。
 

@@ -1,6 +1,6 @@
 {
   "name": "@dsh-electron/dsh-electron-desktop-capabilities",
-  "description": "Desktop capability provider for Electron feature plugins",
+  "description": "Desktop Client composition root: ctx.desktop plus Desktop feature plugins",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -13,9 +13,18 @@
   "dsh": {
     "client": {
       "platform": "web",
-      "immediately": true,
       "inject": [
-        "@deepseek-ai/dsh-client-ui-renderer"
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-workspace",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-plugin-manager",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-api-remotes"
+      ],
+      "external": [
+        "@deepseek-ai/dsh-client-ui-primitives"
       ]
     }
   },

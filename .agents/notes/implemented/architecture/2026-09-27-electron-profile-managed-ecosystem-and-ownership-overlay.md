@@ -10,13 +10,13 @@ Desktop needed Git on the official Plugins page with Enable/Disable, without cha
 
 ## Decision
 
-Electron does not edit `packages/`, `apps/web`, or upstream `docs/`. Runtime plugins stay overlay-mounted and appear as read-only `plugins.item` cards. Ecosystem plugins such as Git are seeded into `$DSH_HOME/profiles/web` as a pinned dependency and, on first seed, as an enabled bundle. `dsh plugin` and the Plugins page are the same profile-managed path.
+Electron does not edit `packages/`, `apps/web`, or upstream `docs/`. Required overlay names come from static `host.patch.yml` inserts, not from the Official roster. Official `plugins.item` cards are Desktop Capabilities and Theme Studio; the Capabilities detail page lists product Components. Ecosystem plugins such as Git are seeded into `$DSH_HOME/profiles/web` as a pinned dependency and, on first seed, as an enabled bundle. `dsh plugin` and the Plugins page are the same profile-managed path.
 
 The ownership overlay scans bundle layers, `profiles/web/cordis.patch.yml`, and `$DSH_HOME/cordis.patch.yml` — the `readProfilePatches()` order before `--patch` and telemetry. Required names disable every pre-Electron copy, then the static overlay inserts one Desktop canonical row. An enabled ecosystem package keeps the row its own `dsh.bundle.patch` inserts; extra same-name rows are disabled. A disabled ecosystem package gets no overlay insert. The overlay never inserts Git.
 
 Disable persists in `dsh.profile.bundles`. Uninstall drops the dependency; the next Desktop boot seeds and enables it again. Electron does not hide Uninstall. Every boot restores Desktop-owned links under `profiles/node_modules` and `profiles/web/node_modules`.
 
-Required `plugins.item` copy is Built into Desktop / Required by Desktop. The roster is not a live inventory of running plugins.
+Required `plugins.item` copy is Built into Desktop / Required by Desktop. The Official cards and the Capabilities Components list are product roster, not live Loader inventory. Client feature nesting is recorded in [Desktop Capabilities composition root](2026-09-27-electron-desktop-capabilities-composition-root.md).
 
 This extends [Web Plugin Manager and Git sidebar](2026-09-13-electron-plugin-manager-and-git-sidebar.md) and keeps the [npm-only ecosystem plugin](2026-09-14-electron-npm-only-ecosystem-plugins.md) distribution rule.
 

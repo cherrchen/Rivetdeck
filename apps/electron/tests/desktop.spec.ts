@@ -158,14 +158,14 @@ describe('Electron host runtime overlay', () => {
       expect(body).toContain('directory-picker')
       expect(body).toContain('disabled: true')
       expect(body).toContain('@deepseek-ai/dsh-host-directory-picker-browse')
-      expect(body).toContain('@dsh-electron/dsh-electron-ui-directory-picker')
       expect(body).toContain('@dsh-electron/dsh-electron-desktop-capabilities')
       expect(body).toContain('id: desktop-network-subprocess')
       expect(body).toContain("name: '@dsh-electron/dsh-electron-network-subprocess'")
       expect(mountRow(body, 'theme-studio')).toContain("name: '@dsh-electron/dsh-theme-studio'")
       expect(mountRow(body, 'theme-studio')).not.toContain('disabled: true')
-      expect(body).toContain('@dsh-electron/dsh-electron-ui-brand')
-      expect(body).toContain('id: desktop-ui-plugins')
+      expect(body).not.toContain('desktop-directory-picker')
+      expect(body).not.toContain('desktop-ui-brand')
+      expect(body).not.toContain('desktop-ui-plugins')
       expect(body).not.toContain('desktop-git')
       expect(body).not.toContain('@dsh-electron/dsh-plugin-git')
       expect(body).not.toContain('plugins.cordis.yml')
@@ -181,11 +181,11 @@ describe('Electron host runtime overlay', () => {
     const harnessHome = await mkdtemp(join(tmpdir(), 'dsh-electron-home-'))
     try {
       ensureRuntimePluginsLinked(appPath, harnessHome)
-      const link = profileModuleLinkPath(harnessHome, '@dsh-electron/dsh-electron-ui-directory-picker')
+      const link = profileModuleLinkPath(harnessHome, '@dsh-electron/dsh-electron-desktop-capabilities')
       const { readlink } = await import('node:fs/promises')
       const target = await readlink(link)
       expect(target.replaceAll('\\', '/')).toBe(
-        join(appPath, 'runtime', 'plugins', 'ui-directory-picker-electron').replaceAll('\\', '/'),
+        join(appPath, 'runtime', 'plugins', 'desktop-capabilities').replaceAll('\\', '/'),
       )
     } finally {
       await rm(harnessHome, { recursive: true, force: true })

@@ -26,19 +26,29 @@ import {
   discoverEcosystemPluginPackages,
   ensureRuntimePluginsLinked,
 } from '../src/runtime-plugins.ts'
-import { REQUIRED_DESKTOP_PLUGINS } from '../runtime/plugins/ui-desktop-plugins/src/client/roster.ts'
+
+const OVERLAY_INSERT_NAMES = [
+  '@dsh-electron/dsh-electron-network-subprocess',
+  '@deepseek-ai/dsh-host-directory-picker-browse',
+  '@dsh-electron/dsh-electron-desktop-capabilities',
+  '@dsh-electron/dsh-theme-studio',
+] as const
 
 const appPath = fileURLToPath(new URL('..', import.meta.url))
 const GIT = '@dsh-electron/dsh-plugin-git'
 const THEME = '@dsh-electron/dsh-theme-studio'
 
-describe('Desktop-required plugin roster', () => {
-  it('matches required overlay insert names and omits Git', () => {
+describe('Desktop overlay insert names', () => {
+  it('inserts the four Loader packages and omits Git', () => {
     const yaml = readFileSync(join(appPath, 'runtime', 'host.patch.yml'), 'utf8')
     const names = staticOverlayInsertNames(yaml)
-    expect(names).toEqual(REQUIRED_DESKTOP_PLUGINS.map(plugin => plugin.name))
+    expect(names).toEqual([...OVERLAY_INSERT_NAMES])
     expect(names).not.toContain(GIT)
     expect(yaml).not.toContain('desktop-git')
+    expect(yaml).not.toContain('desktop-directory-picker')
+    expect(yaml).not.toContain('desktop-ui-brand')
+    expect(yaml).not.toContain('desktop-ui-network-settings')
+    expect(yaml).not.toContain('desktop-ui-plugins')
   })
 })
 
@@ -50,7 +60,8 @@ describe('ownership-aware Electron overlay', () => {
       const overlay = await prepareHostRuntimeOverlay(appPath, userData, home)
       const body = readFileSync(overlay.patchPath, 'utf8')
       expect(body).toContain("name: '@dsh-electron/dsh-theme-studio'")
-      expect(body).toContain('id: desktop-ui-plugins')
+      expect(body).toContain('id: desktop-capabilities')
+      expect(body).not.toContain('desktop-ui-plugins')
       expect(body).not.toContain('desktop-git')
       expect(body).not.toContain(GIT)
     } finally {

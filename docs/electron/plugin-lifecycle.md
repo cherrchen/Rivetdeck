@@ -16,7 +16,19 @@ Desktop classifies plugins by who owns enablement. Profile-managed plugins use t
 
 **Profile-managed.** `dsh plugin` and the official Plugins page are different entries into the same web profile. Both write `$DSH_HOME/profiles/web`. The upstream Plugin Manager owns install, enable, disable, and uninstall.
 
-**Desktop-required.** Directories under `runtime/plugins/`, packages listed in `dshElectron.runtimePlugins`, and required overlay adapters (including `directory-picker-browse` and Theme Studio) are application composition. Electron's overlay always mounts them. The Plugins page lists each as a `plugins.item` card with Built into Desktop / Required by Desktop copy. The card is a roster, not a live inventory of running plugins; a mount failure can prevent the card from appearing. These plugins cannot be turned off.
+**Desktop-required.** Directories under `runtime/plugins/`, packages listed in `dshElectron.runtimePlugins`, and required overlay adapters (including `directory-picker-browse` and Theme Studio) are application composition. Electron's overlay always mounts them. These plugins cannot be turned off.
+
+Desktop-required is not one Official card per package. Keep four facts separate: the composition package, internal features, independent Host adapters, and portable runtime or ecosystem plugins.
+
+**Composition package.** `@dsh-electron/dsh-electron-desktop-capabilities` is one Loader/npm package with one `lib/client.js`. It provides `ctx.desktop` and mounts internal features through Cordis `ctx.plugin()`. It is not `immediately: true`; `ctx.desktop` activates with the application batch.
+
+**Internal features.** Directory picker, brand, network settings, and plugin-manager live under `desktop-capabilities/src/client/features/`. They are child fibers with their own `name` / `inject` / `apply`, not Loader rows and not npm packages.
+
+**Independent Host adapters.** `desktop-network-subprocess` and upstream `directory-picker-browse` remain their own Loader rows. Network subprocess stays a Host-only provider.
+
+**Portable runtime / ecosystem.** Theme Studio is a required npm runtime plugin with its own Official card. Git is an ecosystem bundle on the Installed group.
+
+The Plugins page registers Official `plugins.item` cards only for Desktop Capabilities and Theme Studio, with Built into Desktop / Required by Desktop copy. The Capabilities detail page lists product Components (network subprocess, directory picker backend, directory picker, brand, network settings). That roster is not live Loader inventory; a mount failure can prevent a card from appearing. Entries cannot be enabled, disabled, or uninstalled.
 
 **Desktop-preinstalled ecosystem.** Packages listed in `dshElectron.ecosystemPlugins` (currently Git) are written into the web profile as a pinned `dependencies` entry and, on first seed, into `dsh.profile.bundles`. They appear as Installed/Bundle cards, not Official `plugins.item` cards. Enable and Disable persist in `dsh.profile.bundles`. Uninstall removes the dependency; the next Desktop boot seeds it again and enables it. Git is a portable bundle, so CLI `dsh web` in the same `$DSH_HOME` also sees it.
 

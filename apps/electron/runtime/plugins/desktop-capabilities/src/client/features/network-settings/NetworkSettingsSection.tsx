@@ -7,7 +7,7 @@ import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-cli
 import type {
   DesktopCapabilitiesContract, DesktopNetworkDiagnostics,
   DesktopNetworkState, DesktopNetworkTestItem, DesktopNetworkTestResult,
-} from '@dsh-electron/dsh-electron-desktop-capabilities/client'
+} from '../../contract.ts'
 import { draftErrors, draftFromState, inputFromDraft, type NetworkDraft } from './form.ts'
 import type { NetworkLocaleKey } from './locales.ts'
 import css from './NetworkSettingsSection.module.css'
