@@ -98,3 +98,7 @@
   color: var(--dsw-alias-label-secondary);
   white-space: nowrap;
 }
+
+.row[data-state='failed'] .rowState {
+  color: var(--dsw-alias-state-error-primary);
+}

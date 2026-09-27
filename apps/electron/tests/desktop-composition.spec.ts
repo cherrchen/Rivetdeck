@@ -69,7 +69,10 @@ async function assemble() {
   await ctx.plugin(SlotRegistry).await()
   const locale = new LocaleRuntime(ctx)
   ctx.provide('locale', locale)
-  new TestRemote(ctx, { llm: { listProviders: vi.fn() } })
+  new TestRemote(ctx, {
+    llm: { listProviders: vi.fn() },
+    pluginInventory: { list: vi.fn(async () => ({ ok: true as const, value: { entries: [] } })) },
+  })
   const slots = ctx.get('slots') as SlotRegistry
   slots.register({ name: 'root', children: HOLES } as never, () => null)
   return { ctx, slots }

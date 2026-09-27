@@ -136,20 +136,21 @@ describe('theme studio published runtime plugin regression', () => {
 })
 
 describe('desktop plugins roster', () => {
-  it('registers Desktop Capabilities and Theme Studio as Built into Desktop without claiming they are running', () => {
+  it('registers Desktop Capabilities and Theme Studio as Built into Desktop without claiming the Official cards are running', () => {
     const source = readFileSync(join(featuresRoot, 'plugin-manager', 'index.ts'), 'utf8')
     const card = readFileSync(join(featuresRoot, 'plugin-manager', 'DesktopPluginCard.tsx'), 'utf8')
     const locales = readFileSync(join(featuresRoot, 'plugin-manager', 'locales.ts'), 'utf8')
     expect(OFFICIAL_ROOT_ITEMS.map(item => item.id)).toEqual(['desktop-capabilities', 'theme-studio'])
     expect(source).toContain("name: 'plugins.item'")
     expect(source).toContain("name: 'plugins.detail.section'")
+    expect(source).toContain('remote.pluginInventory')
     expect(source).not.toContain('dsh-plugin-git')
     expect(card).toContain("t('builtIn')")
     expect(card).toContain("t('required')")
+    expect(card).not.toMatch(/\bRunning\b/)
     expect(locales).toContain('Built into Desktop')
     expect(locales).toContain('Required by Desktop')
     expect(locales).not.toMatch(/successfully/i)
-    expect(locales).not.toMatch(/\bRunning\b/)
   })
 
   it('lists five Capabilities components and omits the plugin-manager feature', () => {

@@ -1,13 +1,16 @@
 /**
  * Register Desktop Capabilities and Theme Studio as Official items, plus the
- * Capabilities Components section. The roster is not a live inventory.
+ * Capabilities Components section. Rows cannot be switched; displayed phase
+ * comes from Host `pluginInventory/list` and Client feature fibers.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { CapabilitiesComponentsSection } from './CapabilitiesComponents.tsx'
 import { DesktopPluginCard } from './DesktopPluginCard.tsx'
+import { createRuntimesSource, watchComponentRuntimes } from './inventory-source.ts'
 import { en, zh, type DesktopPluginsLocaleKey } from './locales.ts'
 import { OFFICIAL_ROOT_ITEMS } from './roster.ts'
 
@@ -25,15 +28,17 @@ export const NS = 'plugins.desktopRequired'
 export const name = 'plugin-manager'
 
 /** Required services (cordis fiber inject). */
-export const inject = ['slots', 'locale']
+export const inject = ['slots', 'locale', 'remote', 'remote.pluginInventory']
 
 /**
  * List the two Electron-owned Official items and the Capabilities Components section.
- * @param ctx - Feature fiber that has `slots` and `locale`.
+ * @param ctx - Feature fiber that has `slots`, `locale`, and `remote.pluginInventory`.
  */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'plugin-manager: dictionaries')
   const t = ctx.locale.bind(NS)
+  const runtimes = createRuntimesSource()
+  ctx.effect(() => watchComponentRuntimes(ctx, runtimes), 'plugin-manager: component runtimes')
   ctx.slots.inject('plugins.item', function* () {
     for (const item of OFFICIAL_ROOT_ITEMS) {
       yield ctx.slots.register({
@@ -50,5 +55,6 @@ export function apply(ctx: ClientContext): void {
     id: 'desktop-capabilities-components',
     order: 100,
     locale: NS,
+    inject: () => ({ hooks: { runtimes } }),
   }, CapabilitiesComponentsSection))
 }

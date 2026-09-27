@@ -28,7 +28,7 @@ Desktop-required 不等于每个包一张 Official 卡。四件事分开：compo
 
 **Portable runtime / ecosystem。** Theme Studio 是带有自己 Official 卡的必需 npm runtime 插件。Git 是 Installed 分组中的 ecosystem bundle。
 
-Plugins 页仅为 Desktop Capabilities 与 Theme Studio 注册 Official `plugins.item` 卡片，文案为 Built into Desktop / Required by Desktop。Capabilities 详情页以组合包「包含的组件」同样的标题与计数列出产品 Components（网络子进程、目录选择后端、目录选择、品牌、网络设置）。该 roster 不是 live Loader inventory；挂载失败时卡片可能根本不出现。条目不能 Enable、Disable 或 Uninstall。
+Plugins 页仅为 Desktop Capabilities 与 Theme Studio 注册 Official `plugins.item` 卡片，文案为 Built into Desktop / Required by Desktop。Capabilities 详情页以组合包「包含的组件」同样的标题与计数列出产品 Components（网络子进程、目录选择后端、目录选择、品牌、网络设置）。Loader 行的运行状态来自 Host `pluginInventory/list`；directory-picker、brand、network-settings 的运行状态来自 Client feature fiber。条目不能 Enable、Disable 或 Uninstall。
 
 **Desktop-preinstalled ecosystem。** `dshElectron.ecosystemPlugins` 中的包（当前为 Git）写入 web profile 的 pinned `dependencies`，并在首次 seed 时写入 `dsh.profile.bundles`。它们出现在 Installed/Bundle 卡片中，而不是 Official/`plugins.item`。Enable 与 Disable 持久保存在 `dsh.profile.bundles`。Uninstall 会去掉 dependency；下次 Desktop 启动会再次 seed 并默认启用。Git 是 portable bundle，同一 `$DSH_HOME` 下 CLI `dsh web` 也会看到它。
 

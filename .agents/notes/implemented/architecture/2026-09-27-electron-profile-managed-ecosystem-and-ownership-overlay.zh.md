@@ -16,7 +16,7 @@ ownership overlay 扫描 bundle 层、`profiles/web/cordis.patch.yml` 与 `$DSH_
 
 Disable 持久保存在 `dsh.profile.bundles`。Uninstall 会去掉 dependency；下次 Desktop 启动会再次 seed 并启用。Electron 不隐藏 Uninstall。每次启动都会恢复 `profiles/node_modules` 与 `profiles/web/node_modules` 下的 Desktop-owned 链接。
 
-required 的 `plugins.item` 文案是 Built into Desktop / Required by Desktop。Official 卡片与 Capabilities Components 名单是产品 roster，不是 live Loader inventory。Client feature 嵌套见 [Desktop Capabilities composition root](2026-09-27-electron-desktop-capabilities-composition-root.zh.md)。
+required 的 `plugins.item` 文案是 Built into Desktop / Required by Desktop。Official 卡片与 Capabilities Components 名单是产品 roster，不是 Loader 行清单。组件实时运行状态见 [Desktop Capabilities composition root](2026-09-27-electron-desktop-capabilities-composition-root.zh.md)。
 
 本决策延伸[Web Plugin Manager 与 Git sidebar](2026-09-13-electron-plugin-manager-and-git-sidebar.zh.md)，并保留 [npm-only ecosystem 插件](2026-09-14-electron-npm-only-ecosystem-plugins.zh.md)的发行规则。
 
