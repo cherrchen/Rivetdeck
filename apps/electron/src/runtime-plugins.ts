@@ -5,9 +5,11 @@ import {
   readdirSync,
   readFileSync,
   readlinkSync,
+  renameSync,
   symlinkSync,
   unlinkSync,
 } from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import { basename, dirname, join } from 'node:path'
 
 /** Relative path from the Electron application root to bundled runtime plugins. */
@@ -225,8 +227,8 @@ export function ensureRuntimePluginsLinked(appPath: string, harnessHome: string)
     ...discoverEcosystemPluginPackages(appPath),
   ]
   if (plugins.length === 0) throw new Error(`runtime plugins: no bundled plugins under ${runtimePluginsRoot(appPath)}`)
+  for (const plugin of plugins) validateRuntimePlugin(plugin)
   for (const plugin of plugins) {
-    validateRuntimePlugin(plugin)
     ensureSymlink(profileModuleLinkPath(harnessHome, plugin.name), plugin.rootPath)
     ensureSymlink(webProfileModuleLinkPath(harnessHome, plugin.name), plugin.rootPath)
   }
@@ -239,18 +241,20 @@ export function ensureRuntimePluginsLinked(appPath: string, harnessHome: string)
  */
 export function ensureSymlink(link: string, target: string): void {
   mkdirSync(dirname(link), { recursive: true })
+  let current: ReturnType<typeof lstatSync>
   try {
-    const current = readlinkSync(link)
-    if (current === target) return
-    unlinkSync(link)
+    current = lstatSync(link)
   } catch (error: unknown) {
-    if (!isMissingPathError(error)) {
-      try {
-        if (lstatSync(link).isSymbolicLink() || lstatSync(link).isDirectory()) unlinkSync(link)
-      } catch {
-        // Race or already gone.
-      }
-    }
+    if (!isMissingPathError(error)) throw error
+    symlinkSync(target, link, 'junction')
+    return
+  }
+  if (current.isSymbolicLink()) {
+    if (readlinkSync(link) === target) return
+    unlinkSync(link)
+  } else {
+    // A prior profile install may have placed a real package here. Retain it for recovery.
+    renameSync(link, `${link}.desktop-replaced-${randomUUID()}`)
   }
   symlinkSync(target, link, 'junction')
 }

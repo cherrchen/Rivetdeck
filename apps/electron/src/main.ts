@@ -466,8 +466,8 @@ if (!primaryInstance) {
     })
     const harnessHome = resolveHarnessHome(app.getPath('home'))
     await migrateLegacyPluginState(harnessHome)
-    seedEcosystemProfile(appPath, harnessHome)
     ensureRuntimePluginsLinked(appPath, harnessHome)
+    seedEcosystemProfile(appPath, harnessHome)
     const overlay = await prepareHostRuntimeOverlay(appPath, userDataPath, harnessHome)
     const packageManager = preparePluginPackageManager(
       harnessHome,

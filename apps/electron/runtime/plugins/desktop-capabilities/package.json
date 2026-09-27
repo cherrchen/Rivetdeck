@@ -1,6 +1,6 @@
 {
   "name": "@dsh-electron/dsh-electron-desktop-capabilities",
-  "description": "Desktop Client composition root: ctx.desktop plus Desktop feature plugins",
+  "description": "Desktop capabilities, Client features, and Host ownership refresh",
   "version": "0.1.0",
   "private": true,
   "type": "module",

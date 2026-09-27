@@ -29,8 +29,7 @@ afterEach(() => {
 
 function installBridge() {
   const unsubscribe = vi.fn()
-  globalThis.window = {
-    ...globalThis.window,
+  Object.assign(globalThis.window, {
     deepseekDesktop: {
       app: { getVersion: async () => '1', getPlatform: async () => 'darwin', relaunch: async () => undefined },
       dialog: { pickDirectory: async () => null },
@@ -61,7 +60,7 @@ function installBridge() {
         subscribe: () => unsubscribe,
       },
     },
-  } as Window & typeof globalThis
+  })
   return unsubscribe
 }
 

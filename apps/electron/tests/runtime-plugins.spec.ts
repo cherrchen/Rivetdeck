@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -48,8 +48,8 @@ describe('bundled Desktop plugin startup', () => {
         '@dsh-electron/dsh-electron-desktop-capabilities',
         '@dsh-electron/dsh-electron-network-subprocess',
       ])
-      expect(npmRuntime.map(plugin => plugin.name)).toEqual(['@dsh-electron/dsh-theme-studio'])
-      expect(ecosystem.map(plugin => plugin.name)).toEqual(['@dsh-electron/dsh-plugin-git'])
+      expect(npmRuntime).toEqual([])
+      expect(ecosystem.map(plugin => plugin.name)).toEqual(['@dsh-electron/dsh-plugin-git', '@dsh-electron/dsh-theme-studio'])
       ensureRuntimePluginsLinked(appPath, harnessHome)
       for (const plugin of [...runtime, ...npmRuntime, ...ecosystem]) {
         expect(readlinkSync(profileModuleLinkPath(harnessHome, plugin.name))).toBe(plugin.rootPath)
@@ -66,11 +66,48 @@ describe('bundled Desktop plugin startup', () => {
     }
   })
 
-  it('resolves the declared npm runtime plugin from its installed package artifacts', () => {
-    const [plugin] = discoverRuntimePluginPackages(appPath)
-    expect(plugin?.version).toBe('0.1.1')
+  it('resolves Theme Studio from its installed ecosystem artifact', () => {
+    const plugin = discoverEcosystemPluginPackages(appPath).find(item => item.name === '@dsh-electron/dsh-theme-studio')
+    expect(plugin?.version).toBe('0.1.2')
     expect(plugin?.rootPath).toBe(join(appPath, 'node_modules', '@dsh-electron', 'dsh-theme-studio'))
     expect(plugin?.hasClient).toBe(true)
+  })
+
+  it('preserves a real installed package directory and replaces its resolution path with a link', () => {
+    const harnessHome = mkdtempSync(join(tmpdir(), 'dsh-electron-physical-'))
+    try {
+      const link = webProfileModuleLinkPath(harnessHome, '@dsh-electron/dsh-plugin-git')
+      mkdirSync(link, { recursive: true })
+      writeFileSync(join(link, 'marker.txt'), 'prior install')
+      ensureRuntimePluginsLinked(appPath, harnessHome)
+      const plugin = discoverEcosystemPluginPackages(appPath).find(item => item.name === '@dsh-electron/dsh-plugin-git')
+      expect(readlinkSync(link)).toBe(plugin?.rootPath)
+      const backup = readdirSync(join(harnessHome, 'profiles', 'web', 'node_modules', '@dsh-electron'))
+        .find(name => name.startsWith('dsh-plugin-git.desktop-replaced-'))
+      expect(backup).toBeDefined()
+      expect(existsSync(join(harnessHome, 'profiles', 'web', 'node_modules', '@dsh-electron', backup!, 'marker.txt'))).toBe(true)
+    } finally {
+      rmSync(harnessHome, { recursive: true, force: true })
+    }
+  })
+
+  it('validates every artifact before writing profile links', () => {
+    const appRoot = mkdtempSync(join(tmpdir(), 'dsh-electron-invalid-artifact-'))
+    const harnessHome = mkdtempSync(join(tmpdir(), 'dsh-electron-invalid-home-'))
+    try {
+      const first = join(appRoot, 'runtime', 'plugins', 'first')
+      const second = join(appRoot, 'runtime', 'plugins', 'second')
+      mkdirSync(join(first, 'lib'), { recursive: true })
+      mkdirSync(second, { recursive: true })
+      writeFileSync(join(first, 'package.json'), JSON.stringify({ name: '@test/first', version: '1.0.0' }))
+      writeFileSync(join(first, 'lib', 'index.js'), '')
+      writeFileSync(join(second, 'package.json'), JSON.stringify({ name: '@test/second', version: '1.0.0' }))
+      expect(() => { ensureRuntimePluginsLinked(appRoot, harnessHome) }).toThrow(/missing lib\/index.js/)
+      expect(existsSync(profileModuleLinkPath(harnessHome, '@test/first'))).toBe(false)
+    } finally {
+      rmSync(appRoot, { recursive: true, force: true })
+      rmSync(harnessHome, { recursive: true, force: true })
+    }
   })
 
   it('fails loud when a declared npm runtime plugin is not installed', () => {

@@ -4,16 +4,21 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { load } from 'js-yaml'
+import { Context } from '@deepseek-ai/cordis'
 import {
   composeEntries,
   PROFILE_PATCH_FILENAME,
+  readProfilePatches,
   readProfileManifest,
   resolveProfileDir,
   writeProfileManifest,
+  type ProfileContext,
 } from '@deepseek-ai/dsh-app-boot'
 import type { EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import { seedEcosystemProfile, WEB_PROFILE_NAME } from '../src/ecosystem-profile.ts'
+import { apply as applyCapabilitiesHost } from '../runtime/plugins/desktop-capabilities/src/index.ts'
+import { resolveDshInstallAnchor } from '../src/runtime.ts'
 import {
   ecosystemCanonicalIds,
   flattenEntries,
@@ -31,7 +36,6 @@ const OVERLAY_INSERT_NAMES = [
   '@dsh-electron/dsh-electron-network-subprocess',
   '@deepseek-ai/dsh-host-directory-picker-browse',
   '@dsh-electron/dsh-electron-desktop-capabilities',
-  '@dsh-electron/dsh-theme-studio',
 ] as const
 
 const appPath = fileURLToPath(new URL('..', import.meta.url))
@@ -39,11 +43,12 @@ const GIT = '@dsh-electron/dsh-plugin-git'
 const THEME = '@dsh-electron/dsh-theme-studio'
 
 describe('Desktop overlay insert names', () => {
-  it('inserts the four Loader packages and omits Git', () => {
+  it('inserts the three required Loader packages and omits ecosystem bundles', () => {
     const yaml = readFileSync(join(appPath, 'runtime', 'host.patch.yml'), 'utf8')
     const names = staticOverlayInsertNames(yaml)
     expect(names).toEqual([...OVERLAY_INSERT_NAMES])
     expect(names).not.toContain(GIT)
+    expect(names).not.toContain(THEME)
     expect(yaml).not.toContain('desktop-git')
     expect(yaml).not.toContain('desktop-directory-picker')
     expect(yaml).not.toContain('desktop-ui-brand')
@@ -59,7 +64,7 @@ describe('ownership-aware Electron overlay', () => {
     try {
       const overlay = await prepareHostRuntimeOverlay(appPath, userData, home)
       const body = readFileSync(overlay.patchPath, 'utf8')
-      expect(body).toContain("name: '@dsh-electron/dsh-theme-studio'")
+      expect(body).not.toContain("name: '@dsh-electron/dsh-theme-studio'")
       expect(body).toContain('id: desktop-capabilities')
       expect(body).not.toContain('desktop-ui-plugins')
       expect(body).not.toContain('desktop-git')
@@ -70,7 +75,7 @@ describe('ownership-aware Electron overlay', () => {
     }
   })
 
-  it('disables profile and home required duplicates and still inserts the canonical overlay row', () => {
+  it('disables profile and home ecosystem duplicates while keeping the bundle row', () => {
     const home = seededHome()
     try {
       writeFileSync(join(resolveProfileDir(WEB_PROFILE_NAME, home), PROFILE_PATCH_FILENAME), `
@@ -89,6 +94,37 @@ describe('ownership-aware Electron overlay', () => {
         .every(row => row.disabled === true)).toBe(true)
       expect(active(theme)).toEqual(['theme-studio'])
     } finally {
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
+  it('refreshes ownership after a new same-name row arrives during Host HMR', async () => {
+    const home = seededHome()
+    const ctx = new Context()
+    try {
+      const dir = resolveProfileDir(WEB_PROFILE_NAME, home)
+      const initial: unknown = load(generateOwnershipOverlay(appPath, home))
+      if (!Array.isArray(initial)) throw new Error('initial overlay is not a patch list')
+      const profile: ProfileContext = {
+        name: WEB_PROFILE_NAME, dir, patchPath: join(dir, PROFILE_PATCH_FILENAME),
+        installAnchor: resolveDshInstallAnchor(appPath), cwd: appPath, home,
+        startedBundles: [], overlays: initial as PatchOptions[], telemetryDisabledEnv: undefined,
+      }
+      ctx.provide('profileContext', profile)
+      applyCapabilitiesHost(ctx)
+      writeFileSync(profile.patchPath, `
+- insert:
+    - id: later-theme
+      name: '${THEME}'
+    - id: later-capabilities
+      name: '@dsh-electron/dsh-electron-desktop-capabilities'
+`)
+      const composed = composeEntries([readProfilePatches('dsh', profile)])
+      expect(active(named(composed, THEME))).toEqual(['theme-studio'])
+      expect(active(named(composed, '@dsh-electron/dsh-electron-desktop-capabilities'))).toEqual(['desktop-capabilities'])
+      expect(named(composed, THEME).find(row => row.id === 'later-theme')?.disabled).toBe(true)
+    } finally {
+      await ctx.fiber.dispose()
       rmSync(home, { recursive: true, force: true })
     }
   })
@@ -121,7 +157,7 @@ describe('ownership-aware Electron overlay', () => {
     }
   })
 
-  it('leaves no active Git row when the ecosystem bundle is disabled', () => {
+  it('leaves no active ecosystem row when bundles are disabled', () => {
     const home = seededHome()
     try {
       const dir = resolveProfileDir(WEB_PROFILE_NAME, home)
@@ -132,7 +168,7 @@ describe('ownership-aware Electron overlay', () => {
           ...manifest.dsh,
           profile: {
             ...manifest.dsh?.profile,
-            bundles: (manifest.dsh?.profile?.bundles ?? []).filter(name => name !== GIT),
+            bundles: (manifest.dsh?.profile?.bundles ?? []).filter(name => name !== GIT && name !== THEME),
           },
         },
       })
@@ -140,11 +176,14 @@ describe('ownership-aware Electron overlay', () => {
 - insert:
     - id: home-git-dup
       name: '${GIT}'
+    - id: home-theme-dup
+      name: '${THEME}'
 `)
       const overlay = generateOwnershipOverlay(appPath, home)
       expect(overlay).not.toContain('desktop-git')
       const composed = composeWithOverlay(appPath, home)
       expect(active(named(composed, GIT))).toEqual([])
+      expect(active(named(composed, THEME))).toEqual([])
     } finally {
       rmSync(home, { recursive: true, force: true })
     }

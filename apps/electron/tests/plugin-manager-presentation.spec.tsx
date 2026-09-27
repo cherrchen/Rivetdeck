@@ -32,7 +32,8 @@ function interpolate(template: string, params?: Record<string, unknown>): string
     name in params ? String(params[name]) : match)
 }
 
-const t: TranslateNS<'plugins.desktopRequired'> = (key, params) => interpolate(en[key], params)
+const t: TranslateNS<'plugins.desktopRequired'> = (key, params) =>
+  interpolate((en as Readonly<Record<string, string>>)[key] ?? key, params)
 
 function bindRuntimes(map: ComponentRuntimeMap | null): CapabilitiesComponentsProps['useRuntimes'] {
   return sel => sel(map)

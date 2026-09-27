@@ -130,4 +130,36 @@ describe('Capabilities component inventory source', () => {
     })
     stop()
   })
+
+  it('ignores a slow inventory response after a newer refresh has published', async () => {
+    const ctx = new Context()
+    const first = Promise.withResolvers<{
+      ok: true
+      value: { entries: Array<{ entryId: string; moduleName: string; enabled: boolean; fiberPhase: 'active' | null }> }
+    }>()
+    const list = vi.fn()
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(async () => ({
+        ok: true as const,
+        value: { entries: [{ entryId: 'net', moduleName: NETWORK, enabled: false, fiberPhase: null }] },
+      }))
+    const remote = new TestRemote(ctx, { pluginInventory: { list } })
+    const source = createRuntimesSource()
+    const stop = watchComponentRuntimes(ctx, source)
+    try {
+      remote.emit('plugin-manager/changed', [{ reason: 'bundle' }])
+      await vi.waitFor(() => {
+        expect(source.getSnapshot()?.['network-subprocess']).toEqual({ enabled: false, phase: null })
+      })
+      first.resolve({
+        ok: true,
+        value: { entries: [{ entryId: 'net', moduleName: NETWORK, enabled: true, fiberPhase: 'active' }] },
+      })
+      await first.promise
+      await Promise.resolve()
+      expect(source.getSnapshot()?.['network-subprocess']).toEqual({ enabled: false, phase: null })
+    } finally {
+      stop()
+    }
+  })
 })

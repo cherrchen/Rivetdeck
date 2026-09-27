@@ -88,7 +88,7 @@ describe('theme studio published runtime plugin regression', () => {
       dsh?: { client?: { platform?: string; inject?: string[] } }
     }
     expect(manifest.name).toBe('@dsh-electron/dsh-theme-studio')
-    expect(manifest.version).toBe('0.1.1')
+    expect(manifest.version).toBe('0.1.2')
     const dshPeers = Object.entries(manifest.peerDependencies ?? {}).filter(([name]) => name.startsWith('@deepseek-ai/dsh-'))
     expect(dshPeers.length).toBeGreaterThan(0)
     for (const [, versions] of dshPeers) expect(versions.split(' || ')).toContain('0.1.7-rc.2')
@@ -149,7 +149,7 @@ describe('desktop plugins roster', () => {
     expect(OFFICIAL_ROOT_ITEMS.map(item => item.id)).toEqual(['desktop-capabilities'])
     expect(OFFICIAL_ROOT_ITEMS.find(item => item.id === 'desktop-capabilities')?.version).toBe(DESKTOP_CAPABILITIES_VERSION)
     expect(manifest.version).toBe(DESKTOP_CAPABILITIES_VERSION)
-    expect(themeManifest.version).toBe('0.1.1')
+    expect(themeManifest.version).toBe('0.1.2')
     expect(source).toContain("name: 'plugins.item'")
     expect(source).toContain("name: 'plugins.detail.badge'")
     expect(source).toContain("name: 'plugins.detail.section'")

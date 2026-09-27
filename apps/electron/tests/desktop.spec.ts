@@ -132,21 +132,6 @@ describe('Electron desktop integration', () => {
   })
 })
 
-/**
- * Slice one host patch row by its entry id.
- * @param body - Patch file text.
- * @param id - Entry id to slice.
- * @returns The row's own lines, excluding the next row.
- */
-function mountRow(body: string, id: string): string {
-  const lines = body.split('\n')
-  const start = lines.findIndex(line => line.trim() === `- id: ${id}`)
-  if (start < 0) throw new Error(`host patch row ${id} is missing`)
-  const rest = lines.slice(start + 1)
-  const end = rest.findIndex(line => line.trimStart().startsWith('- id: '))
-  return (end < 0 ? rest : rest.slice(0, end)).join('\n')
-}
-
 describe('Electron host runtime overlay', () => {
   it('writes the Host patch that keeps browse Host and Electron client', async () => {
     const appPath = join(import.meta.dirname, '..')
@@ -161,8 +146,7 @@ describe('Electron host runtime overlay', () => {
       expect(body).toContain('@dsh-electron/dsh-electron-desktop-capabilities')
       expect(body).toContain('id: desktop-network-subprocess')
       expect(body).toContain("name: '@dsh-electron/dsh-electron-network-subprocess'")
-      expect(mountRow(body, 'theme-studio')).toContain("name: '@dsh-electron/dsh-theme-studio'")
-      expect(mountRow(body, 'theme-studio')).not.toContain('disabled: true')
+      expect(body).not.toContain("name: '@dsh-electron/dsh-theme-studio'")
       expect(body).not.toContain('desktop-directory-picker')
       expect(body).not.toContain('desktop-ui-brand')
       expect(body).not.toContain('desktop-ui-plugins')

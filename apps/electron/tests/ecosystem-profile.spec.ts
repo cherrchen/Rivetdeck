@@ -14,6 +14,7 @@ import { seedEcosystemProfile, WEB_PROFILE_NAME } from '../src/ecosystem-profile
 
 const appPath = fileURLToPath(new URL('..', import.meta.url))
 const GIT = '@dsh-electron/dsh-plugin-git'
+const THEME = '@dsh-electron/dsh-theme-studio'
 
 describe('ecosystem web profile seed', () => {
   it('enables a new ecosystem dependency on first seed', () => {
@@ -23,6 +24,8 @@ describe('ecosystem web profile seed', () => {
       const manifest = readProfileManifest('dsh', resolveProfileDir(WEB_PROFILE_NAME, home))
       expect(manifest.dependencies?.[GIT]).toBe('0.2.3')
       expect(manifest.dsh?.profile?.bundles).toContain(GIT)
+      expect(manifest.dependencies?.[THEME]).toBe('0.1.2')
+      expect(manifest.dsh?.profile?.bundles).toContain(THEME)
     } finally {
       rmSync(home, { recursive: true, force: true })
     }
@@ -38,7 +41,7 @@ describe('ecosystem web profile seed', () => {
       const before = readProfileManifest('dsh', dir)
       writeProfileManifest(dir, {
         ...before,
-        dependencies: { ...before.dependencies, [GIT]: '0.2.3' },
+        dependencies: { ...before.dependencies, [GIT]: '0.2.3', [THEME]: '0.1.2' },
         dsh: { ...before.dsh, profile: { ...before.dsh?.profile, bundles: [...(before.dsh?.profile?.bundles ?? [])] } },
       })
       const bundlesBefore = readProfileManifest('dsh', dir).dsh?.profile?.bundles ?? []

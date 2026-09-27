@@ -89,13 +89,15 @@ export async function readComponentRuntimes(ctx: ClientContext): Promise<Compone
  */
 export function watchComponentRuntimes(ctx: ClientContext, source: RuntimesSource): () => void {
   let closed = false
+  let requested = 0
   let entries: readonly InventoryEntry[] = []
   const publish = (): void => {
     if (!closed) source.set(buildComponentRuntimes(ctx, entries))
   }
   const refreshInventory = (): void => {
+    const request = ++requested
     void listInventoryEntries(ctx).then((next) => {
-      if (closed) return
+      if (closed || request !== requested) return
       if (next !== undefined) entries = next
       publish()
     })
