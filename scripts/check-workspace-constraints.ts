@@ -59,6 +59,8 @@ const experimentalPackageNamePrefix = '@deepseek-ai/dsh-experimental-'
 const standardReleaseMemberDirectory = /^(?:packages\/(?!experimental\/)[^/]+\/[^/]+|apps\/(?!desktop(?:-host)?$)[^/]+|vendor\/[^/]+)$/
 /** Installable application assembled by electron-builder rather than published to npm. */
 const desktopApplicationDirectory = 'apps/desktop'
+/** Downstream Electron installer with its own private manifest and dependency sync. */
+const downstreamElectronApplicationDirectory = 'apps/electron'
 const localArtifactDirs = new Set(['node_modules'])
 const appPackageFiles: Readonly<Record<string, readonly string[]>> = {
   '@deepseek-ai/dsh': ['lib/*.js', 'lib/types/*.d.ts'],
@@ -352,7 +354,8 @@ export function checkExperimentalManifest(
 }
 
 function isReleaseMemberDirectory(dir: string): boolean {
-  return standardReleaseMemberDirectory.test(dir) || isPublicExperimentalPackageDirectory(dir)
+  return dir !== downstreamElectronApplicationDirectory
+    && (standardReleaseMemberDirectory.test(dir) || isPublicExperimentalPackageDirectory(dir))
 }
 
 /**
@@ -562,6 +565,7 @@ export function checkExperimentalDependencyIsolation(
     .filter(name => name !== undefined))
   const errors: string[] = []
   for (const { dir, manifest } of manifests) {
+    if (dir === downstreamElectronApplicationDirectory) continue
     if (!standardReleaseMemberDirectory.test(dir) && dir !== 'python/sdk-runtime') continue
     const offered = manifest.name === '@deepseek-ai/dsh' ? new Set(optionalBundles) : new Set<string>()
     for (const section of runtimeDependencySections) {
@@ -595,9 +599,10 @@ export function checkWorkspaceProtocol(manifests: readonly WorkspaceManifest[]):
     for (const section of dependencySections) {
       for (const [name, range] of Object.entries(manifest[section] ?? {})) {
         if (!members.has(name)) continue
-        const expected = name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-')
-          ? 'workspace:*'
-          : vendors.has(name) ? 'workspace:~' : undefined
+        let expected: string | undefined
+        if (dir === downstreamElectronApplicationDirectory) expected = 'workspace:^'
+        else if (name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-')) expected = 'workspace:*'
+        else if (vendors.has(name)) expected = 'workspace:~'
         if (expected !== undefined ? range === expected : range.startsWith('workspace:')) continue
         errors.push(`${manifest.name ?? dir}: ${section}.${name} must use ${expected ?? 'the workspace: protocol'}, got ${range}`)
       }
