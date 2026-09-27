@@ -334,12 +334,14 @@ Desktop 从两处汇集其所需的 runtime 插件：`apps/electron/runtime/plug
 ```text
 runtime/plugins/*          Desktop adapters, Electron carriers, and Desktop-only integration (build + link)
 node_modules/@dsh-electron/*  runtime plugins (dshElectron.runtimePlugins) and ecosystem plugins (dshElectron.ecosystemPlugins), prebuilt + link
-runtime/host.patch.yml     Host overlay: required Desktop plugins and bundled Git
+runtime/host.patch.yml     Host overlay: required Desktop plugins only
 scripts/build-runtime-plugins.mjs
 src/runtime-plugins.ts     discovery, validation, and profile linking
+src/ecosystem-profile.ts   seed ecosystem plugins into the web profile
+src/ownership-overlay.ts   suppress foreign overlay rows then insert canonical names
 ```
 
-启动时先校验这三个来源发现的每个插件，再将其链接到 `$DSH_HOME/profiles/node_modules/<package-name>`，然后启动受监督 Host。`host.patch.yml` 直接挂载必需的 Desktop 插件和随包 Git 插件。之后安装的插件由上游 Web profile 管理（[插件生命周期](plugin-lifecycle.zh.md)）。
+启动时先校验这三个来源发现的每个插件，再将其链接到 `$DSH_HOME/profiles/node_modules/<package-name>` 与 `$DSH_HOME/profiles/web/node_modules/<package-name>`，然后启动受监督 Host。`host.patch.yml` 挂载必需的 Desktop 插件。Git 等 ecosystem 插件被 seed 进 web profile。这些 bundle 以及之后安装的插件由上游 Web profile 管理启用状态（[插件生命周期](plugin-lifecycle.zh.md)）。
 
 Desktop Capability Provider（`@dsh-electron/dsh-electron-desktop-capabilities`）把 `window.deepseekDesktop` 适配为 feature 插件可用的 `ctx.desktop`。只有 Renderer 基础设施与该 provider 可直接读取全局 bridge。
 
@@ -351,7 +353,7 @@ Desktop Capability Provider（`@dsh-electron/dsh-electron-desktop-capabilities`�
 
 [网络设置页面](network-settings.zh.md) 是必需的 Desktop Client 插件。它贡献顶层 `settings.section` 条目，并通过 `ctx.desktop.network` 配置网络、读取脱敏诊断及运行连接测试；Main 持有策略、密码和重启操作。原生故障对话框可以打开此分区，而不改变已选择的路由。
 
-Git（`@dsh-electron/dsh-plugin-git@0.2.3`）是仅从 npm 安装的 bundled ecosystem 插件。其 Client 占用 `ctx.sidebarRight` / `sidebarRightTabs`，并列入 `dshElectron.ecosystemPlugins`。
+Git（`@dsh-electron/dsh-plugin-git@0.2.3`）是仅从 npm 安装的 bundled ecosystem 插件。其 Client 占用 `ctx.sidebarRight` / `sidebarRightTabs`，并列入 `dshElectron.ecosystemPlugins`。Desktop 把它 seed 进共享 web profile，因此 Plugins 页在 Installed 中展示它，Enable 与 Disable 在此持久保存。
 
 Theme Studio（`@dsh-electron/dsh-theme-studio@0.1.1`）是仅从 npm 安装的必需 runtime 插件，列入 `dshElectron.runtimePlugins`。其源码真源是 `cherrchen/dsh-theme-studio`；本仓库不保留其任何副本。该包注册**设置 → 通用 → 主题**，并调用 `ctx.theme.overrideTokens()`；它不替换官方外观，也不自己呈现 CSS。其 `host.patch.yml` 挂载行已启用，已发布的 peer 声明包含 `0.1.7-rc.2`。
 

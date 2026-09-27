@@ -334,12 +334,14 @@ Desktop assembles its required runtime plugins from two sources: directories und
 ```text
 runtime/plugins/*          Desktop adapters, Electron carriers, and Desktop-only integration (build + link)
 node_modules/@dsh-electron/*  runtime plugins (dshElectron.runtimePlugins) and ecosystem plugins (dshElectron.ecosystemPlugins), prebuilt + link
-runtime/host.patch.yml     Host overlay: required Desktop plugins and bundled Git
+runtime/host.patch.yml     Host overlay: required Desktop plugins only
 scripts/build-runtime-plugins.mjs
 src/runtime-plugins.ts     discovery, validation, and profile linking
+src/ecosystem-profile.ts   seed ecosystem plugins into the web profile
+src/ownership-overlay.ts   suppress foreign overlay rows then insert canonical names
 ```
 
-Startup validates and links every discovered plugin from those three sources into `$DSH_HOME/profiles/node_modules/<package-name>` before the supervised Host starts. `host.patch.yml` mounts required Desktop plugins and bundled Git directly. The upstream Web profile manages subsequently installed plugins ([plugin lifecycle](plugin-lifecycle.md)).
+Startup validates and links every discovered plugin from those three sources into `$DSH_HOME/profiles/node_modules/<package-name>` and `$DSH_HOME/profiles/web/node_modules/<package-name>` before the supervised Host starts. `host.patch.yml` mounts required Desktop plugins. Ecosystem plugins such as Git are seeded into the web profile. The upstream Web profile manages enablement for those bundles and for subsequently installed plugins ([plugin lifecycle](plugin-lifecycle.md)).
 
 The Desktop Capability Provider (`@dsh-electron/dsh-electron-desktop-capabilities`) adapts `window.deepseekDesktop` into `ctx.desktop` for feature plugins. Only renderer infrastructure and the provider read the global bridge directly.
 
@@ -351,7 +353,7 @@ The upstream Web bundle provides plugin management in its Plugins UI and agent t
 
 The [Network Settings page](network-settings.md) is a required Desktop client plugin. It contributes a top-level `settings.section` entry and uses `ctx.desktop.network` for configuration, sanitized diagnostics, and connection tests; Main owns the policy, secrets, and restart. The native failure dialog can open this section without changing the selected route.
 
-Git (`@dsh-electron/dsh-plugin-git@0.2.3`) is a bundled ecosystem plugin installed only from npm. Its client occupies `ctx.sidebarRight` / `sidebarRightTabs` and is listed in `dshElectron.ecosystemPlugins`.
+Git (`@dsh-electron/dsh-plugin-git@0.2.3`) is a bundled ecosystem plugin installed only from npm. Its client occupies `ctx.sidebarRight` / `sidebarRightTabs` and is listed in `dshElectron.ecosystemPlugins`. Desktop seeds it into the shared web profile so the Plugins page shows it in Installed, where Enable and Disable persist.
 
 Theme Studio (`@dsh-electron/dsh-theme-studio@0.1.1`) is a required runtime plugin installed only from npm and listed in `dshElectron.runtimePlugins`. Its canonical source is `cherrchen/dsh-theme-studio`; this repository keeps no copy of it. The package registers **Settings → General → Themes** and calls `ctx.theme.overrideTokens()`; it does not replace official Appearance or present CSS itself. Its `host.patch.yml` row is enabled, and its published peer declarations include `0.1.7-rc.2`.
 

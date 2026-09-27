@@ -124,6 +124,30 @@ describe('theme studio published runtime plugin regression', () => {
   })
 })
 
+describe('desktop plugins roster plugin', () => {
+  it('registers required packages as Built into Desktop without claiming they are running', () => {
+    const source = readFileSync(
+      join(electronRoot, 'runtime', 'plugins', 'ui-desktop-plugins', 'src', 'client', 'index.ts'),
+      'utf8',
+    )
+    const card = readFileSync(
+      join(electronRoot, 'runtime', 'plugins', 'ui-desktop-plugins', 'src', 'client', 'DesktopPluginCard.tsx'),
+      'utf8',
+    )
+    const locales = readFileSync(
+      join(electronRoot, 'runtime', 'plugins', 'ui-desktop-plugins', 'src', 'client', 'locales.ts'),
+      'utf8',
+    )
+    expect(source).toContain("name: 'plugins.item'")
+    expect(source).not.toContain('dsh-plugin-git')
+    expect(card).toContain("t('builtIn')")
+    expect(card).toContain("t('required')")
+    expect(locales).toContain('Built into Desktop')
+    expect(locales).toContain('Required by Desktop')
+    expect(locales).not.toMatch(/successfully/i)
+  })
+})
+
 describe('production runtime plugin packaging inventory', () => {
   it('includes built artifacts for every bundled production plugin and excludes test fixtures', () => {
     const pluginsRoot = join(electronRoot, 'runtime', 'plugins')

@@ -200,7 +200,21 @@ export function profileModuleLinkPath(harnessHome: string, packageName: string):
 }
 
 /**
- * Validate and link bundled Desktop plugins for profile resolution before Host boot.
+ * Resolve the web profile node_modules link path for one npm package name.
+ * Desktop boot restores this link so a same-named CLI install cannot shadow
+ * the application copy.
+ * @param harnessHome - `$DSH_HOME` root used by the supervised Host.
+ * @param packageName - Scoped or unscoped npm package name.
+ * @returns Absolute symlink path under profiles/web/node_modules.
+ */
+export function webProfileModuleLinkPath(harnessHome: string, packageName: string): string {
+  return join(harnessHome, 'profiles', 'web', 'node_modules', ...packageName.split('/'))
+}
+
+/**
+ * Validate and link bundled Desktop plugins into profile resolution before Host boot.
+ * Every Electron boot restores Desktop-owned package links under both
+ * `$DSH_HOME/profiles/node_modules` and `$DSH_HOME/profiles/web/node_modules`.
  * @param appPath - Electron application root.
  * @param harnessHome - Active Harness home.
  */
@@ -214,6 +228,7 @@ export function ensureRuntimePluginsLinked(appPath: string, harnessHome: string)
   for (const plugin of plugins) {
     validateRuntimePlugin(plugin)
     ensureSymlink(profileModuleLinkPath(harnessHome, plugin.name), plugin.rootPath)
+    ensureSymlink(webProfileModuleLinkPath(harnessHome, plugin.name), plugin.rootPath)
   }
 }
 

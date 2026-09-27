@@ -10,6 +10,7 @@ import {
   discoverRuntimePluginPackages,
   ensureRuntimePluginsLinked,
   profileModuleLinkPath,
+  webProfileModuleLinkPath,
 } from '../src/runtime-plugins.ts'
 
 const appPath = fileURLToPath(new URL('..', import.meta.url))
@@ -49,9 +50,12 @@ describe('bundled Desktop plugin startup', () => {
       ensureRuntimePluginsLinked(appPath, harnessHome)
       for (const plugin of [...runtime, ...npmRuntime, ...ecosystem]) {
         expect(readlinkSync(profileModuleLinkPath(harnessHome, plugin.name))).toBe(plugin.rootPath)
+        expect(readlinkSync(webProfileModuleLinkPath(harnessHome, plugin.name))).toBe(plugin.rootPath)
       }
       const patch = readFileSync(join(appPath, 'runtime', 'host.patch.yml'), 'utf8')
-      expect(patch).toContain("name: '@dsh-electron/dsh-plugin-git'")
+      expect(patch).not.toContain('desktop-git')
+      expect(patch).not.toContain("name: '@dsh-electron/dsh-plugin-git'")
+      expect(patch).toContain("name: '@dsh-electron/dsh-electron-ui-desktop-plugins'")
       expect(patch).not.toContain('cordis:include')
     } finally {
       rmSync(harnessHome, { recursive: true, force: true })

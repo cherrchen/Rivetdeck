@@ -136,6 +136,16 @@ export function resolveDshBin(appPath: string): string {
 }
 
 /**
+ * Resolve the supervised `dsh` installation's package.json.
+ * Bundle lookup uses this anchor, matching `dsh web` launched from the packaged CLI.
+ * @param appPath - Electron application root.
+ * @returns Absolute path of `@deepseek-ai/dsh/package.json`.
+ */
+export function resolveDshInstallAnchor(appPath: string): string {
+  return join(appPath, 'node_modules', '@deepseek-ai', 'dsh', 'package.json')
+}
+
+/**
  * Build the Node-compatible child arguments required by upstream config HMR.
  * @param dshBin - Absolute path to the packaged dsh executable module.
  * @param patchPath - overlay patch path before Web launch.

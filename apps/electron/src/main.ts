@@ -46,6 +46,7 @@ import {
   registerRendererScheme,
   resolveRendererRoot,
 } from './protocol.ts'
+import { seedEcosystemProfile } from './ecosystem-profile.ts'
 import { prepareHostRuntimeOverlay } from './runtime-overlay.ts'
 import { ensureRuntimePluginsLinked } from './runtime-plugins.ts'
 import {
@@ -465,8 +466,9 @@ if (!primaryInstance) {
     })
     const harnessHome = resolveHarnessHome(app.getPath('home'))
     await migrateLegacyPluginState(harnessHome)
+    seedEcosystemProfile(appPath, harnessHome)
     ensureRuntimePluginsLinked(appPath, harnessHome)
-    const overlay = await prepareHostRuntimeOverlay(appPath, userDataPath)
+    const overlay = await prepareHostRuntimeOverlay(appPath, userDataPath, harnessHome)
     const packageManager = preparePluginPackageManager(
       harnessHome,
       hostRuntime,

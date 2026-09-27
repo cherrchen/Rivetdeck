@@ -153,7 +153,7 @@ describe('Electron host runtime overlay', () => {
     const userData = await mkdtemp(join(tmpdir(), 'dsh-electron-patch-'))
     const harnessHome = await mkdtemp(join(tmpdir(), 'dsh-electron-home-'))
     try {
-      const overlay = await prepareHostRuntimeOverlay(appPath, userData)
+      const overlay = await prepareHostRuntimeOverlay(appPath, userData, harnessHome)
       const body = await readFile(overlay.patchPath, 'utf8')
       expect(body).toContain('directory-picker')
       expect(body).toContain('disabled: true')
@@ -165,7 +165,9 @@ describe('Electron host runtime overlay', () => {
       expect(mountRow(body, 'theme-studio')).toContain("name: '@dsh-electron/dsh-theme-studio'")
       expect(mountRow(body, 'theme-studio')).not.toContain('disabled: true')
       expect(body).toContain('@dsh-electron/dsh-electron-ui-brand')
-      expect(body).toContain('@dsh-electron/dsh-plugin-git')
+      expect(body).toContain('id: desktop-ui-plugins')
+      expect(body).not.toContain('desktop-git')
+      expect(body).not.toContain('@dsh-electron/dsh-plugin-git')
       expect(body).not.toContain('plugins.cordis.yml')
       expect(body).not.toContain('directory-picker-browse-client')
     } finally {

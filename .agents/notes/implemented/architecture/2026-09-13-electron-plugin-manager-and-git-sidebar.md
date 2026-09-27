@@ -24,4 +24,6 @@ The Web profile mounts the upstream Plugin Manager. Desktop's Host patch does no
 
 ## Consequences
 
-The upstream Plugin Manager provides the Installed view. Git UI lives in the right sidebar, and `host.patch.yml` inserts the bundled Git package directly.
+The upstream Plugin Manager provides the Installed view. Git UI lives in the right sidebar. Desktop seeds the Git package into the web profile; `host.patch.yml` does not insert it.
+
+See [profile-managed ecosystem plugins](2026-09-27-electron-profile-managed-ecosystem-and-ownership-overlay.md) for seed, Disable versus Uninstall, and ownership overlay rules.
