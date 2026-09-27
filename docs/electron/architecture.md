@@ -353,7 +353,7 @@ The [Network Settings page](network-settings.md) is a required Desktop client pl
 
 Git (`@dsh-electron/dsh-plugin-git@0.2.3`) is a bundled ecosystem plugin installed only from npm. Its client occupies `ctx.sidebarRight` / `sidebarRightTabs` and is listed in `dshElectron.ecosystemPlugins`.
 
-Theme Studio (`@dsh-electron/dsh-theme-studio@0.1.0`) is a required runtime plugin installed only from npm and listed in `dshElectron.runtimePlugins`. Its canonical source is `cherrchen/dsh-theme-studio`; this repository keeps no copy of it. The package registers **Settings → General → Themes** and calls `ctx.theme.overrideTokens()`; it does not replace official Appearance or present CSS itself. Its `host.patch.yml` row stays disabled because the published 0.1.0 declares dsh peers only through `0.1.7-alpha.2`, so the Host compatibility preflight denies the row; Desktop re-enables it after the canonical repository republishes with the current dsh version in its peer union.
+Theme Studio (`@dsh-electron/dsh-theme-studio@0.1.1`) is a required runtime plugin installed only from npm and listed in `dshElectron.runtimePlugins`. Its canonical source is `cherrchen/dsh-theme-studio`; this repository keeps no copy of it. The package registers **Settings → General → Themes** and calls `ctx.theme.overrideTokens()`; it does not replace official Appearance or present CSS itself. Its `host.patch.yml` row is enabled, and its published peer declarations include `0.1.7-rc.2`.
 
 ```text
 Feature Plugin

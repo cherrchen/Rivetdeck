@@ -60,7 +60,7 @@ describe('bundled Desktop plugin startup', () => {
 
   it('resolves the declared npm runtime plugin from its installed package artifacts', () => {
     const [plugin] = discoverRuntimePluginPackages(appPath)
-    expect(plugin?.version).toBe('0.1.0')
+    expect(plugin?.version).toBe('0.1.1')
     expect(plugin?.rootPath).toBe(join(appPath, 'node_modules', '@dsh-electron', 'dsh-theme-studio'))
     expect(plugin?.hasClient).toBe(true)
   })

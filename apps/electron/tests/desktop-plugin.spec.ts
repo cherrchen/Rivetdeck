@@ -70,10 +70,14 @@ describe('theme studio published runtime plugin regression', () => {
       name?: string
       version?: string
       dependencies?: Record<string, string>
+      peerDependencies?: Record<string, string>
       dsh?: { client?: { platform?: string; inject?: string[] } }
     }
     expect(manifest.name).toBe('@dsh-electron/dsh-theme-studio')
-    expect(manifest.version).toBe('0.1.0')
+    expect(manifest.version).toBe('0.1.1')
+    const dshPeers = Object.entries(manifest.peerDependencies ?? {}).filter(([name]) => name.startsWith('@deepseek-ai/dsh-'))
+    expect(dshPeers.length).toBeGreaterThan(0)
+    for (const [, versions] of dshPeers) expect(versions.split(' || ')).toContain('0.1.7-rc.2')
     expect(manifest.dsh?.client?.platform).toBe('web')
     expect(manifest.dsh?.client?.inject ?? []).not.toContain('@dsh-electron/dsh-electron-desktop-capabilities')
     expect(Object.keys(manifest.dependencies ?? {})).not.toContain('electron')

@@ -353,7 +353,7 @@ Desktop Capability Provider（`@dsh-electron/dsh-electron-desktop-capabilities`�
 
 Git（`@dsh-electron/dsh-plugin-git@0.2.3`）是仅从 npm 安装的 bundled ecosystem 插件。其 Client 占用 `ctx.sidebarRight` / `sidebarRightTabs`，并列入 `dshElectron.ecosystemPlugins`。
 
-Theme Studio（`@dsh-electron/dsh-theme-studio@0.1.0`）是仅从 npm 安装的必需 runtime 插件，列入 `dshElectron.runtimePlugins`。其源码真源是 `cherrchen/dsh-theme-studio`；本仓库不保留其任何副本。该包注册**设置 → 通用 → 主题**，并调用 `ctx.theme.overrideTokens()`；它不替换官方外观，也不自己呈现 CSS。其 `host.patch.yml` 行保持禁用：已发布的 0.1.0 的 dsh peer 只到 `0.1.7-alpha.2`，Host 兼容性预检因此拒绝该行；待 canonical 仓库把当前 dsh 版本补入 peer 并集并重新发布后，Desktop 再启用它。
+Theme Studio（`@dsh-electron/dsh-theme-studio@0.1.1`）是仅从 npm 安装的必需 runtime 插件，列入 `dshElectron.runtimePlugins`。其源码真源是 `cherrchen/dsh-theme-studio`；本仓库不保留其任何副本。该包注册**设置 → 通用 → 主题**，并调用 `ctx.theme.overrideTokens()`；它不替换官方外观，也不自己呈现 CSS。其 `host.patch.yml` 挂载行已启用，已发布的 peer 声明包含 `0.1.7-rc.2`。
 
 ```text
 Feature Plugin

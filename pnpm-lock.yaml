@@ -1081,8 +1081,8 @@ importers:
         specifier: 0.2.3
         version: 0.2.3(90f844476ae8cd131ce05b465f9e2b95)
       '@dsh-electron/dsh-theme-studio':
-        specifier: 0.1.0
-        version: 0.1.0(@deepseek-ai/cordis@vendor+cordis)(@deepseek-ai/dsh-api-remotes@packages+api+remotes)(@deepseek-ai/dsh-client-connection@packages+client+connection)(@deepseek-ai/dsh-client-locale@packages+client+locale)(@deepseek-ai/dsh-client-store@packages+client+store)(@deepseek-ai/dsh-client-ui-renderer@packages+client+ui-renderer)(@deepseek-ai/dsh-client-ui-settings@packages+client+ui-settings)(@deepseek-ai/dsh-client-ui-slots@packages+client+ui-slots)(@deepseek-ai/dsh-client-ui-theme@packages+client+ui-theme)(@deepseek-ai/dsh-settings@packages+settings+settings)(react@18.3.1)
+        specifier: 0.1.1
+        version: 0.1.1(@deepseek-ai/cordis@vendor+cordis)(@deepseek-ai/dsh-api-remotes@packages+api+remotes)(@deepseek-ai/dsh-client-connection@packages+client+connection)(@deepseek-ai/dsh-client-locale@packages+client+locale)(@deepseek-ai/dsh-client-store@packages+client+store)(@deepseek-ai/dsh-client-ui-renderer@packages+client+ui-renderer)(@deepseek-ai/dsh-client-ui-settings@packages+client+ui-settings)(@deepseek-ai/dsh-client-ui-slots@packages+client+ui-slots)(@deepseek-ai/dsh-client-ui-theme@packages+client+ui-theme)(@deepseek-ai/dsh-settings@packages+settings+settings)(react@18.3.1)
       electron-updater:
         specifier: ^6.8.9
         version: 6.8.9
@@ -15396,20 +15396,20 @@ packages:
       '@deepseek-ai/dsh-settings':
         optional: true
 
-  '@dsh-electron/dsh-theme-studio@0.1.0':
-    resolution: {integrity: sha512-t7IfaVvwnOMSPtALl5YWkEunevF3lfu+0VXKHAZrKcUt8i58lkOG/4gdgfhqgcrubNhbRzUsYhbyFR7He8KOyw==}
+  '@dsh-electron/dsh-theme-studio@0.1.1':
+    resolution: {integrity: sha512-cTwWCbs69/2ToIEI8oarqx5RgHW1vw5qw1/bhIsseyRkNWxtP2jsIl4kK0w5g2e6FVI/XFgr5tsZmWDVuSU6+Q==}
     engines: {node: ^22.19.0 || >=24.0.0}
     peerDependencies:
       '@deepseek-ai/cordis': '>=4.0.2 <5.0.0'
-      '@deepseek-ai/dsh-api-remotes': 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.6-alpha.1 || 0.1.6-alpha.2 || 0.1.7-alpha.1 || 0.1.7-alpha.2
-      '@deepseek-ai/dsh-client-connection': 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.6-alpha.1 || 0.1.6-alpha.2 || 0.1.7-alpha.1 || 0.1.7-alpha.2
-      '@deepseek-ai/dsh-client-locale': 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.6-alpha.1 || 0.1.6-alpha.2 || 0.1.7-alpha.1 || 0.1.7-alpha.2
-      '@deepseek-ai/dsh-client-store': 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.6-alpha.1 || 0.1.6-alpha.2 || 0.1.7-alpha.1 || 0.1.7-alpha.2
-      '@deepseek-ai/dsh-client-ui-renderer': 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.6-alpha.1 || 0.1.6-alpha.2 || 0.1.7-alpha.1 || 0.1.7-alpha.2
-      '@deepseek-ai/dsh-client-ui-settings': 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.6-alpha.1 || 0.1.6-alpha.2 || 0.1.7-alpha.1 || 0.1.7-alpha.2
-      '@deepseek-ai/dsh-client-ui-slots': 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.6-alpha.1 || 0.1.6-alpha.2 || 0.1.7-alpha.1 || 0.1.7-alpha.2
-      '@deepseek-ai/dsh-client-ui-theme': 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.6-alpha.1 || 0.1.6-alpha.2 || 0.1.7-alpha.1 || 0.1.7-alpha.2
-      '@deepseek-ai/dsh-settings': 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.6-alpha.1 || 0.1.6-alpha.2 || 0.1.7-alpha.1 || 0.1.7-alpha.2
+      '@deepseek-ai/dsh-api-remotes': 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.6-alpha.1 || 0.1.6-alpha.2 || 0.1.7-alpha.1 || 0.1.7-alpha.2 || 0.1.7-rc.1 || 0.1.7-rc.2
+      '@deepseek-ai/dsh-client-connection': 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.6-alpha.1 || 0.1.6-alpha.2 || 0.1.7-alpha.1 || 0.1.7-alpha.2 || 0.1.7-rc.1 || 0.1.7-rc.2
+      '@deepseek-ai/dsh-client-locale': 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.6-alpha.1 || 0.1.6-alpha.2 || 0.1.7-alpha.1 || 0.1.7-alpha.2 || 0.1.7-rc.1 || 0.1.7-rc.2
+      '@deepseek-ai/dsh-client-store': 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.6-alpha.1 || 0.1.6-alpha.2 || 0.1.7-alpha.1 || 0.1.7-alpha.2 || 0.1.7-rc.1 || 0.1.7-rc.2
+      '@deepseek-ai/dsh-client-ui-renderer': 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.6-alpha.1 || 0.1.6-alpha.2 || 0.1.7-alpha.1 || 0.1.7-alpha.2 || 0.1.7-rc.1 || 0.1.7-rc.2
+      '@deepseek-ai/dsh-client-ui-settings': 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.6-alpha.1 || 0.1.6-alpha.2 || 0.1.7-alpha.1 || 0.1.7-alpha.2 || 0.1.7-rc.1 || 0.1.7-rc.2
+      '@deepseek-ai/dsh-client-ui-slots': 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.6-alpha.1 || 0.1.6-alpha.2 || 0.1.7-alpha.1 || 0.1.7-alpha.2 || 0.1.7-rc.1 || 0.1.7-rc.2
+      '@deepseek-ai/dsh-client-ui-theme': 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.6-alpha.1 || 0.1.6-alpha.2 || 0.1.7-alpha.1 || 0.1.7-alpha.2 || 0.1.7-rc.1 || 0.1.7-rc.2
+      '@deepseek-ai/dsh-settings': 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.6-alpha.1 || 0.1.6-alpha.2 || 0.1.7-alpha.1 || 0.1.7-alpha.2 || 0.1.7-rc.1 || 0.1.7-rc.2
       react: '>=18.2.0 <19.0.0'
 
   '@earendil-works/pi-ai@0.85.1':
@@ -23007,7 +23007,7 @@ snapshots:
       '@deepseek-ai/dsh-llm': link:packages/llm/llm
       '@deepseek-ai/dsh-settings': link:packages/settings/settings
 
-  '@dsh-electron/dsh-theme-studio@0.1.0(@deepseek-ai/cordis@vendor+cordis)(@deepseek-ai/dsh-api-remotes@packages+api+remotes)(@deepseek-ai/dsh-client-connection@packages+client+connection)(@deepseek-ai/dsh-client-locale@packages+client+locale)(@deepseek-ai/dsh-client-store@packages+client+store)(@deepseek-ai/dsh-client-ui-renderer@packages+client+ui-renderer)(@deepseek-ai/dsh-client-ui-settings@packages+client+ui-settings)(@deepseek-ai/dsh-client-ui-slots@packages+client+ui-slots)(@deepseek-ai/dsh-client-ui-theme@packages+client+ui-theme)(@deepseek-ai/dsh-settings@packages+settings+settings)(react@18.3.1)':
+  '@dsh-electron/dsh-theme-studio@0.1.1(@deepseek-ai/cordis@vendor+cordis)(@deepseek-ai/dsh-api-remotes@packages+api+remotes)(@deepseek-ai/dsh-client-connection@packages+client+connection)(@deepseek-ai/dsh-client-locale@packages+client+locale)(@deepseek-ai/dsh-client-store@packages+client+store)(@deepseek-ai/dsh-client-ui-renderer@packages+client+ui-renderer)(@deepseek-ai/dsh-client-ui-settings@packages+client+ui-settings)(@deepseek-ai/dsh-client-ui-slots@packages+client+ui-slots)(@deepseek-ai/dsh-client-ui-theme@packages+client+ui-theme)(@deepseek-ai/dsh-settings@packages+settings+settings)(react@18.3.1)':
     dependencies:
       '@deepseek-ai/cordis': link:vendor/cordis
       '@deepseek-ai/dsh-api-remotes': link:packages/api/remotes

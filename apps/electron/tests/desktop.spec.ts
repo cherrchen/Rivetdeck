@@ -163,6 +163,7 @@ describe('Electron host runtime overlay', () => {
       expect(body).toContain('id: desktop-network-subprocess')
       expect(body).toContain("name: '@dsh-electron/dsh-electron-network-subprocess'")
       expect(mountRow(body, 'theme-studio')).toContain("name: '@dsh-electron/dsh-theme-studio'")
+      expect(mountRow(body, 'theme-studio')).not.toContain('disabled: true')
       expect(body).toContain('@dsh-electron/dsh-electron-ui-brand')
       expect(body).toContain('@dsh-electron/dsh-plugin-git')
       expect(body).not.toContain('plugins.cordis.yml')
