@@ -162,6 +162,13 @@ describe('desktop plugins roster', () => {
       'network-settings',
     ])
     expect(CAPABILITIES_COMPONENTS.some(component => component.id === 'plugin-manager')).toBe(false)
+    expect(CAPABILITIES_COMPONENTS.map(component => component.moduleName)).toEqual([
+      '@dsh-electron/dsh-electron-network-subprocess',
+      '@deepseek-ai/dsh-host-directory-picker-browse',
+      '@dsh-electron/dsh-electron-desktop-capabilities/directory-picker',
+      '@dsh-electron/dsh-electron-desktop-capabilities/brand',
+      '@dsh-electron/dsh-electron-desktop-capabilities/network-settings',
+    ])
   })
 })
 

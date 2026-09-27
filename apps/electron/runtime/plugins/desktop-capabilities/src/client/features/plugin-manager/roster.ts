@@ -1,5 +1,21 @@
 /** Official Plugins page items and the Desktop Capabilities component roster. */
 
+/** npm name of the Desktop Capabilities composition package. */
+export const DESKTOP_CAPABILITIES_PACKAGE = '@dsh-electron/dsh-electron-desktop-capabilities'
+
+/** Internal feature whose Components row uses a composition subpath specifier. */
+export type CapabilitiesFeatureId = 'directory-picker' | 'brand' | 'network-settings'
+
+/**
+ * Display specifier for one internal Capabilities feature.
+ * This is the Components-row package name, not a Loader module.
+ * @param feature - feature directory and Cordis plugin `name`.
+ * @returns `@dsh-electron/dsh-electron-desktop-capabilities/<feature>`.
+ */
+export function capabilitiesFeatureModuleName(feature: CapabilitiesFeatureId): string {
+  return `${DESKTOP_CAPABILITIES_PACKAGE}/${feature}`
+}
+
 /** One Official card this feature registers on the Plugins page. */
 export interface OfficialRootItem {
   /** `plugins.item` registration id. */
@@ -23,8 +39,11 @@ export interface CapabilitiesComponent {
   labelKey: CapabilitiesComponentLabelKey
   /** Live-state source: Host inventory row or Client feature fiber. */
   source: CapabilitiesComponentSource
-  /** npm package name shown on the row when the component is its own Loader package. */
-  moduleName?: string
+  /**
+   * Package specifier shown on the row.
+   * Internal features use `capabilitiesFeatureModuleName`; independent Loader packages use their npm name.
+   */
+  moduleName: string
 }
 
 /** Locale keys that name one Capabilities component. */
@@ -60,7 +79,22 @@ export const CAPABILITIES_COMPONENTS: readonly CapabilitiesComponent[] = [
     source: { kind: 'inventory', moduleName: '@deepseek-ai/dsh-host-directory-picker-browse' },
     moduleName: '@deepseek-ai/dsh-host-directory-picker-browse',
   },
-  { id: 'directory-picker', labelKey: 'directoryPicker', source: { kind: 'fiber', fiberName: 'directory-picker' } },
-  { id: 'brand', labelKey: 'brand', source: { kind: 'fiber', fiberName: 'brand' } },
-  { id: 'network-settings', labelKey: 'networkSettings', source: { kind: 'fiber', fiberName: 'network-settings' } },
+  {
+    id: 'directory-picker',
+    labelKey: 'directoryPicker',
+    source: { kind: 'fiber', fiberName: 'directory-picker' },
+    moduleName: capabilitiesFeatureModuleName('directory-picker'),
+  },
+  {
+    id: 'brand',
+    labelKey: 'brand',
+    source: { kind: 'fiber', fiberName: 'brand' },
+    moduleName: capabilitiesFeatureModuleName('brand'),
+  },
+  {
+    id: 'network-settings',
+    labelKey: 'networkSettings',
+    source: { kind: 'fiber', fiberName: 'network-settings' },
+    moduleName: capabilitiesFeatureModuleName('network-settings'),
+  },
 ]

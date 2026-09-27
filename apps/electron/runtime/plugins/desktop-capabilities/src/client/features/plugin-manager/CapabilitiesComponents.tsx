@@ -25,7 +25,8 @@ export type CapabilitiesComponentsProps =
 /**
  * List Desktop product components on the Capabilities item page; otherwise render nothing.
  * The heading, count, and rows match a bundle's contained-components block.
- * Rows stay read-only. Displayed phase comes from `useRuntimes`, not from a hardcoded Off.
+ * Each row shows its product id and package specifier. Rows stay read-only.
+ * Displayed phase comes from `useRuntimes`, not from a hardcoded Off.
  * @param props - Detail subject, locale copy, and live runtimes selector.
  * @returns the Components section, or null.
  */
@@ -64,9 +65,7 @@ export function CapabilitiesComponentsSection(props: CapabilitiesComponentsProps
                 <div className={css.rowMain}>
                   <span className={css.rowId}>{title}</span>
                   <code className={css.rowModule}>{component.id}</code>
-                  {component.moduleName === undefined
-                    ? null
-                    : <code className={css.rowModule}>{component.moduleName}</code>}
+                  <code className={css.rowModule}>{component.moduleName}</code>
                 </div>
                 {unread
                   ? null

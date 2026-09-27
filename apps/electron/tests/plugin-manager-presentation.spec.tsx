@@ -61,6 +61,13 @@ describe('Desktop Plugin Manager presentation', () => {
       'network-settings',
     ])
     expect(CAPABILITIES_COMPONENTS.map(component => component.id)).not.toContain('plugin-manager')
+    expect(CAPABILITIES_COMPONENTS.map(component => component.moduleName)).toEqual([
+      '@dsh-electron/dsh-electron-network-subprocess',
+      '@deepseek-ai/dsh-host-directory-picker-browse',
+      '@dsh-electron/dsh-electron-desktop-capabilities/directory-picker',
+      '@dsh-electron/dsh-electron-desktop-capabilities/brand',
+      '@dsh-electron/dsh-electron-desktop-capabilities/network-settings',
+    ])
   })
 
   it('injects slots, locale, and pluginInventory, then releases Official items and the Components section on dispose', async () => {
@@ -109,9 +116,8 @@ describe('Desktop Plugin Manager presentation', () => {
     for (const component of CAPABILITIES_COMPONENTS) {
       expect(screen.getByText(en[component.labelKey])).toBeTruthy()
       expect(screen.getByText(component.id)).toBeTruthy()
+      expect(screen.getByText(component.moduleName)).toBeTruthy()
     }
-    expect(screen.getByText('@dsh-electron/dsh-electron-network-subprocess')).toBeTruthy()
-    expect(screen.getByText('@deepseek-ai/dsh-host-directory-picker-browse')).toBeTruthy()
     expect(screen.queryByRole('switch')).toBeNull()
     cleanup()
 
