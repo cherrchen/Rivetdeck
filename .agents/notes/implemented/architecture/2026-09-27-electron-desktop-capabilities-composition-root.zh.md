@@ -14,7 +14,7 @@ Status: implemented
 
 composition 包不是 `immediately: true`。`dsh.client.inject` 是原先 Client adapter 的并集并去掉自引用；`dsh.client.external` 保留 `@deepseek-ai/dsh-client-ui-primitives`。`ctx.desktop` 随 application batch 激活。需要它的 feature 声明 Cordis `inject: ['desktop', …]`。外部 Desktop-aware 插件继续 `ctx.inject(['desktop'], …)`。
 
-Plugins 页仅为 Desktop Capabilities 与 Theme Studio 注册 Official `plugins.item` 卡片。Capabilities 详情页列出五条产品 Components（网络子进程、目录选择后端、目录选择、品牌、网络设置）。每行显示包名：内部 feature 为 `@dsh-electron/dsh-electron-desktop-capabilities/<feature>`，独立 Loader adapter 用各自的 npm 名。这些名字是展示用，不是 Loader 行。条目不能 Enable、Disable 或 Uninstall。Loader 行的显示状态来自 Host `pluginInventory/list`；directory-picker、brand、network-settings 来自 Client feature fiber。Official 卡片文案仍是 Built into Desktop / Required by Desktop。
+Plugins 页仅为 Desktop Capabilities 与 Theme Studio 注册 Official `plugins.item` 卡片。Capabilities 详情页列出五条产品 Components（网络子进程、目录选择后端、目录选择、品牌、网络设置）。每行显示包名：内部 feature 为 `@dsh-electron/dsh-electron-desktop-capabilities/<feature>`，独立 Loader adapter 用各自的 npm 名。这些名字是展示用，不是 Loader 行。条目不能 Enable、Disable 或 Uninstall。Loader 行与 Theme Studio 的显示状态来自 Host `pluginInventory/list`；directory-picker、brand、network-settings 来自 Client feature fiber。Desktop Capabilities 详情页显示版本标签、桌面能力标签、包名，以及白话的组件说明。Theme Studio 详情页显示版本和包名，不带实验性标签，并只列一行，标题为 `@dsh-electron/dsh-theme-studio`，patch id 为 `theme-studio`。
 
 `host.patch.yml` 插入四条 Loader 行：network-subprocess、directory-picker-browse、desktop-capabilities 与 theme-studio。ownership overlay 的 required 名称来自这些静态 insert 包名。`@dsh-electron/dsh-electron-network-subprocess` 仍是独立 Host provider。Theme Studio 仍是 portable npm runtime 插件。Git 仍是 ecosystem bundle。`@dsh-electron/dsh-electron` 是应用包，不是插件父包。
 

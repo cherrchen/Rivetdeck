@@ -1,9 +1,11 @@
-/** Simplified Chinese copy for Desktop Official cards and the Capabilities roster. */
+/** Simplified Chinese copy for Desktop Official cards and their component rows. */
 export const zh = {
-  builtIn: 'Desktop 内置',
-  required: 'Desktop 必需，无法关闭',
+  desktopBadge: '桌面能力',
+  versionTag: 'v{version}',
   capabilities: '桌面能力',
   themeStudio: '主题工作室',
+  capabilitiesDescription: '选择工作文件夹、显示应用图标和名称，并配置网络。它随桌面版提供，不能单独关闭。',
+  themeStudioDescription: '在设置里预览并保存配色，下次打开仍然生效。',
   components: '包含的组件',
   countTotal: '共 {count} 个',
   countRunning: '{count} 运行中',
@@ -16,19 +18,26 @@ export const zh = {
   rowPhaseActive: '运行中',
   rowPhaseFailed: '异常',
   rowPhaseUnloading: '卸载中',
-  networkSubprocess: '网络子进程',
-  directoryPickerBackend: '目录选择后端',
-  directoryPicker: '目录选择',
-  brand: '品牌',
+  networkSubprocess: '网络访问',
+  networkSubprocessDescription: '让对话和工具通过桌面版访问网络。',
+  directoryPickerBackend: '系统文件夹窗口',
+  directoryPickerBackendDescription: '打开系统自带的文件夹选择窗口。',
+  directoryPicker: '选择工作文件夹',
+  directoryPickerDescription: '在对话和侧边栏里选择要使用的文件夹。',
+  brand: '应用图标和名称',
+  brandDescription: '在侧边栏和欢迎页显示桌面版的图标和名称。',
   networkSettings: '网络设置',
+  networkSettingsDescription: '在设置里查看和修改网络连接。',
 } as const
 
 /** English copy follows the same typed keys. */
 export const en = {
-  builtIn: 'Built into Desktop',
-  required: 'Required by Desktop. It cannot be turned off.',
+  desktopBadge: 'Desktop',
+  versionTag: 'v{version}',
   capabilities: 'Desktop Capabilities',
   themeStudio: 'Theme Studio',
+  capabilitiesDescription: 'Choose a workspace folder, show the app icon and name, and configure the network. It comes with the desktop app and cannot be turned off on its own.',
+  themeStudioDescription: 'Preview and save color themes in Settings. They stay in place the next time you open the app.',
   components: 'Components',
   countTotal: '{count} total',
   countRunning: '{count} running',
@@ -41,11 +50,16 @@ export const en = {
   rowPhaseActive: 'Running',
   rowPhaseFailed: 'Problem',
   rowPhaseUnloading: 'Unloading',
-  networkSubprocess: 'Network subprocess',
-  directoryPickerBackend: 'Directory picker backend',
-  directoryPicker: 'Directory picker',
-  brand: 'Brand',
+  networkSubprocess: 'Network access',
+  networkSubprocessDescription: 'Lets chat and tools reach the network through the desktop app.',
+  directoryPickerBackend: 'System folder window',
+  directoryPickerBackendDescription: 'Opens the system folder chooser.',
+  directoryPicker: 'Choose a workspace folder',
+  directoryPickerDescription: 'Picks the folder to use from the conversation and the sidebar.',
+  brand: 'App icon and name',
+  brandDescription: 'Shows the desktop app icon and name in the sidebar and on the welcome page.',
   networkSettings: 'Network settings',
+  networkSettingsDescription: 'View and change the network connection in Settings.',
 } satisfies Record<keyof typeof zh, string>
 
 export type DesktopPluginsLocaleKey = keyof typeof zh

@@ -19,6 +19,7 @@ const HOLES = {
   'conversation.hero.brand.mark': { kind: 'single', scope: 'root' },
   'settings.section': { kind: 'list', scope: 'root' },
   'plugins.item': { kind: 'list', scope: 'root' },
+  'plugins.detail.badge': { kind: 'list', scope: 'root' },
   'plugins.detail.section': { kind: 'list', scope: 'root' },
 } as const
 
@@ -93,11 +94,13 @@ describe('desktop capabilities client composition', () => {
       'desktop-capabilities',
       'theme-studio',
     ])
+    expect(slots.entries('plugins.detail.badge')[0]?.options.id).toBe('desktop-capabilities-badge')
     expect(slots.entries('plugins.detail.section')[0]?.options.id).toBe('desktop-capabilities-components')
     await fiber.dispose()
     expect(slots.entries('conversation.hero.workspace.directoryFlow')).toHaveLength(0)
     expect(slots.entries('settings.section')).toHaveLength(0)
     expect(slots.entries('plugins.item')).toHaveLength(0)
+    expect(slots.entries('plugins.detail.badge')).toHaveLength(0)
     expect(slots.entries('plugins.detail.section')).toHaveLength(0)
     expect(slots.entries('sidebar.brand.mark')).toHaveLength(0)
   })

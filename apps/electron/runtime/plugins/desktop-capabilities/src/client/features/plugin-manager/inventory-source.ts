@@ -3,7 +3,7 @@
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
-import { CAPABILITIES_COMPONENTS } from './roster.ts'
+import { TRACKED_COMPONENTS } from './roster.ts'
 import {
   phaseFromFiberState, runtimeFromInventory, sameRuntimeMap,
   type ComponentPhase, type ComponentRuntime, type ComponentRuntimeMap,
@@ -48,11 +48,11 @@ export function createRuntimesSource(): RuntimesSource {
  * Absent inventory matches and missing fibers are omitted rather than invented.
  * @param ctx - feature fiber whose registry holds sibling Client features.
  * @param entries - latest successful `pluginInventory/list` rows; empty when none yet.
- * @returns runtime per observed Capabilities component id.
+ * @returns runtime per observed roster component id.
  */
 export function buildComponentRuntimes(ctx: ClientContext, entries: readonly InventoryEntry[]): ComponentRuntimeMap {
   const map: Record<string, ComponentRuntime> = {}
-  for (const component of CAPABILITIES_COMPONENTS) {
+  for (const component of TRACKED_COMPONENTS) {
     const source = component.source
     if (source.kind === 'inventory') {
       const runtime = runtimeFromInventory(entries, source.moduleName)
@@ -72,7 +72,7 @@ export function buildComponentRuntimes(ctx: ClientContext, entries: readonly Inv
 /**
  * Read Host plugin inventory and Client feature fibers into one roster map.
  * @param ctx - feature fiber with `remote.pluginInventory` and the registry.
- * @returns runtime per observed Capabilities component id.
+ * @returns runtime per observed roster component id.
  */
 export async function readComponentRuntimes(ctx: ClientContext): Promise<ComponentRuntimeMap> {
   const entries = await listInventoryEntries(ctx)

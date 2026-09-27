@@ -76,6 +76,13 @@
   overflow-wrap: anywhere;
 }
 
+.rowDesc {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+  overflow-wrap: anywhere;
+}
+
 .row[data-state='off'] .rowId {
   color: var(--dsw-alias-label-secondary);
 }

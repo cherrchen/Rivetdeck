@@ -16,7 +16,7 @@ The ownership overlay scans bundle layers, `profiles/web/cordis.patch.yml`, and 
 
 Disable persists in `dsh.profile.bundles`. Uninstall drops the dependency; the next Desktop boot seeds and enables it again. Electron does not hide Uninstall. Every boot restores Desktop-owned links under `profiles/node_modules` and `profiles/web/node_modules`.
 
-Required `plugins.item` copy is Built into Desktop / Required by Desktop. The Official cards and the Capabilities Components list are a product roster, not a dump of Loader rows. Live component phase is recorded in [Desktop Capabilities composition root](2026-09-27-electron-desktop-capabilities-composition-root.md).
+The Official cards and the component lists are a product roster, not a dump of Loader rows. Desktop Capabilities' detail page carries a version, a Desktop badge, and plain-language component descriptions. Theme Studio lists `@dsh-electron/dsh-theme-studio` as one component row and shows its version and package name without a beta tag. Live component phase is recorded in [Desktop Capabilities composition root](2026-09-27-electron-desktop-capabilities-composition-root.md).
 
 This extends [Web Plugin Manager and Git sidebar](2026-09-13-electron-plugin-manager-and-git-sidebar.md) and keeps the [npm-only ecosystem plugin](2026-09-14-electron-npm-only-ecosystem-plugins.md) distribution rule.
 

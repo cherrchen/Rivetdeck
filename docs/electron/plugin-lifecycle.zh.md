@@ -28,7 +28,7 @@ Desktop-required 不等于每个包一张 Official 卡。四件事分开：compo
 
 **Portable runtime / ecosystem。** Theme Studio 是带有自己 Official 卡的必需 npm runtime 插件。Git 是 Installed 分组中的 ecosystem bundle。
 
-Plugins 页仅为 Desktop Capabilities 与 Theme Studio 注册 Official `plugins.item` 卡片，文案为 Built into Desktop / Required by Desktop。Capabilities 详情页以组合包「包含的组件」同样的标题与计数列出产品 Components（网络子进程、目录选择后端、目录选择、品牌、网络设置）。每行显示包名：内部 feature 为 `@dsh-electron/dsh-electron-desktop-capabilities/<feature>`，独立 Loader adapter 用各自的 npm 名。Loader 行的运行状态来自 Host `pluginInventory/list`；directory-picker、brand、network-settings 的运行状态来自 Client feature fiber。条目不能 Enable、Disable 或 Uninstall。
+Plugins 页仅为 Desktop Capabilities 与 Theme Studio 注册 Official `plugins.item` 卡片。Desktop Capabilities 详情页显示版本、桌面能力标签、包名和一句说明，再以组合包「包含的组件」同样的标题与计数列出产品 Components（网络访问、系统文件夹窗口、选择工作文件夹、应用图标和名称、网络设置）。Capabilities 每一行显示这句说明、短 id 和包名：内部 feature 为 `@dsh-electron/dsh-electron-desktop-capabilities/<feature>`，独立 Loader adapter 用各自的 npm 名。Theme Studio 详情页显示版本和包名，不带实验性标签，然后只列一行，标题为 `@dsh-electron/dsh-theme-studio`，其下是 patch id `theme-studio`，与已安装 bundle 列出 Git 这类插件行的方式相同。Loader 行与 Theme Studio 的运行状态来自 Host `pluginInventory/list`；directory-picker、brand、network-settings 的运行状态来自 Client feature fiber。条目不能 Enable、Disable 或 Uninstall。
 
 **Desktop-preinstalled ecosystem。** `dshElectron.ecosystemPlugins` 中的包（当前为 Git）写入 web profile 的 pinned `dependencies`，并在首次 seed 时写入 `dsh.profile.bundles`。它们出现在 Installed/Bundle 卡片中，而不是 Official/`plugins.item`。Enable 与 Disable 持久保存在 `dsh.profile.bundles`。Uninstall 会去掉 dependency；下次 Desktop 启动会再次 seed 并默认启用。Git 是 portable bundle，同一 `$DSH_HOME` 下 CLI `dsh web` 也会看到它。
 

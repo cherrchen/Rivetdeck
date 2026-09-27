@@ -13,9 +13,15 @@ import {
 } from '../runtime/plugins/desktop-capabilities/src/client/features/plugin-manager/CapabilitiesComponents.tsx'
 import { apply, inject, NS } from '../runtime/plugins/desktop-capabilities/src/client/features/plugin-manager/index.ts'
 import { en } from '../runtime/plugins/desktop-capabilities/src/client/features/plugin-manager/locales.ts'
+import { DesktopPluginBadge, type DesktopPluginBadgeProps } from '../runtime/plugins/desktop-capabilities/src/client/features/plugin-manager/DesktopPluginBadge.tsx'
 import {
   CAPABILITIES_COMPONENTS,
+  DESKTOP_CAPABILITIES_PACKAGE,
+  DESKTOP_CAPABILITIES_VERSION,
   OFFICIAL_ROOT_ITEMS,
+  THEME_STUDIO_COMPONENTS,
+  THEME_STUDIO_PACKAGE,
+  THEME_STUDIO_VERSION,
 } from '../runtime/plugins/desktop-capabilities/src/client/features/plugin-manager/roster.ts'
 import type { ComponentRuntimeMap } from '../runtime/plugins/desktop-capabilities/src/client/features/plugin-manager/runtime.ts'
 
@@ -84,6 +90,7 @@ describe('Desktop Plugin Manager presentation', () => {
       name: 'root',
       children: {
         'plugins.item': { kind: 'list', scope: 'root' },
+        'plugins.detail.badge': { kind: 'list', scope: 'root' },
         'plugins.detail.section': { kind: 'list', scope: 'root' },
       },
     } as never, () => null)
@@ -92,10 +99,12 @@ describe('Desktop Plugin Manager presentation', () => {
       'desktop-capabilities',
       'theme-studio',
     ])
+    expect(slots.entries('plugins.detail.badge')[0]?.options.id).toBe('desktop-capabilities-badge')
     expect(slots.entries('plugins.detail.section')[0]?.options.id).toBe('desktop-capabilities-components')
     expect(slots.entries('plugins.detail.section')[0]?.locale).toBe(NS)
     await fiber.dispose()
     expect(slots.entries('plugins.item')).toHaveLength(0)
+    expect(slots.entries('plugins.detail.badge')).toHaveLength(0)
     expect(slots.entries('plugins.detail.section')).toHaveLength(0)
   })
 
@@ -115,6 +124,7 @@ describe('Desktop Plugin Manager presentation', () => {
     ])
     for (const component of CAPABILITIES_COMPONENTS) {
       expect(screen.getByText(en[component.labelKey])).toBeTruthy()
+      expect(screen.getByText(en[component.descriptionKey])).toBeTruthy()
       expect(screen.getByText(component.id)).toBeTruthy()
       expect(screen.getByText(component.moduleName)).toBeTruthy()
     }
@@ -122,7 +132,13 @@ describe('Desktop Plugin Manager presentation', () => {
     cleanup()
 
     const theme = section({ kind: 'item', id: 'theme-studio' })
-    expect(theme.container.firstChild).toBeNull()
+    expect(screen.getByRole('heading', { name: en.components, level: 4 })).toBeTruthy()
+    expect(screen.getByText(interpolate(en.countTotal, { count: '1' }))).toBeTruthy()
+    expect(screen.getByText(THEME_STUDIO_PACKAGE)).toBeTruthy()
+    expect(screen.getByText(en.themeStudioDescription)).toBeTruthy()
+    expect(screen.getByText(THEME_STUDIO_COMPONENTS[0].id)).toBeTruthy()
+    expect(screen.queryByText(en.partOff)).toBeNull()
+    expect(screen.queryByRole('switch')).toBeNull()
     theme.unmount()
 
     const bundle = section({
@@ -158,5 +174,20 @@ describe('Desktop Plugin Manager presentation', () => {
     expect(screen.getAllByRole('listitem')[0]?.getAttribute('data-state')).toBe('failed')
     expect(screen.getAllByRole('listitem')[1]?.getAttribute('data-state')).toBeNull()
     expect(screen.queryByText(en.partOff)).toBeNull()
+  })
+
+  it('shows version and package name on both Official pages, and the Desktop tag only on Capabilities', () => {
+    const badge = (subject: DesktopPluginBadgeProps['subject']) => render(createElement(DesktopPluginBadge, {
+      subject, t,
+    } as DesktopPluginBadgeProps))
+    badge({ kind: 'item', id: 'desktop-capabilities' })
+    expect(screen.getByText(interpolate(en.versionTag, { version: DESKTOP_CAPABILITIES_VERSION }))).toBeTruthy()
+    expect(screen.getByText(en.desktopBadge)).toBeTruthy()
+    expect(screen.getByText(DESKTOP_CAPABILITIES_PACKAGE)).toBeTruthy()
+    cleanup()
+    badge({ kind: 'item', id: 'theme-studio' })
+    expect(screen.getByText(interpolate(en.versionTag, { version: THEME_STUDIO_VERSION }))).toBeTruthy()
+    expect(screen.getByText(THEME_STUDIO_PACKAGE)).toBeTruthy()
+    expect(screen.queryByText(en.desktopBadge)).toBeNull()
   })
 })

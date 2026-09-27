@@ -4,7 +4,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import { PluginArtworkDefault, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
-import { CAPABILITIES_COMPONENTS } from './roster.ts'
+import { componentsForItem, usesPackageTitle, type RosterComponent } from './roster.ts'
 import { partsSummary, rowDataState, rowDotState, rowStateKey, type ComponentRuntimeMap } from './runtime.ts'
 import css from './CapabilitiesComponents.module.css'
 
@@ -23,21 +23,38 @@ export type CapabilitiesComponentsProps =
   & InjectFace<CapabilitiesComponentsInjected>
 
 /**
- * List Desktop product components on the Capabilities item page; otherwise render nothing.
+ * Title of one roster row.
+ * Theme Studio uses the npm package name. Capabilities uses the localized product name.
+ * @param component - roster row.
+ * @param t - locale translate.
+ * @returns the row title.
+ */
+function rowTitle(
+  component: RosterComponent,
+  t: CapabilitiesComponentsProps['t'],
+): string {
+  return usesPackageTitle(component) ? component.moduleName : t(component.labelKey)
+}
+
+/**
+ * List product components on a Desktop Official item page; otherwise render nothing.
  * The heading, count, and rows match a bundle's contained-components block.
- * Each row shows its product id and package specifier. Rows stay read-only.
- * Displayed phase comes from `useRuntimes`, not from a hardcoded Off.
+ * Capabilities rows show a product name, a sentence, the short id, and the package specifier.
+ * Theme Studio shows one package row: the npm name, a sentence, and the patch id.
+ * Rows stay read-only. Displayed phase comes from `useRuntimes`, not from a hardcoded Off.
  * @param props - Detail subject, locale copy, and live runtimes selector.
  * @returns the Components section, or null.
  */
 export function CapabilitiesComponentsSection(props: CapabilitiesComponentsProps) {
   const { subject, t, useRuntimes } = props
-  if (subject.kind !== 'item' || subject.id !== 'desktop-capabilities') return null
+  if (subject.kind !== 'item') return null
+  const components = componentsForItem(subject.id)
+  if (components === undefined) return null
   const runtimes = useRuntimes(map => map)
   const unread = runtimes === null
   const summary = partsSummary(
-    CAPABILITIES_COMPONENTS.length,
-    unread ? [] : CAPABILITIES_COMPONENTS.map(component => runtimes[component.id]),
+    components.length,
+    unread ? [] : components.map(component => runtimes[component.id]),
     t,
   )
   return (
@@ -47,8 +64,9 @@ export function CapabilitiesComponentsSection(props: CapabilitiesComponentsProps
         <span className={css.count}>{summary}</span>
       </div>
       <ul className={css.list}>
-        {CAPABILITIES_COMPONENTS.map((component) => {
-          const title = t(component.labelKey)
+        {components.map((component) => {
+          const title = rowTitle(component, t)
+          const packaged = usesPackageTitle(component)
           const runtime = runtimes?.[component.id]
           const dataState = rowDataState(runtime)
           return (
@@ -64,8 +82,11 @@ export function CapabilitiesComponentsSection(props: CapabilitiesComponentsProps
                 </span>
                 <div className={css.rowMain}>
                   <span className={css.rowId}>{title}</span>
-                  <code className={css.rowModule}>{component.id}</code>
-                  <code className={css.rowModule}>{component.moduleName}</code>
+                  <span className={css.rowDesc}>{t(component.descriptionKey)}</span>
+                  {title === component.id ? null : <code className={css.rowModule}>{component.id}</code>}
+                  {packaged || title === component.moduleName
+                    ? null
+                    : <code className={css.rowModule}>{component.moduleName}</code>}
                 </div>
                 {unread
                   ? null

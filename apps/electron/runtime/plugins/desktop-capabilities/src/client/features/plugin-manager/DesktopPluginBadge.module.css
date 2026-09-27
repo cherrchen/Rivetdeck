@@ -1,0 +1,17 @@
+.versionTag {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.badge {
+  flex: none;
+}
+
+.packageName {
+  flex: 1 0 100%;
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+  overflow-wrap: anywhere;
+}
