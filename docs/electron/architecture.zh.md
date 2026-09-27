@@ -338,7 +338,7 @@ runtime/host.patch.yml     Host overlay: required Desktop plugins only
 scripts/build-runtime-plugins.mjs
 src/runtime-plugins.ts     discovery, validation, and profile linking
 src/ecosystem-profile.ts   seed ecosystem plugins into the web profile
-src/ownership-overlay.ts   suppress foreign overlay rows then insert canonical names
+src/ownership-overlay.ts   generate ownership patches for current profile layers
 ```
 
 启动时先校验这三个来源发现的每个插件，再将其链接到 `$DSH_HOME/profiles/node_modules/<package-name>` 与 `$DSH_HOME/profiles/web/node_modules/<package-name>`，然后启动受监督 Host。`host.patch.yml` 挂载必需的 Desktop 插件。Git 等 ecosystem 插件被 seed 进 web profile。这些 bundle 以及之后安装的插件由上游 Web profile 管理启用状态（[插件生命周期](plugin-lifecycle.zh.md)）。
@@ -355,7 +355,7 @@ Desktop Capabilities 包（`@dsh-electron/dsh-electron-desktop-capabilities`）�
 
 Git（`@dsh-electron/dsh-plugin-git@0.2.3`）是仅从 npm 安装的 bundled ecosystem 插件。其 Client 占用 `ctx.sidebarRight` / `sidebarRightTabs`，并列入 `dshElectron.ecosystemPlugins`。Desktop 把它 seed 进共享 web profile，因此 Plugins 页在 Installed 中展示它，Enable 与 Disable 在此持久保存。
 
-Theme Studio（`@dsh-electron/dsh-theme-studio@0.1.1`）是仅从 npm 安装的必需 runtime 插件，列入 `dshElectron.runtimePlugins`。其源码真源是 `cherrchen/dsh-theme-studio`；本仓库不保留其任何副本。该包注册**设置 → 通用 → 主题**，并调用 `ctx.theme.overrideTokens()`；它不替换官方外观，也不自己呈现 CSS。其 `host.patch.yml` 挂载行已启用，已发布的 peer 声明包含 `0.1.7-rc.2`。
+Theme Studio（`@dsh-electron/dsh-theme-studio@0.1.2`）是列入 `dshElectron.ecosystemPlugins` 的预装 ecosystem bundle。其源码真源是 `cherrchen/dsh-theme-studio`；本仓库不保留其任何副本。该包注册**设置 → 通用 → 主题**，并调用 `ctx.theme.overrideTokens()`；上游 Plugins 页在 Installed 下展示它的 bundle。已发布的 peer 声明包含 `0.1.7-rc.2`。
 
 ```text
 Feature Plugin
@@ -623,7 +623,7 @@ apps/electron/runtime/plugins/
 └─ desktop-network-subprocess/      independent Host provider
 
 npm registry
-├─ @dsh-electron/dsh-theme-studio  runtime plugin (dshElectron.runtimePlugins)
+├─ @dsh-electron/dsh-theme-studio  ecosystem plugin (dshElectron.ecosystemPlugins)
 └─ @dsh-electron/dsh-plugin-*      ecosystem plugin (dshElectron.ecosystemPlugins)
 ```
 
@@ -670,9 +670,9 @@ Desktop
 
 Desktop-required Client adapter 是 `@dsh-electron/dsh-electron-desktop-capabilities` 的内部 Cordis feature。它 inject `desktop`，并从子 fiber 占用产品 slot。它不是独立的 `@dsh-electron/dsh-electron-*` Loader 包。Host-only provider（如 `@dsh-electron/dsh-electron-network-subprocess`）仍是独立的 `runtime/plugins/` 包和 overlay 行。
 
-### Electron 必需的 portable DSH UI 基础设施
+### 预装的 portable ecosystem 插件
 
-这是 Desktop 在上游 Client 仍提供占用插槽时作为必需 Host 组合挂载的 portable `platform: web` 公共包。它只使用上游 DSH 服务，不依赖 Electron，源码真源是独立仓库，Desktop 安装、打包并链接其已发布 npm artifact，不重新构建。`dshElectron.runtimePlugins` 声明它，因此它与 `runtime/plugins/` 成员地位相同，而不是外部生态插件。加载该包 MUST NOT 占用产品 UI，直到消费者调用已发布的服务。当前唯一成员是 Theme Studio。用户可禁用的产品功能是声明在 `dshElectron.ecosystemPlugins` 中的生态插件。
+用户拥有启用权的 portable `platform: web` 公共包可作为预装 ecosystem bundle。它只使用上游 DSH 服务，Desktop 安装、打包并链接其已发布 npm artifact，不重新构建。Theme Studio 与 Git 都声明在 `dshElectron.ecosystemPlugins` 中，用户可在共享 web profile 中禁用它们。
 
 ## 20. 原生实现与功能所有权
 

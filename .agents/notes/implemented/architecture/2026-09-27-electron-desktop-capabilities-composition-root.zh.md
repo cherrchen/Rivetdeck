@@ -10,13 +10,13 @@ Status: implemented
 
 ## Decision
 
-`@dsh-electron/dsh-electron-desktop-capabilities` 是唯一的 Desktop Client Loader/npm 包。其 Host half 仍为空。其唯一的 `lib/client.js` 先提供 `ctx.desktop`，再用 Cordis `ctx.plugin()` 挂载内部 feature 插件。feature 位于 `src/client/features/{directory-picker,brand,network-settings,plugin-manager}/`，导出 `name` / `inject` / `apply` 且无 default export，不是 npm 包、Loader 行或 npm subpath 插件。
+`@dsh-electron/dsh-electron-desktop-capabilities` 是唯一的 Desktop Client Loader/npm 包。其 Host half 为 profile HMR 刷新 ownership overlay。其唯一的 `lib/client.js` 先提供 `ctx.desktop`，再用 Cordis `ctx.plugin()` 挂载内部 feature 插件。feature 位于 `src/client/features/{directory-picker,brand,network-settings,plugin-manager}/`，导出 `name` / `inject` / `apply` 且无 default export，不是 npm 包、Loader 行或 npm subpath 插件。
 
 composition 包不是 `immediately: true`。`dsh.client.inject` 是原先 Client adapter 的并集并去掉自引用；`dsh.client.external` 保留 `@deepseek-ai/dsh-client-ui-primitives`。`ctx.desktop` 随 application batch 激活。需要它的 feature 声明 Cordis `inject: ['desktop', …]`。外部 Desktop-aware 插件继续 `ctx.inject(['desktop'], …)`。
 
 Plugins 页仅由 Desktop Capabilities 注册 Official `plugins.item` 卡片。Capabilities 详情页列出五条产品 Components（网络子进程、目录选择后端、目录选择、品牌、网络设置）。每行显示包名：内部 feature 为 `@dsh-electron/dsh-electron-desktop-capabilities/<feature>`，独立 Loader adapter 用各自的 npm 名。这些名字是展示用，不是 Loader 行。条目不能 Enable、Disable 或 Uninstall。Loader 行的显示状态来自 Host `pluginInventory/list`；directory-picker、brand、network-settings 来自 Client feature fiber。Desktop Capabilities 详情页显示版本标签、桌面能力标签、包名，以及白话的组件说明。
 
-`host.patch.yml` 插入四条 Loader 行：network-subprocess、directory-picker-browse、desktop-capabilities 与 theme-studio。ownership overlay 的 required 名称来自这些静态 insert 包名。`@dsh-electron/dsh-electron-network-subprocess` 仍是独立 Host provider。Theme Studio 仍是 portable npm runtime 插件。Git 仍是 ecosystem bundle。`@dsh-electron/dsh-electron` 是应用包，不是插件父包。
+`host.patch.yml` 插入三条 Loader 行：network-subprocess、directory-picker-browse 与 desktop-capabilities。required package ownership 名称来自这些静态 insert 包名。`@dsh-electron/dsh-electron-network-subprocess` 仍是独立 Host provider。Theme Studio 与 Git 都是 portable ecosystem bundle。`@dsh-electron/dsh-electron` 是应用包，不是插件父包。
 
 本决策延伸 [类型化 Main 桥所有权](2026-08-21-electron-desktop-capability-ownership.zh.md)，保留 [本地品牌占用](../feature/2026-08-23-electron-desktop-ui-brand.zh.md)，并在 [ecosystem seed 与 ownership overlay](2026-09-27-electron-profile-managed-ecosystem-and-ownership-overlay.zh.md) 中把 Official 卡与 overlay insert 分开。
 

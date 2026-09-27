@@ -338,7 +338,7 @@ runtime/host.patch.yml     Host overlay: required Desktop plugins only
 scripts/build-runtime-plugins.mjs
 src/runtime-plugins.ts     discovery, validation, and profile linking
 src/ecosystem-profile.ts   seed ecosystem plugins into the web profile
-src/ownership-overlay.ts   suppress foreign overlay rows then insert canonical names
+src/ownership-overlay.ts   generate ownership patches for current profile layers
 ```
 
 Startup validates and links every discovered plugin from those three sources into `$DSH_HOME/profiles/node_modules/<package-name>` and `$DSH_HOME/profiles/web/node_modules/<package-name>` before the supervised Host starts. `host.patch.yml` mounts required Desktop plugins. Ecosystem plugins such as Git are seeded into the web profile. The upstream Web profile manages enablement for those bundles and for subsequently installed plugins ([plugin lifecycle](plugin-lifecycle.md)).
@@ -355,7 +355,7 @@ The [Network Settings page](network-settings.md) is an internal Desktop Client f
 
 Git (`@dsh-electron/dsh-plugin-git@0.2.3`) is a bundled ecosystem plugin installed only from npm. Its client occupies `ctx.sidebarRight` / `sidebarRightTabs` and is listed in `dshElectron.ecosystemPlugins`. Desktop seeds it into the shared web profile so the Plugins page shows it in Installed, where Enable and Disable persist.
 
-Theme Studio (`@dsh-electron/dsh-theme-studio@0.1.1`) is a required runtime plugin installed only from npm and listed in `dshElectron.runtimePlugins`. Its canonical source is `cherrchen/dsh-theme-studio`; this repository keeps no copy of it. The package registers **Settings → General → Themes** and calls `ctx.theme.overrideTokens()`; it does not replace official Appearance or present CSS itself. Its `host.patch.yml` row is enabled, and its published peer declarations include `0.1.7-rc.2`.
+Theme Studio (`@dsh-electron/dsh-theme-studio@0.1.2`) is a preinstalled ecosystem bundle listed in `dshElectron.ecosystemPlugins`. Its canonical source is `cherrchen/dsh-theme-studio`; this repository keeps no copy of it. The package registers **Settings → General → Themes** and calls `ctx.theme.overrideTokens()`; the upstream Plugins page lists its bundle under Installed. Its published peer declarations include `0.1.7-rc.2`.
 
 ```text
 Feature Plugin
@@ -623,7 +623,7 @@ apps/electron/runtime/plugins/
 └─ desktop-network-subprocess/      independent Host provider
 
 npm registry
-├─ @dsh-electron/dsh-theme-studio  runtime plugin (dshElectron.runtimePlugins)
+├─ @dsh-electron/dsh-theme-studio  ecosystem plugin (dshElectron.ecosystemPlugins)
 └─ @dsh-electron/dsh-plugin-*      ecosystem plugin (dshElectron.ecosystemPlugins)
 ```
 
@@ -670,9 +670,9 @@ The main fiber declares only portable requirements. An optional `ctx.inject(['de
 
 A Desktop-required Client adapter is an internal Cordis feature of `@dsh-electron/dsh-electron-desktop-capabilities`. It injects `desktop` and occupies product slots from a child fiber. It is not a separate `@dsh-electron/dsh-electron-*` Loader package. A Host-only provider such as `@dsh-electron/dsh-electron-network-subprocess` remains an independent `runtime/plugins/` package and overlay row.
 
-### Electron-required portable DSH UI infrastructure
+### Preinstalled portable ecosystem plugins
 
-A portable `platform: web` public package that Desktop mounts as required Host composition when the upstream Client still provides its occupancy slot. It uses only upstream DSH services, has no Electron dependency, and lives in a standalone canonical repository whose published npm artifact Desktop installs, packages, and links without rebuilding. `dshElectron.runtimePlugins` declares it, so it holds the same status as a `runtime/plugins/` member instead of an external ecosystem plugin. Loading the package MUST NOT occupy product UI until a consumer calls the published service. Theme Studio is the only member. Product features that consumers may disable are ecosystem plugins declared in `dshElectron.ecosystemPlugins`.
+A portable `platform: web` public package can ship as a preinstalled ecosystem bundle when users own its enablement. It uses upstream DSH services and its published npm artifact is installed, packaged, and linked without rebuilding. Theme Studio and Git are declared in `dshElectron.ecosystemPlugins`; users can disable either in the shared web profile.
 
 ## 20. Native implementation versus feature ownership
 

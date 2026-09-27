@@ -45,8 +45,8 @@
   en: c77a4edf8d67be6e
   zh: 3177218b1b645050
 /part-i-current-architecture/10-current-runtime-plugin-infrastructure:
-  en: bceebf6dc88677df
-  zh: 48e0fd86f3e0d6ab
+  en: d64e71e3f9ed8053
+  zh: 6d05542f387aaeb6
 /part-ii-architecture-principles:
   en: b38007fbc1f7ded6
   zh: 1077832f84d3a4fb
@@ -89,9 +89,9 @@
 /part-iii-target-architecture/19-feature-plugin-model/desktop-required-adapter:
   en: 4650e4779a5f4522
   zh: 9d27c39652a86b73
-/part-iii-target-architecture/19-feature-plugin-model/electron-required-portable-dsh-ui-infrastructure:
-  en: 915ac6671e0cb2e9
-  zh: 2e3d461773f6ec66
+/part-iii-target-architecture/19-feature-plugin-model/preinstalled-portable-ecosystem-plugins:
+  en: 54614c7b3f6d11a2
+  zh: 49c4a25d607ba668
 /part-iii-target-architecture/20-native-implementation-versus-feature-ownership:
   en: b894d6a67599582a
   zh: ebf6b9480c5621f1
