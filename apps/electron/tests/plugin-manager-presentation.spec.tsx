@@ -19,9 +19,6 @@ import {
   DESKTOP_CAPABILITIES_PACKAGE,
   DESKTOP_CAPABILITIES_VERSION,
   OFFICIAL_ROOT_ITEMS,
-  THEME_STUDIO_COMPONENTS,
-  THEME_STUDIO_PACKAGE,
-  THEME_STUDIO_VERSION,
 } from '../runtime/plugins/desktop-capabilities/src/client/features/plugin-manager/roster.ts'
 import type { ComponentRuntimeMap } from '../runtime/plugins/desktop-capabilities/src/client/features/plugin-manager/runtime.ts'
 
@@ -54,8 +51,8 @@ function allRunning(): ComponentRuntimeMap {
 }
 
 describe('Desktop Plugin Manager presentation', () => {
-  it('registers only Desktop Capabilities and Theme Studio as Electron-owned Official items', () => {
-    expect(OFFICIAL_ROOT_ITEMS.map(item => item.id)).toEqual(['desktop-capabilities', 'theme-studio'])
+  it('registers only Desktop Capabilities as an Electron-owned Official item', () => {
+    expect(OFFICIAL_ROOT_ITEMS.map(item => item.id)).toEqual(['desktop-capabilities'])
   })
 
   it('lists five Capabilities components and omits the plugin-manager feature', () => {
@@ -97,7 +94,6 @@ describe('Desktop Plugin Manager presentation', () => {
     const fiber = await ctx.plugin({ inject: [...inject], apply }).await()
     expect(slots.entries('plugins.item').map(entry => entry.options.id)).toEqual([
       'desktop-capabilities',
-      'theme-studio',
     ])
     expect(slots.entries('plugins.detail.badge')[0]?.options.id).toBe('desktop-capabilities-badge')
     expect(slots.entries('plugins.detail.section')[0]?.options.id).toBe('desktop-capabilities-components')
@@ -129,23 +125,6 @@ describe('Desktop Plugin Manager presentation', () => {
       expect(screen.getByText(component.moduleName)).toBeTruthy()
     }
     expect(screen.queryByRole('switch')).toBeNull()
-    cleanup()
-
-    const theme = section({ kind: 'item', id: 'theme-studio' })
-    expect(screen.getByRole('heading', { name: en.components, level: 4 })).toBeTruthy()
-    expect(screen.getByText(interpolate(en.countTotal, { count: '1' }))).toBeTruthy()
-    expect(screen.getByText(THEME_STUDIO_PACKAGE)).toBeTruthy()
-    expect(screen.getByText(en.themeStudioDescription)).toBeTruthy()
-    expect(screen.getByText(THEME_STUDIO_COMPONENTS[0].id)).toBeTruthy()
-    expect(screen.queryByText(en.partOff)).toBeNull()
-    expect(screen.queryByRole('switch')).toBeNull()
-    theme.unmount()
-
-    const bundle = section({
-      kind: 'bundle',
-      pkg: { name: '@dsh-electron/dsh-theme-studio', installed: true, enabled: true, rows: [] },
-    })
-    expect(bundle.container.firstChild).toBeNull()
   })
 
   it('shows running from live runtimes and keeps rows unswitchable', () => {
@@ -176,7 +155,7 @@ describe('Desktop Plugin Manager presentation', () => {
     expect(screen.queryByText(en.partOff)).toBeNull()
   })
 
-  it('shows version and package name on both Official pages, and the Desktop tag only on Capabilities', () => {
+  it('shows version, package name, and the Desktop tag on the Capabilities Official page', () => {
     const badge = (subject: DesktopPluginBadgeProps['subject']) => render(createElement(DesktopPluginBadge, {
       subject, t,
     } as DesktopPluginBadgeProps))
@@ -184,10 +163,5 @@ describe('Desktop Plugin Manager presentation', () => {
     expect(screen.getByText(interpolate(en.versionTag, { version: DESKTOP_CAPABILITIES_VERSION }))).toBeTruthy()
     expect(screen.getByText(en.desktopBadge)).toBeTruthy()
     expect(screen.getByText(DESKTOP_CAPABILITIES_PACKAGE)).toBeTruthy()
-    cleanup()
-    badge({ kind: 'item', id: 'theme-studio' })
-    expect(screen.getByText(interpolate(en.versionTag, { version: THEME_STUDIO_VERSION }))).toBeTruthy()
-    expect(screen.getByText(THEME_STUDIO_PACKAGE)).toBeTruthy()
-    expect(screen.queryByText(en.desktopBadge)).toBeNull()
   })
 })

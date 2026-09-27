@@ -1,8 +1,7 @@
 /**
- * Register Desktop Capabilities and Theme Studio as Official items, the
- * Capabilities title badges, and both component sections. Rows cannot be
- * switched; displayed phase comes from Host `pluginInventory/list` and
- * Client feature fibers.
+ * Register Desktop Capabilities as an Official item, its title badges, and the
+ * Capabilities component section. Rows cannot be switched; displayed phase comes
+ * from Host `pluginInventory/list` and Client feature fibers.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
@@ -11,7 +10,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { CapabilitiesComponentsSection } from './CapabilitiesComponents.tsx'
 import { DesktopPluginBadge } from './DesktopPluginBadge.tsx'
-import { CapabilitiesItemCard, ThemeStudioItemCard } from './DesktopPluginCard.tsx'
+import { CapabilitiesItemCard } from './DesktopPluginCard.tsx'
 import { createRuntimesSource, watchComponentRuntimes } from './inventory-source.ts'
 import { en, zh, type DesktopPluginsLocaleKey } from './locales.ts'
 import { OFFICIAL_ROOT_ITEMS, type OfficialRootItem } from './roster.ts'
@@ -35,13 +34,12 @@ export const inject = ['slots', 'locale', 'remote', 'remote.pluginInventory']
 /** Card component for one Official item. */
 const ITEM_CARDS = {
   'desktop-capabilities': CapabilitiesItemCard,
-  'theme-studio': ThemeStudioItemCard,
 } satisfies Record<OfficialRootItem['id'], typeof CapabilitiesItemCard>
 
 /**
- * List the two Electron-owned Official items, the Capabilities title badges,
- * and the component sections. Rows cannot be switched; displayed phase comes
- * from Host `pluginInventory/list` and Client feature fibers.
+ * List the Electron-owned Desktop Capabilities Official item, its title badges,
+ * and the component section. Rows cannot be switched; displayed phase comes from
+ * Host `pluginInventory/list` and Client feature fibers.
  * @param ctx - Feature fiber that has `slots`, `locale`, and `remote.pluginInventory`.
  */
 export function apply(ctx: ClientContext): void {

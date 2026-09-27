@@ -4,7 +4,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import { PluginArtworkDefault, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
-import { componentsForItem, usesPackageTitle, type RosterComponent } from './roster.ts'
+import { componentsForItem } from './roster.ts'
 import { partsSummary, rowDataState, rowDotState, rowStateKey, type ComponentRuntimeMap } from './runtime.ts'
 import css from './CapabilitiesComponents.module.css'
 
@@ -23,24 +23,9 @@ export type CapabilitiesComponentsProps =
   & InjectFace<CapabilitiesComponentsInjected>
 
 /**
- * Title of one roster row.
- * Theme Studio uses the npm package name. Capabilities uses the localized product name.
- * @param component - roster row.
- * @param t - locale translate.
- * @returns the row title.
- */
-function rowTitle(
-  component: RosterComponent,
-  t: CapabilitiesComponentsProps['t'],
-): string {
-  return usesPackageTitle(component) ? component.moduleName : t(component.labelKey)
-}
-
-/**
- * List product components on a Desktop Official item page; otherwise render nothing.
+ * List product components on the Desktop Capabilities Official page; otherwise render nothing.
  * The heading, count, and rows match a bundle's contained-components block.
- * Capabilities rows show a product name, a sentence, the short id, and the package specifier.
- * Theme Studio shows one package row: the npm name, a sentence, and the patch id.
+ * Each row shows a product name, a sentence, the short id, and the package specifier.
  * Rows stay read-only. Displayed phase comes from `useRuntimes`, not from a hardcoded Off.
  * @param props - Detail subject, locale copy, and live runtimes selector.
  * @returns the Components section, or null.
@@ -65,8 +50,7 @@ export function CapabilitiesComponentsSection(props: CapabilitiesComponentsProps
       </div>
       <ul className={css.list}>
         {components.map((component) => {
-          const title = rowTitle(component, t)
-          const packaged = usesPackageTitle(component)
+          const title = t(component.labelKey)
           const runtime = runtimes?.[component.id]
           const dataState = rowDataState(runtime)
           return (
@@ -84,7 +68,7 @@ export function CapabilitiesComponentsSection(props: CapabilitiesComponentsProps
                   <span className={css.rowId}>{title}</span>
                   <span className={css.rowDesc}>{t(component.descriptionKey)}</span>
                   {title === component.id ? null : <code className={css.rowModule}>{component.id}</code>}
-                  {packaged || title === component.moduleName
+                  {title === component.moduleName
                     ? null
                     : <code className={css.rowModule}>{component.moduleName}</code>}
                 </div>

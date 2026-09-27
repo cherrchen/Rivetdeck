@@ -8,9 +8,6 @@ import {
   CAPABILITIES_COMPONENTS,
   DESKTOP_CAPABILITIES_VERSION,
   OFFICIAL_ROOT_ITEMS,
-  THEME_STUDIO_COMPONENTS,
-  THEME_STUDIO_PACKAGE,
-  THEME_STUDIO_VERSION,
 } from '../runtime/plugins/desktop-capabilities/src/client/features/plugin-manager/roster.ts'
 
 const electronRoot = fileURLToPath(new URL('..', import.meta.url))
@@ -143,26 +140,26 @@ describe('theme studio published runtime plugin regression', () => {
 })
 
 describe('desktop plugins roster', () => {
-  it('registers Desktop Capabilities and Theme Studio without claiming the Official cards are running', () => {
+  it('registers Desktop Capabilities without claiming the Official card is running', () => {
     const source = readFileSync(join(featuresRoot, 'plugin-manager', 'index.ts'), 'utf8')
     const card = readFileSync(join(featuresRoot, 'plugin-manager', 'DesktopPluginCard.tsx'), 'utf8')
     const locales = readFileSync(join(featuresRoot, 'plugin-manager', 'locales.ts'), 'utf8')
     const manifest = JSON.parse(readFileSync(join(capabilitiesRoot, 'package.json'), 'utf8')) as { version?: string }
     const themeManifest = JSON.parse(readFileSync(join(npmThemeStudioRoot, 'package.json'), 'utf8')) as { version?: string }
-    expect(OFFICIAL_ROOT_ITEMS.map(item => item.id)).toEqual(['desktop-capabilities', 'theme-studio'])
+    expect(OFFICIAL_ROOT_ITEMS.map(item => item.id)).toEqual(['desktop-capabilities'])
     expect(OFFICIAL_ROOT_ITEMS.find(item => item.id === 'desktop-capabilities')?.version).toBe(DESKTOP_CAPABILITIES_VERSION)
-    expect(OFFICIAL_ROOT_ITEMS.find(item => item.id === 'theme-studio')?.version).toBe(THEME_STUDIO_VERSION)
     expect(manifest.version).toBe(DESKTOP_CAPABILITIES_VERSION)
-    expect(themeManifest.version).toBe(THEME_STUDIO_VERSION)
+    expect(themeManifest.version).toBe('0.1.1')
     expect(source).toContain("name: 'plugins.item'")
     expect(source).toContain("name: 'plugins.detail.badge'")
     expect(source).toContain("name: 'plugins.detail.section'")
     expect(source).toContain('remote.pluginInventory')
     expect(source).not.toContain('dsh-plugin-git')
+    expect(source).not.toContain('theme-studio')
     expect(card).toContain('descriptionKey')
     expect(card).not.toMatch(/\bRunning\b/)
     expect(locales).toContain('Choose a workspace folder')
-    expect(locales).toContain('Preview and save color themes')
+    expect(locales).not.toContain('Preview and save color themes')
     expect(locales).not.toContain('Built into Desktop')
     expect(locales).not.toContain('Required by Desktop')
     expect(locales).not.toMatch(/successfully/i)
@@ -184,13 +181,6 @@ describe('desktop plugins roster', () => {
       '@dsh-electron/dsh-electron-desktop-capabilities/brand',
       '@dsh-electron/dsh-electron-desktop-capabilities/network-settings',
     ])
-    expect(THEME_STUDIO_COMPONENTS).toEqual([{
-      id: 'theme-studio',
-      packageTitle: true,
-      descriptionKey: 'themeStudioDescription',
-      source: { kind: 'inventory', moduleName: THEME_STUDIO_PACKAGE },
-      moduleName: THEME_STUDIO_PACKAGE,
-    }])
   })
 })
 

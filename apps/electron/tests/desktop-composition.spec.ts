@@ -92,7 +92,6 @@ describe('desktop capabilities client composition', () => {
     expect(slots.entries('settings.section')[0]?.options).toMatchObject({ id: 'network', order: 60 })
     expect(slots.entries('plugins.item').map(entry => entry.options.id)).toEqual([
       'desktop-capabilities',
-      'theme-studio',
     ])
     expect(slots.entries('plugins.detail.badge')[0]?.options.id).toBe('desktop-capabilities-badge')
     expect(slots.entries('plugins.detail.section')[0]?.options.id).toBe('desktop-capabilities-components')
@@ -117,7 +116,7 @@ describe('desktop capabilities client composition', () => {
     expect(slots.entries('conversation.hero.workspace.directoryFlow')).toHaveLength(0)
     expect(slots.entries('settings.section')).toHaveLength(0)
     expect(slots.entries('sidebar.brand.mark')).toHaveLength(1)
-    expect(slots.entries('plugins.item')).toHaveLength(2)
+    expect(slots.entries('plugins.item')).toHaveLength(1)
     await ctx.plugin(DesktopCapabilitiesService).await()
     await picker.await()
     await settings.await()

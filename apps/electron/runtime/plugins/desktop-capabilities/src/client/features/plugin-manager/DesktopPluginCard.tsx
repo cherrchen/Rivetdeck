@@ -25,8 +25,3 @@ function summaryFor(props: DesktopPluginCardProps, id: OfficialRootItem['id']) {
 export function CapabilitiesItemCard(props: DesktopPluginCardProps) {
   return summaryFor(props, 'desktop-capabilities')
 }
-
-/** Theme Studio card. */
-export function ThemeStudioItemCard(props: DesktopPluginCardProps) {
-  return summaryFor(props, 'theme-studio')
-}

@@ -1,16 +1,10 @@
-/** Official Plugins page items and the Desktop product component rosters. */
+/** Official Plugins page items and the Desktop Capabilities component roster. */
 
 /** npm name of the Desktop Capabilities composition package. */
 export const DESKTOP_CAPABILITIES_PACKAGE = '@dsh-electron/dsh-electron-desktop-capabilities'
 
-/** npm name of the Theme Studio runtime plugin. */
-export const THEME_STUDIO_PACKAGE = '@dsh-electron/dsh-theme-studio'
-
 /** Published version shown on the Desktop Capabilities detail page. */
 export const DESKTOP_CAPABILITIES_VERSION = '0.1.0'
-
-/** Published version shown on the Theme Studio detail page. */
-export const THEME_STUDIO_VERSION = '0.1.1'
 
 /** Internal feature whose Components row uses a composition subpath specifier. */
 export type CapabilitiesFeatureId = 'directory-picker' | 'brand' | 'network-settings'
@@ -25,17 +19,17 @@ export function capabilitiesFeatureModuleName(feature: CapabilitiesFeatureId): s
   return `${DESKTOP_CAPABILITIES_PACKAGE}/${feature}`
 }
 
-/** Locale keys for an Official card's one-liner. */
-export type OfficialDescriptionKey = 'capabilitiesDescription' | 'themeStudioDescription'
+/** Locale keys for the Official Desktop Capabilities card one-liner. */
+export type OfficialDescriptionKey = 'capabilitiesDescription'
 
-/** One Official card this feature registers on the Plugins page. */
+/** The one Official card this feature registers on the Plugins page. */
 export interface OfficialRootItem {
   /** `plugins.item` registration id. */
-  id: 'desktop-capabilities' | 'theme-studio'
+  id: 'desktop-capabilities'
   /** Plugins page order among official items. */
   order: number
   /** Locale key for the card title. */
-  labelKey: 'capabilities' | 'themeStudio'
+  labelKey: 'capabilities'
   /** Locale key for the card one-liner and the detail description. */
   descriptionKey: OfficialDescriptionKey
   /** Package name under the detail title. */
@@ -64,9 +58,8 @@ export type ComponentDescriptionKey =
   | 'directoryPickerDescription'
   | 'brandDescription'
   | 'networkSettingsDescription'
-  | 'themeStudioDescription'
 
-/** One product component listed on an Official detail page. */
+/** One product component listed on the Desktop Capabilities detail page. */
 export interface CapabilitiesComponent {
   /** Stable product id for the roster row. Shown as the short code line. */
   id: string
@@ -84,26 +77,6 @@ export interface CapabilitiesComponent {
 }
 
 /**
- * Theme Studio's single component row.
- * The title is the npm package name, matching an installed bundle row such as Git.
- */
-export interface ThemeStudioComponent {
-  /** Patch id, shown under the package name. */
-  id: 'theme-studio'
-  /** Row title is `moduleName`, not a localized product name. */
-  packageTitle: true
-  /** Locale key for the sentence under the package name. */
-  descriptionKey: 'themeStudioDescription'
-  /** Live-state source: the Theme Studio Loader row. */
-  source: { readonly kind: 'inventory'; readonly moduleName: typeof THEME_STUDIO_PACKAGE }
-  /** npm package name used as the row title. */
-  moduleName: typeof THEME_STUDIO_PACKAGE
-}
-
-/** A row on either Official detail page. */
-export type RosterComponent = CapabilitiesComponent | ThemeStudioComponent
-
-/**
  * Official items this feature adds. Upstream official items stay on the page.
  */
 export const OFFICIAL_ROOT_ITEMS: readonly OfficialRootItem[] = [
@@ -114,14 +87,6 @@ export const OFFICIAL_ROOT_ITEMS: readonly OfficialRootItem[] = [
     descriptionKey: 'capabilitiesDescription',
     packageName: DESKTOP_CAPABILITIES_PACKAGE,
     version: DESKTOP_CAPABILITIES_VERSION,
-  },
-  {
-    id: 'theme-studio',
-    order: 130,
-    labelKey: 'themeStudio',
-    descriptionKey: 'themeStudioDescription',
-    packageName: THEME_STUDIO_PACKAGE,
-    version: THEME_STUDIO_VERSION,
   },
 ]
 
@@ -167,42 +132,15 @@ export const CAPABILITIES_COMPONENTS: readonly CapabilitiesComponent[] = [
   },
 ]
 
-/**
- * The one Theme Studio row. It names the npm package, then the patch id,
- * the same way Git's bundle page names `@dsh-electron/dsh-plugin-git` and `dsh-plugin-git`.
- */
-export const THEME_STUDIO_COMPONENTS: readonly ThemeStudioComponent[] = [
-  {
-    id: 'theme-studio',
-    packageTitle: true,
-    descriptionKey: 'themeStudioDescription',
-    source: { kind: 'inventory', moduleName: THEME_STUDIO_PACKAGE },
-    moduleName: THEME_STUDIO_PACKAGE,
-  },
-]
-
 /** Every row whose live phase the inventory watcher publishes. */
-export const TRACKED_COMPONENTS: readonly RosterComponent[] = [
-  ...CAPABILITIES_COMPONENTS,
-  ...THEME_STUDIO_COMPONENTS,
-]
+export const TRACKED_COMPONENTS: readonly CapabilitiesComponent[] = CAPABILITIES_COMPONENTS
 
 /**
- * Rows for one Official detail page.
+ * Rows for the Desktop Capabilities Official detail page.
  * @param id - `plugins.item` id.
- * @returns that page's roster, or undefined for any other subject.
+ * @returns the Capabilities roster, or undefined for any other subject.
  */
-export function componentsForItem(id: string): readonly RosterComponent[] | undefined {
+export function componentsForItem(id: string): readonly CapabilitiesComponent[] | undefined {
   if (id === 'desktop-capabilities') return CAPABILITIES_COMPONENTS
-  if (id === 'theme-studio') return THEME_STUDIO_COMPONENTS
   return undefined
-}
-
-/**
- * Whether the row title is the npm package name.
- * @param component - a roster row.
- * @returns true for the Theme Studio package row.
- */
-export function usesPackageTitle(component: RosterComponent): component is ThemeStudioComponent {
-  return 'packageTitle' in component && component.packageTitle === true
 }

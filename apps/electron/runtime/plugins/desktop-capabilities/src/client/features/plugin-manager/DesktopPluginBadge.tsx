@@ -12,8 +12,7 @@ export type DesktopPluginBadgeProps =
   & PropsLocale<'plugins.desktopRequired'>
 
 /**
- * Show the version and package name beside an Official Desktop title.
- * Desktop Capabilities also gets the Desktop tag. Theme Studio does not.
+ * Show the version, Desktop tag, and package name beside the Capabilities title.
  * Other subjects render nothing.
  * @param props - Detail subject and locale copy.
  * @returns the title-row tags, or null.
