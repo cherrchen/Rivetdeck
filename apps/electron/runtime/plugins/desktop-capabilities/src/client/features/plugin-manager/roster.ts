@@ -16,6 +16,8 @@ export interface CapabilitiesComponent {
   id: string
   /** Locale key for the row label. */
   labelKey: CapabilitiesComponentLabelKey
+  /** npm package name when the row is an independent Loader package. */
+  moduleName?: string
 }
 
 /** Locale keys that name one Capabilities component. */
@@ -38,8 +40,16 @@ export const OFFICIAL_ROOT_ITEMS: readonly OfficialRootItem[] = [
  * Product roster shown under Desktop Capabilities. Not a live Loader inventory.
  */
 export const CAPABILITIES_COMPONENTS: readonly CapabilitiesComponent[] = [
-  { id: 'network-subprocess', labelKey: 'networkSubprocess' },
-  { id: 'directory-picker-backend', labelKey: 'directoryPickerBackend' },
+  {
+    id: 'network-subprocess',
+    labelKey: 'networkSubprocess',
+    moduleName: '@dsh-electron/dsh-electron-network-subprocess',
+  },
+  {
+    id: 'directory-picker-backend',
+    labelKey: 'directoryPickerBackend',
+    moduleName: '@deepseek-ai/dsh-host-directory-picker-browse',
+  },
   { id: 'directory-picker', labelKey: 'directoryPicker' },
   { id: 'brand', labelKey: 'brand' },
   { id: 'network-settings', labelKey: 'networkSettings' },

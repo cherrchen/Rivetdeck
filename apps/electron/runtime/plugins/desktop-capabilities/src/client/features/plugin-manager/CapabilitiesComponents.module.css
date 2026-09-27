@@ -4,12 +4,24 @@
   gap: 12px;
 }
 
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
 .title {
   margin: 0;
   font-size: 14px;
   line-height: 20px;
   font-weight: 500;
   color: var(--dsw-alias-label-primary);
+}
+
+.count {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
 }
 
 .list {
@@ -23,11 +35,66 @@
 .row {
   padding: 12px 2px;
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--dsw-alias-label-primary);
 }
 
 .row:last-child {
   border-bottom: 0;
+}
+
+.rowLine {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.rowIcon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-md);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.rowMain {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rowId {
+  font-size: 13.5px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+  overflow-wrap: anywhere;
+}
+
+.row[data-state='off'] .rowId {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.rowModule {
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11.5px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  overflow-wrap: anywhere;
+}
+
+.rowState {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+  white-space: nowrap;
 }

@@ -21,7 +21,13 @@ afterEach(() => {
   cleanup()
 })
 
-const t: TranslateNS<'plugins.desktopRequired'> = key => en[key]
+function interpolate(template: string, params?: Record<string, unknown>): string {
+  if (params === undefined) return template
+  return template.replace(/\{(\w+)\}/g, (match, name: string) =>
+    name in params ? String(params[name]) : match)
+}
+
+const t: TranslateNS<'plugins.desktopRequired'> = (key, params) => interpolate(en[key], params)
 
 function section(subject: CapabilitiesComponentsProps['subject']) {
   return render(createElement(CapabilitiesComponentsSection, { subject, t } as CapabilitiesComponentsProps))
@@ -68,16 +74,27 @@ describe('Desktop Plugin Manager presentation', () => {
     expect(slots.entries('plugins.detail.section')).toHaveLength(0)
   })
 
-  it('renders five Components on the Capabilities item and nothing on other subjects', () => {
+  it('renders the contained-components count and five read-only rows on the Capabilities item', () => {
     section({ kind: 'item', id: 'desktop-capabilities' })
-    const names = screen.getAllByRole('listitem').map(item => item.textContent)
-    expect(names).toEqual([
-      'Network subprocess',
-      'Directory picker backend',
-      'Directory picker',
-      'Brand',
-      'Network settings',
+    const count = String(CAPABILITIES_COMPONENTS.length)
+    expect(screen.getByRole('heading', { name: en.components, level: 4 })).toBeTruthy()
+    expect(screen.getByText(`${interpolate(en.countTotal, { count })} · ${interpolate(en.countOff, { count })}`)).toBeTruthy()
+    const rows = screen.getAllByRole('listitem')
+    expect(rows.map(item => item.getAttribute('data-plugin-row'))).toEqual([
+      'network-subprocess',
+      'directory-picker-backend',
+      'directory-picker',
+      'brand',
+      'network-settings',
     ])
+    for (const component of CAPABILITIES_COMPONENTS) {
+      expect(screen.getByText(en[component.labelKey])).toBeTruthy()
+      expect(screen.getByText(component.id)).toBeTruthy()
+    }
+    expect(screen.getByText('@dsh-electron/dsh-electron-network-subprocess')).toBeTruthy()
+    expect(screen.getByText('@deepseek-ai/dsh-host-directory-picker-browse')).toBeTruthy()
+    expect(screen.getAllByText(en.partOff)).toHaveLength(CAPABILITIES_COMPONENTS.length)
+    expect(screen.queryByRole('switch')).toBeNull()
     cleanup()
 
     const theme = section({ kind: 'item', id: 'theme-studio' })
