@@ -10,11 +10,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DesktopNetworkState } from '../src/network/domain.ts'
 import type { DesktopCapabilitiesContract } from '../runtime/plugins/desktop-capabilities/src/client/index.ts'
 import { parseNetworkTestRequest, runNetworkTests } from '../src/network/test-service.ts'
-import { draftErrors, draftFromState } from '../runtime/plugins/ui-network-settings-electron/src/client/form.ts'
-import { NetworkSettingsSection } from '../runtime/plugins/ui-network-settings-electron/src/client/NetworkSettingsSection.tsx'
-import { en } from '../runtime/plugins/ui-network-settings-electron/src/client/locales.ts'
-import { apply as networkApply, inject as networkInject } from '../runtime/plugins/ui-network-settings-electron/src/client/index.ts'
-import { openNetworkSettings } from '../runtime/plugins/ui-network-settings-electron/src/client/navigation.ts'
+import { draftErrors, draftFromState } from '../runtime/plugins/desktop-capabilities/src/client/features/network-settings/form.ts'
+import { NetworkSettingsSection } from '../runtime/plugins/desktop-capabilities/src/client/features/network-settings/NetworkSettingsSection.tsx'
+import { en } from '../runtime/plugins/desktop-capabilities/src/client/features/network-settings/locales.ts'
+import { apply as networkApply, inject as networkInject } from '../runtime/plugins/desktop-capabilities/src/client/features/network-settings/index.ts'
+import { openNetworkSettings } from '../runtime/plugins/desktop-capabilities/src/client/features/network-settings/navigation.ts'
 
 const base: DesktopNetworkState = {
   configuredMode: 'manual', effectiveMode: 'manual',

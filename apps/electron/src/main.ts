@@ -46,8 +46,8 @@ import {
   registerRendererScheme,
   resolveRendererRoot,
 } from './protocol.ts'
+import { prepareEcosystemProfile } from './ecosystem-profile.ts'
 import { prepareHostRuntimeOverlay } from './runtime-overlay.ts'
-import { ensureRuntimePluginsLinked } from './runtime-plugins.ts'
 import {
   HARNESS_START_TIMEOUT_MS,
   harnessArguments,
@@ -465,8 +465,8 @@ if (!primaryInstance) {
     })
     const harnessHome = resolveHarnessHome(app.getPath('home'))
     await migrateLegacyPluginState(harnessHome)
-    ensureRuntimePluginsLinked(appPath, harnessHome)
-    const overlay = await prepareHostRuntimeOverlay(appPath, userDataPath)
+    await prepareEcosystemProfile(appPath, harnessHome)
+    const overlay = await prepareHostRuntimeOverlay(appPath, userDataPath, harnessHome)
     const packageManager = preparePluginPackageManager(
       harnessHome,
       hostRuntime,

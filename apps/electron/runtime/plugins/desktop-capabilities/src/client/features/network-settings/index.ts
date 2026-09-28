@@ -4,7 +4,6 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
-import type {} from '@dsh-electron/dsh-electron-desktop-capabilities/client'
 import { NetworkSettingsSection, type NetworkSettingsInjected } from './NetworkSettingsSection.tsx'
 import { en, zh, type NetworkLocaleKey } from './locales.ts'
 import { openNetworkSettings } from './navigation.ts'
@@ -19,12 +18,15 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Dictionary namespace owned by the Desktop Network page. */
 export const NS = 'settings.networkElectron'
 
+/** Cordis plugin name used by fiber diagnostics. */
+export const name = 'network-settings'
+
 /** Services required by the Network settings page. */
 export const inject = ['slots', 'locale', 'desktop', 'remote', 'remote.llm']
 
 /** Register one top-level Network section. */
 export function apply(ctx: ClientContext): void {
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-network-settings-electron: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'network-settings: dictionaries')
   const t = ctx.locale.bind(NS)
   const settingsT = ctx.locale.bind('settings')
   const injected = (): NetworkSettingsInjected => ({
@@ -45,7 +47,7 @@ export function apply(ctx: ClientContext): void {
       cancelNavigation = openNetworkSettings(settingsT('trigger'), t('nav'))
     })
     return () => { unsubscribe(); cancelNavigation?.() }
-  }, 'ui-network-settings-electron: failure dialog navigation')
+  }, 'network-settings: failure dialog navigation')
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: 'network', order: 60,
     label: () => t('nav'), locale: NS, inject: injected,

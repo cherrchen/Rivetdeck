@@ -1,17 +1,19 @@
 /**
- * Client plugin: fill ui-workspace directory-flow holes with Electron Main's chooser.
+ * Fill workspace directory-flow slots with Electron Main's directory chooser.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
-import type {} from '@dsh-electron/dsh-electron-desktop-capabilities/client'
 import { ElectronDirectoryFlow, type ElectronFlowInjected } from './flow.ts'
 
-/** Required services for slot registration. */
+/** Cordis plugin name used by fiber diagnostics. */
+export const name = 'directory-picker'
+
+/** Slot registration plus the desktop directory chooser. */
 export const inject = ['slots', 'desktop']
 
 /**
- * @param ctx - Client root context.
+ * @param ctx - Feature fiber that has `slots` and `desktop`.
  */
 export function apply(ctx: ClientContext): void {
   const injected = (): ElectronFlowInjected => ({

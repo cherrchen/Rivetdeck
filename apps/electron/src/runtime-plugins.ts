@@ -5,9 +5,11 @@ import {
   readdirSync,
   readFileSync,
   readlinkSync,
+  renameSync,
   symlinkSync,
   unlinkSync,
 } from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import { basename, dirname, join } from 'node:path'
 
 /** Relative path from the Electron application root to bundled runtime plugins. */
@@ -200,7 +202,21 @@ export function profileModuleLinkPath(harnessHome: string, packageName: string):
 }
 
 /**
- * Validate and link bundled Desktop plugins for profile resolution before Host boot.
+ * Resolve the web profile node_modules link path for one npm package name.
+ * Desktop boot restores this link so a same-named CLI install cannot shadow
+ * the application copy.
+ * @param harnessHome - `$DSH_HOME` root used by the supervised Host.
+ * @param packageName - Scoped or unscoped npm package name.
+ * @returns Absolute symlink path under profiles/web/node_modules.
+ */
+export function webProfileModuleLinkPath(harnessHome: string, packageName: string): string {
+  return join(harnessHome, 'profiles', 'web', 'node_modules', ...packageName.split('/'))
+}
+
+/**
+ * Validate and link bundled Desktop plugins into profile resolution before Host boot.
+ * Every Electron boot restores Desktop-owned package links under both
+ * `$DSH_HOME/profiles/node_modules` and `$DSH_HOME/profiles/web/node_modules`.
  * @param appPath - Electron application root.
  * @param harnessHome - Active Harness home.
  */
@@ -211,9 +227,10 @@ export function ensureRuntimePluginsLinked(appPath: string, harnessHome: string)
     ...discoverEcosystemPluginPackages(appPath),
   ]
   if (plugins.length === 0) throw new Error(`runtime plugins: no bundled plugins under ${runtimePluginsRoot(appPath)}`)
+  for (const plugin of plugins) validateRuntimePlugin(plugin)
   for (const plugin of plugins) {
-    validateRuntimePlugin(plugin)
     ensureSymlink(profileModuleLinkPath(harnessHome, plugin.name), plugin.rootPath)
+    ensureSymlink(webProfileModuleLinkPath(harnessHome, plugin.name), plugin.rootPath)
   }
 }
 
@@ -224,18 +241,20 @@ export function ensureRuntimePluginsLinked(appPath: string, harnessHome: string)
  */
 export function ensureSymlink(link: string, target: string): void {
   mkdirSync(dirname(link), { recursive: true })
+  let current: ReturnType<typeof lstatSync>
   try {
-    const current = readlinkSync(link)
-    if (current === target) return
-    unlinkSync(link)
+    current = lstatSync(link)
   } catch (error: unknown) {
-    if (!isMissingPathError(error)) {
-      try {
-        if (lstatSync(link).isSymbolicLink() || lstatSync(link).isDirectory()) unlinkSync(link)
-      } catch {
-        // Race or already gone.
-      }
-    }
+    if (!isMissingPathError(error)) throw error
+    symlinkSync(target, link, 'junction')
+    return
+  }
+  if (current.isSymbolicLink()) {
+    if (readlinkSync(link) === target) return
+    unlinkSync(link)
+  } else {
+    // A prior profile install may have placed a real package here. Retain it for recovery.
+    renameSync(link, `${link}.desktop-replaced-${randomUUID()}`)
   }
   symlinkSync(target, link, 'junction')
 }

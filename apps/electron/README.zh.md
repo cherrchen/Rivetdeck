@@ -30,7 +30,7 @@ Electron Main
 
 - Desktop 专属改动留在 `apps/electron/**`；不要通过改 `apps/web` 做 Desktop-only UI。
 - 保持 `src/renderer` 为薄 bootstrap/carrier；不要在此长出第二套产品前端。
-- Portable 与 Desktop-aware 产品功能归属独立发布的 DSH/Cordis package；`runtime/plugins/` 容纳 Desktop-required adapter 与 Electron carrier；Electron 必需的 portable DSH UI 基础设施以发布包形式提供，声明在 `dshElectron.runtimePlugins` 中。Desktop 必需的 Host 组合和随包 Git 插件列在 `runtime/host.patch.yml` 中（[插件生命周期](../../docs/electron/plugin-lifecycle.zh.md)）。
+- Portable 与 Desktop-aware 产品功能归属独立发布的 DSH/Cordis package；`runtime/plugins/` 容纳 Desktop Capabilities composition 包与 Host-only provider。Desktop 必需的 Host 组合列在 `runtime/host.patch.yml` 中；随包 Git 与 Theme Studio 被 seed 进 web profile（[插件生命周期](../../docs/electron/plugin-lifecycle.zh.md)）。
 - Desktop-aware feature 保持 core fiber portable，并通过 optional `ctx.inject(['desktop'], ...)` child fiber 安装原生增强。它通过 `ctx.desktop` 能力服务消费原生能力，不得直接访问 `window.deepseekDesktop`。
 - 环回 Host 传输是内部兼容机制，无证据时不要为架构纯粹性替换它。
 
@@ -51,6 +51,8 @@ pnpm --filter @dsh-electron/dsh-electron build
 pnpm --filter @dsh-electron/dsh-electron test
 ```
 
+Electron 应用是私有安装程序，不作为 npm 发布成员。依赖同步使用 `workspace:^` 复制上游 CLI 的 workspace 依赖；仓库的 `constraints` 检查对该应用执行此范围要求，并继续对上游包执行上游发布规则。
+
 仓库的 Python 集成测试要求 PATH 中的 `python3` 指向 CPython 3.10+。若 mise 提示 shim 未激活，可为命令激活已安装版本，例如 `mise exec python@3.13.12 -- pnpm test packages/experimental/code-runtime-python/tests/runtime.spec.ts packages/experimental/code-runtime-python/tests/boot-write-failure.spec.ts`。请使用本机已安装的版本；运行测试前，`python3 --version` 必须成功。
 
 独立的 [Network Runtime](../../docs/electron/network-runtime.zh.md) 为 Manual HTTP、HTTPS、SOCKS5 和严格 System 策略路由提供环回 Gateway。验证命令及接入限制见该文档。
@@ -60,7 +62,7 @@ pnpm --filter @dsh-electron/dsh-electron test
 
 主窗口使用隐藏标题栏，不绘制独立 Heading。侧栏背景延伸至窗口顶部：macOS 在侧栏顶部保留可拖拽的“交通信号灯”区域，Windows 和 Linux 则把侧栏右侧的各列下移到原生控件行之下，使该区域留空并可拖拽；全屏右侧面板会在自身盒内保留同样的留白行。活动会话 Header 的非交互部分可拖拽，空白会话背景与留空区域由透明命中面覆盖。Header 控件被明确排除拖拽；模态对话框打开期间，页面的所有拖拽区域均会暂停，使对话框遮罩和控件能够保持指针输入。关闭主窗口会隐藏窗口，Harness 进程继续运行。通过托盘菜单可以重新打开窗口，也可以退出应用并停止受监管的子进程。
 
-操作系统桌面能力由 Electron Main 拥有，并通过类型化的 `window.deepseekDesktop` preload 桥暴露。Desktop Capability Provider 插件（`runtime/plugins/desktop-capabilities`）将该桥适配为 feature 插件可用的 `ctx.desktop`。受监督 Host 接收 `runtime/host.patch.yml`，其中挂载必需的 Desktop adapter 和随包 Git 插件。Theme Studio 已随包安装并链接，但在其已发布的 dsh peer 范围支持此版本前保持禁用。启动时 Main 校验随包构建产物，并将它们链接至 `$DSH_HOME/profiles/node_modules`。Main 会将旧版由 Desktop 管理的运行时插件一次性迁入 Web profile patch，并保留其启用或禁用状态。此后由上游 Web profile 管理插件及其 UI；Main 将随包 pnpm 加入 Host 的 `PATH`。`scripts/build-runtime-plugins.mjs` 从源码构建本地 Desktop 插件，Theme Studio 与 Git 则使用已发布的 Host 和 Client 产物。上游 UI 的剪贴板写入通过 Renderer shim 到达 Main。以新窗口打开的外部 URL 使用 `https:`、`http:` 或 `mailto:`。
+操作系统桌面能力由 Electron Main 拥有，并通过类型化的 `window.deepseekDesktop` preload 桥暴露。Desktop Capabilities 包（`runtime/plugins/desktop-capabilities`）将该桥适配为 `ctx.desktop`、挂载 Desktop Client feature，并在 profile HMR 时刷新 Host ownership overlay。受监督 Host 接收生成的 `electron-host.patch.yml`，其中挂载必需的 Desktop Loader 行。启动时 Main 校验随包构建产物，将 package 链接恢复至 `$DSH_HOME/profiles/node_modules` 与 `$DSH_HOME/profiles/web/node_modules`，随后把 Git 与 Theme Studio 等 ecosystem bundle seed 进 web profile。Main 会将旧版由 Desktop 管理的运行时插件一次性迁入 Web profile patch，并保留其启用或禁用状态。此后由上游 Web profile 管理插件及其 UI；Main 将随包 pnpm 加入 Host 的 `PATH`。`scripts/build-runtime-plugins.mjs` 从源码构建本地 Desktop 插件，Theme Studio 与 Git 则使用已发布的 Host 和 Client 产物。上游 UI 的剪贴板写入通过 Renderer shim 到达 Main。以新窗口打开的外部 URL 使用 `https:`、`http:` 或 `mailto:`。
 
 随包提供的 Desktop 网络子进程插件在运行时导入已安装的 `dsh-subprocess-local` 和 `dsh-subprocess` 包。它们必须与 Host 共用“找不到可执行文件”的错误类，终端 shell 发现流程才能跳过未安装的候选项。
 

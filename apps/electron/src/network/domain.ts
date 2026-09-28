@@ -110,7 +110,7 @@ export type NetworkEpochReason =
   | 'pac-reloaded'
   | 'user-reload'
 
-/** Sanitized identity and provenance of one network configuration generation. */
+/** Sanitized identity and fingerprints of one network configuration generation. */
 export interface NetworkEpochSummary {
   id: string
   startedAt: string

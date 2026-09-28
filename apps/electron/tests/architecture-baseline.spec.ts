@@ -18,7 +18,6 @@ describe('runtime plugin architecture baselines', () => {
     expect(source).toContain('installHostBootstrap')
     expect(source).toContain('AppWebEntry')
     expect(source).not.toContain('runtime/plugins')
-    expect(source).not.toContain('dsh-electron-ui-directory-picker')
     expect(source).not.toContain('dsh-electron-desktop-capabilities')
   })
 

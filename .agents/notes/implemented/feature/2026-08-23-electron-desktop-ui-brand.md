@@ -10,7 +10,7 @@ Upstream Web shells treat product branding as a deployment concern. Without occu
 
 ## Decision
 
-`apps/electron/runtime/plugins/ui-brand-electron` ships as `@dsh-electron/dsh-electron-ui-brand`. Its browser half always injects the three brand slots with the same `FishLogo` / `BrandWordmark` artwork used by the official package, without reading `DSH_CLIENT_BUILD_PROFILE`. `apps/electron/runtime/host.patch.yml` mounts the plugin beside the other Desktop runtime plugins; discovery and `build:runtime-plugins` pick it up like any other inventory entry. Document title text remains the separate Electron Vite `DSH_CLIENT_TITLE` default (`DeepSeek Harness`).
+The brand feature at `apps/electron/runtime/plugins/desktop-capabilities/src/client/features/brand/` always injects the three brand slots with the same `FishLogo` / `BrandWordmark` artwork used by the official package, without reading `DSH_CLIENT_BUILD_PROFILE`. It is an internal Cordis feature of `@dsh-electron/dsh-electron-desktop-capabilities`, not a separate Loader package; see [Desktop Capabilities composition root](../architecture/2026-09-27-electron-desktop-capabilities-composition-root.md). Document title text remains the separate Electron Vite `DSH_CLIENT_TITLE` default (`DeepSeek Harness`).
 
 ## Alternatives considered
 
@@ -22,4 +22,4 @@ Upstream Web shells treat product branding as a deployment concern. Without occu
 
 ## Consequences
 
-Desktop branding no longer depends on the upstream official client profile. When an official Host build also mounts `ui-brand-official`, both packages may occupy the same single slots; Desktop still owns the composition row that mounts its plugin. Focused Electron tests cover patch mounting, inventory discovery, profile gating absence, and slot registration teardown.
+Desktop branding no longer depends on the upstream official client profile. When an official Host build also mounts `ui-brand-official`, both occupants may occupy the same single slots; Desktop still owns the composition that mounts the brand feature. Focused Electron tests cover slot registration teardown and the absence of `DSH_CLIENT_BUILD_PROFILE` gating.

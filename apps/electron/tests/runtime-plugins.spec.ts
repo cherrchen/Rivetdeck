@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -10,6 +10,7 @@ import {
   discoverRuntimePluginPackages,
   ensureRuntimePluginsLinked,
   profileModuleLinkPath,
+  webProfileModuleLinkPath,
 } from '../src/runtime-plugins.ts'
 
 const appPath = fileURLToPath(new URL('..', import.meta.url))
@@ -43,26 +44,70 @@ describe('bundled Desktop plugin startup', () => {
       const runtime = discoverRuntimePluginDirectories(appPath)
       const npmRuntime = discoverRuntimePluginPackages(appPath)
       const ecosystem = discoverEcosystemPluginPackages(appPath)
-      expect(runtime.map(plugin => plugin.name)).toContain('@dsh-electron/dsh-electron-desktop-capabilities')
-      expect(npmRuntime.map(plugin => plugin.name)).toEqual(['@dsh-electron/dsh-theme-studio'])
-      expect(ecosystem.map(plugin => plugin.name)).toEqual(['@dsh-electron/dsh-plugin-git'])
+      expect(runtime.map(plugin => plugin.name).sort()).toEqual([
+        '@dsh-electron/dsh-electron-desktop-capabilities',
+        '@dsh-electron/dsh-electron-network-subprocess',
+      ])
+      expect(npmRuntime).toEqual([])
+      expect(ecosystem.map(plugin => plugin.name)).toEqual(['@dsh-electron/dsh-plugin-git', '@dsh-electron/dsh-theme-studio'])
       ensureRuntimePluginsLinked(appPath, harnessHome)
       for (const plugin of [...runtime, ...npmRuntime, ...ecosystem]) {
         expect(readlinkSync(profileModuleLinkPath(harnessHome, plugin.name))).toBe(plugin.rootPath)
+        expect(readlinkSync(webProfileModuleLinkPath(harnessHome, plugin.name))).toBe(plugin.rootPath)
       }
       const patch = readFileSync(join(appPath, 'runtime', 'host.patch.yml'), 'utf8')
-      expect(patch).toContain("name: '@dsh-electron/dsh-plugin-git'")
+      expect(patch).not.toContain('desktop-git')
+      expect(patch).not.toContain("name: '@dsh-electron/dsh-plugin-git'")
+      expect(patch).toContain("name: '@dsh-electron/dsh-electron-desktop-capabilities'")
+      expect(patch).not.toContain('desktop-ui-plugins')
       expect(patch).not.toContain('cordis:include')
     } finally {
       rmSync(harnessHome, { recursive: true, force: true })
     }
   })
 
-  it('resolves the declared npm runtime plugin from its installed package artifacts', () => {
-    const [plugin] = discoverRuntimePluginPackages(appPath)
-    expect(plugin?.version).toBe('0.1.0')
+  it('resolves Theme Studio from its installed ecosystem artifact', () => {
+    const plugin = discoverEcosystemPluginPackages(appPath).find(item => item.name === '@dsh-electron/dsh-theme-studio')
+    expect(plugin?.version).toBe('0.1.2')
     expect(plugin?.rootPath).toBe(join(appPath, 'node_modules', '@dsh-electron', 'dsh-theme-studio'))
     expect(plugin?.hasClient).toBe(true)
+  })
+
+  it('preserves a real installed package directory and replaces its resolution path with a link', () => {
+    const harnessHome = mkdtempSync(join(tmpdir(), 'dsh-electron-physical-'))
+    try {
+      const link = webProfileModuleLinkPath(harnessHome, '@dsh-electron/dsh-plugin-git')
+      mkdirSync(link, { recursive: true })
+      writeFileSync(join(link, 'marker.txt'), 'prior install')
+      ensureRuntimePluginsLinked(appPath, harnessHome)
+      const plugin = discoverEcosystemPluginPackages(appPath).find(item => item.name === '@dsh-electron/dsh-plugin-git')
+      expect(readlinkSync(link)).toBe(plugin?.rootPath)
+      const backup = readdirSync(join(harnessHome, 'profiles', 'web', 'node_modules', '@dsh-electron'))
+        .find(name => name.startsWith('dsh-plugin-git.desktop-replaced-'))
+      expect(backup).toBeDefined()
+      expect(existsSync(join(harnessHome, 'profiles', 'web', 'node_modules', '@dsh-electron', backup!, 'marker.txt'))).toBe(true)
+    } finally {
+      rmSync(harnessHome, { recursive: true, force: true })
+    }
+  })
+
+  it('validates every artifact before writing profile links', () => {
+    const appRoot = mkdtempSync(join(tmpdir(), 'dsh-electron-invalid-artifact-'))
+    const harnessHome = mkdtempSync(join(tmpdir(), 'dsh-electron-invalid-home-'))
+    try {
+      const first = join(appRoot, 'runtime', 'plugins', 'first')
+      const second = join(appRoot, 'runtime', 'plugins', 'second')
+      mkdirSync(join(first, 'lib'), { recursive: true })
+      mkdirSync(second, { recursive: true })
+      writeFileSync(join(first, 'package.json'), JSON.stringify({ name: '@test/first', version: '1.0.0' }))
+      writeFileSync(join(first, 'lib', 'index.js'), '')
+      writeFileSync(join(second, 'package.json'), JSON.stringify({ name: '@test/second', version: '1.0.0' }))
+      expect(() => { ensureRuntimePluginsLinked(appRoot, harnessHome) }).toThrow(/missing lib\/index.js/)
+      expect(existsSync(profileModuleLinkPath(harnessHome, '@test/first'))).toBe(false)
+    } finally {
+      rmSync(appRoot, { recursive: true, force: true })
+      rmSync(harnessHome, { recursive: true, force: true })
+    }
   })
 
   it('fails loud when a declared npm runtime plugin is not installed', () => {

@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-09-27-electron-profile-managed-ecosystem-and-ownership-overlay.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-27-electron-profile-managed-ecosystem-and-ownership-overlay.md
+/agent-note-electron-seeds-ecosystem-plugins-into-the-web-profile-and-dedupes-by-ownership:
+  en: 027512992487b08b
+  zh: f87bc9bfd1bbde96
+/agent-note-electron-seeds-ecosystem-plugins-into-the-web-profile-and-dedupes-by-ownership/problem:
+  en: 6952bc01724f302d
+  zh: 47650f0971e4a9c3
+/agent-note-electron-seeds-ecosystem-plugins-into-the-web-profile-and-dedupes-by-ownership/decision:
+  en: 55e5cb434b05282a
+  zh: 2ecc91225e5c2298
+/agent-note-electron-seeds-ecosystem-plugins-into-the-web-profile-and-dedupes-by-ownership/alternatives-considered:
+  en: 9dcf736441110c59
+  zh: 972e8e24eca7a0b5
+/agent-note-electron-seeds-ecosystem-plugins-into-the-web-profile-and-dedupes-by-ownership/consequences:
+  en: 184c6197c036b964
+  zh: 65f9b72a99c91622

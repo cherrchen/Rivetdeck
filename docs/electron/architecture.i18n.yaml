@@ -45,8 +45,8 @@
   en: c77a4edf8d67be6e
   zh: 3177218b1b645050
 /part-i-current-architecture/10-current-runtime-plugin-infrastructure:
-  en: 63673d87d336b404
-  zh: 9952467538617b84
+  en: d64e71e3f9ed8053
+  zh: 6d05542f387aaeb6
 /part-ii-architecture-principles:
   en: b38007fbc1f7ded6
   zh: 1077832f84d3a4fb
@@ -87,11 +87,11 @@
   en: cd97736d5b969a1e
   zh: 2e5c4eac7e783dc5
 /part-iii-target-architecture/19-feature-plugin-model/desktop-required-adapter:
-  en: 2f36f4eb802bdda8
-  zh: ff11c09939001784
-/part-iii-target-architecture/19-feature-plugin-model/electron-required-portable-dsh-ui-infrastructure:
-  en: 915ac6671e0cb2e9
-  zh: 2e3d461773f6ec66
+  en: 4650e4779a5f4522
+  zh: 9d27c39652a86b73
+/part-iii-target-architecture/19-feature-plugin-model/preinstalled-portable-ecosystem-plugins:
+  en: 54614c7b3f6d11a2
+  zh: 49c4a25d607ba668
 /part-iii-target-architecture/20-native-implementation-versus-feature-ownership:
   en: b894d6a67599582a
   zh: ebf6b9480c5621f1
@@ -105,8 +105,8 @@
   en: 44c6b4e036e90b04
   zh: d641352271b6abf4
 /part-iv-milestones/23-milestone-3-pluginized-feature-layer:
-  en: 95899b049f48132e
-  zh: 7385dd4da5be56c8
+  en: baf7940f0f0091e4
+  zh: 61957ebb6de38aa2
 /part-iv-milestones/24-optional-milestone-4-transport-optimization:
   en: b5771ef4f847eab6
   zh: 3c4514830ed96c77

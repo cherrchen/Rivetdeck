@@ -6,7 +6,8 @@
     "declarationMap": false,
     "incremental": false,
     "rootDir": "src",
-    "outDir": "lib"
+    "outDir": "lib",
+    "paths": {}
   },
   "include": [
     "src"

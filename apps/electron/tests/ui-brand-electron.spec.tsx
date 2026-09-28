@@ -3,8 +3,8 @@ import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
-import { apply, inject } from '../runtime/plugins/ui-brand-electron/src/client/index.ts'
-import { DesktopBrandMark, DesktopBrandName } from '../runtime/plugins/ui-brand-electron/src/client/Brand.tsx'
+import { apply, inject } from '../runtime/plugins/desktop-capabilities/src/client/features/brand/index.ts'
+import { DesktopBrandMark, DesktopBrandName } from '../runtime/plugins/desktop-capabilities/src/client/features/brand/Brand.tsx'
 
 afterEach(() => {
   cleanup()

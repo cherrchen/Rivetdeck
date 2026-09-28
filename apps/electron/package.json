@@ -13,11 +13,10 @@
   "main": "lib/main.js",
   "license": "MIT",
   "dshElectron": {
-    "runtimePlugins": [
-      "@dsh-electron/dsh-theme-studio"
-    ],
+    "runtimePlugins": [],
     "ecosystemPlugins": [
-      "@dsh-electron/dsh-plugin-git"
+      "@dsh-electron/dsh-plugin-git",
+      "@dsh-electron/dsh-theme-studio"
     ]
   },
   "scripts": {
@@ -153,7 +152,7 @@
     "@deepseek-ai/dsh-workspace": "workspace:^",
     "@deepseek-ai/schemastery": "workspace:^",
     "@dsh-electron/dsh-plugin-git": "0.2.3",
-    "@dsh-electron/dsh-theme-studio": "0.1.0",
+    "@dsh-electron/dsh-theme-studio": "0.1.2",
     "electron-updater": "^6.8.9",
     "js-yaml": "^4.2.0",
     "pnpm": "11.7.0",
@@ -180,9 +179,9 @@
     "electron": "43.0.0",
     "electron-builder": "26.15.3",
     "extract-zip": "^2.0.1",
-    "sharp": "^0.35.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "sharp": "^0.35.3",
     "typescript": "^6.0.3",
     "vite": "^6.0.0",
     "vitest": "^4.1.8"

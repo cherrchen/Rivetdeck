@@ -10,7 +10,7 @@ Status: implemented
 
 ## Decision
 
-`apps/electron/runtime/plugins/ui-brand-electron` 以 `@dsh-electron/dsh-electron-ui-brand` 发布。其浏览器半边始终向三个品牌 slot 注入与 official 包相同的 `FishLogo` / `BrandWordmark` 视觉，且不读取 `DSH_CLIENT_BUILD_PROFILE`。`apps/electron/runtime/host.patch.yml` 将该插件与其他 Desktop runtime 插件一并挂载；discovery 与 `build:runtime-plugins` 将其视为普通 inventory 条目。文档标题文案仍由 Electron Vite 的独立 `DSH_CLIENT_TITLE` 默认值（`DeepSeek Harness`）负责。
+`apps/electron/runtime/plugins/desktop-capabilities/src/client/features/brand/` 中的品牌 feature 始终向三个品牌 slot 注入与 official 包相同的 `FishLogo` / `BrandWordmark` 视觉，且不读取 `DSH_CLIENT_BUILD_PROFILE`。它是 `@dsh-electron/dsh-electron-desktop-capabilities` 的内部 Cordis feature，不是独立 Loader 包；见 [Desktop Capabilities composition root](../architecture/2026-09-27-electron-desktop-capabilities-composition-root.zh.md)。文档标题文案仍由 Electron Vite 的独立 `DSH_CLIENT_TITLE` 默认值（`DeepSeek Harness`）负责。
 
 ## Alternatives considered
 
@@ -22,4 +22,4 @@ Status: implemented
 
 ## Consequences
 
-Desktop 品牌不再依赖上游 official client profile。当 official Host 构建同时挂载 `ui-brand-official` 时，两个包可能占用同一组 single slot；Desktop 仍拥有挂载其插件的组合行。聚焦的 Electron 测试覆盖 patch 挂载、inventory 发现、无 profile 门控，以及 slot 注册与 teardown。
+Desktop 品牌不再依赖上游 official client profile。当 official Host 构建同时挂载 `ui-brand-official` 时，两个占位者可能占用同一组 single slot；Desktop 仍拥有挂载品牌 feature 的组合。聚焦的 Electron 测试覆盖 slot 注册与 teardown，以及无 `DSH_CLIENT_BUILD_PROFILE` 门控。

@@ -132,39 +132,26 @@ describe('Electron desktop integration', () => {
   })
 })
 
-/**
- * Slice one host patch row by its entry id.
- * @param body - Patch file text.
- * @param id - Entry id to slice.
- * @returns The row's own lines, excluding the next row.
- */
-function mountRow(body: string, id: string): string {
-  const lines = body.split('\n')
-  const start = lines.findIndex(line => line.trim() === `- id: ${id}`)
-  if (start < 0) throw new Error(`host patch row ${id} is missing`)
-  const rest = lines.slice(start + 1)
-  const end = rest.findIndex(line => line.trimStart().startsWith('- id: '))
-  return (end < 0 ? rest : rest.slice(0, end)).join('\n')
-}
-
 describe('Electron host runtime overlay', () => {
   it('writes the Host patch that keeps browse Host and Electron client', async () => {
     const appPath = join(import.meta.dirname, '..')
     const userData = await mkdtemp(join(tmpdir(), 'dsh-electron-patch-'))
     const harnessHome = await mkdtemp(join(tmpdir(), 'dsh-electron-home-'))
     try {
-      const overlay = await prepareHostRuntimeOverlay(appPath, userData)
+      const overlay = await prepareHostRuntimeOverlay(appPath, userData, harnessHome)
       const body = await readFile(overlay.patchPath, 'utf8')
       expect(body).toContain('directory-picker')
       expect(body).toContain('disabled: true')
       expect(body).toContain('@deepseek-ai/dsh-host-directory-picker-browse')
-      expect(body).toContain('@dsh-electron/dsh-electron-ui-directory-picker')
       expect(body).toContain('@dsh-electron/dsh-electron-desktop-capabilities')
       expect(body).toContain('id: desktop-network-subprocess')
       expect(body).toContain("name: '@dsh-electron/dsh-electron-network-subprocess'")
-      expect(mountRow(body, 'theme-studio')).toContain("name: '@dsh-electron/dsh-theme-studio'")
-      expect(body).toContain('@dsh-electron/dsh-electron-ui-brand')
-      expect(body).toContain('@dsh-electron/dsh-plugin-git')
+      expect(body).not.toContain("name: '@dsh-electron/dsh-theme-studio'")
+      expect(body).not.toContain('desktop-directory-picker')
+      expect(body).not.toContain('desktop-ui-brand')
+      expect(body).not.toContain('desktop-ui-plugins')
+      expect(body).not.toContain('desktop-git')
+      expect(body).not.toContain('@dsh-electron/dsh-plugin-git')
       expect(body).not.toContain('plugins.cordis.yml')
       expect(body).not.toContain('directory-picker-browse-client')
     } finally {
@@ -178,11 +165,11 @@ describe('Electron host runtime overlay', () => {
     const harnessHome = await mkdtemp(join(tmpdir(), 'dsh-electron-home-'))
     try {
       ensureRuntimePluginsLinked(appPath, harnessHome)
-      const link = profileModuleLinkPath(harnessHome, '@dsh-electron/dsh-electron-ui-directory-picker')
+      const link = profileModuleLinkPath(harnessHome, '@dsh-electron/dsh-electron-desktop-capabilities')
       const { readlink } = await import('node:fs/promises')
       const target = await readlink(link)
       expect(target.replaceAll('\\', '/')).toBe(
-        join(appPath, 'runtime', 'plugins', 'ui-directory-picker-electron').replaceAll('\\', '/'),
+        join(appPath, 'runtime', 'plugins', 'desktop-capabilities').replaceAll('\\', '/'),
       )
     } finally {
       await rm(harnessHome, { recursive: true, force: true })

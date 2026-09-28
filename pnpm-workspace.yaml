@@ -99,8 +99,8 @@ minimumReleaseAgeExclude:
   - '@trycua/cua-driver@0.28.0'
   # Desktop pins this reviewed ecosystem plugin before the release-age window expires.
   - '@dsh-electron/dsh-plugin-git@0.2.3'
-  # Desktop pins this reviewed bundled runtime plugin before the release-age window expires.
-  - '@dsh-electron/dsh-theme-studio@0.1.0'
+  # Desktop pins this reviewed ecosystem plugin before the release-age window expires.
+  - '@dsh-electron/dsh-theme-studio@0.1.2'
   # These workspace packages are published inside the release-age window.
   - '@deepseek-ai/dsh-client-resources@0.1.7-rc.2'
   - '@deepseek-ai/dsh-client-ui-settings-plugins@0.1.7-rc.2'

@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-09-27-electron-desktop-capabilities-composition-root.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-27-electron-desktop-capabilities-composition-root.md
+/agent-note-electron-desktop-capabilities-is-the-client-composition-root:
+  en: 7402c1ecf1c5b282
+  zh: 6027f41fce2f39e1
+/agent-note-electron-desktop-capabilities-is-the-client-composition-root/problem:
+  en: 1d945b91ea859d50
+  zh: 9862279433a07db7
+/agent-note-electron-desktop-capabilities-is-the-client-composition-root/decision:
+  en: 1d3dba8c0a13e5ee
+  zh: c7780503196cb488
+/agent-note-electron-desktop-capabilities-is-the-client-composition-root/alternatives-considered:
+  en: d489f10f52762058
+  zh: 429b2c801c748866
+/agent-note-electron-desktop-capabilities-is-the-client-composition-root/consequences:
+  en: 1ea27bcf899f1c51
+  zh: 701ac9ae4582b089

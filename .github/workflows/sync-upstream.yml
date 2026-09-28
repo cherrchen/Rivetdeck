@@ -1,7 +1,7 @@
 name: Sync upstream
 
 on:
-  # Pinned to dsh-v0.1.7-rc.2 (477b4f42). Scheduled master merges would pull
+  # Pinned to dsh-v0.1.7-rc.2. Scheduled master merges would pull
   # commits after that tag. Re-enable the cron only after an explicit decision
   # to leave that pin.
   # schedule:

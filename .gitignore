@@ -26,6 +26,7 @@ tmp/
 .claude/launch.json
 .claude/settings.json
 .vscode/
+.cursor/
 .DS_Store
 .idea
 mise.toml

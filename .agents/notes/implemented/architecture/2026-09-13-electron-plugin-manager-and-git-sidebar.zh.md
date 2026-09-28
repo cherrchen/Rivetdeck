@@ -24,4 +24,6 @@ Web profile 挂载上游 Plugin Manager。Desktop Host patch 不再插入独立�
 
 ## Consequences
 
-上游 Plugin Manager 提供 Installed 视图。Git UI 位于右侧边栏，`host.patch.yml` 直接插入随包 Git 插件。
+上游 Plugin Manager 提供 Installed 视图。Git UI 位于右侧边栏。Desktop 把 Git package seed 进 web profile；`host.patch.yml` 不再插入它。
+
+参见[由 profile 管理的 ecosystem 插件](2026-09-27-electron-profile-managed-ecosystem-and-ownership-overlay.zh.md)了解 seed、Disable 与 Uninstall，以及 ownership overlay 规则。

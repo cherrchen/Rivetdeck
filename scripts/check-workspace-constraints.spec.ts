@@ -74,6 +74,23 @@ describe('workspace dependency ranges', () => {
       },
     )
   })
+
+  it('keeps the downstream Electron installer on its synchronized workspace ranges', () => {
+    const electron: WorkspaceManifest = {
+      dir: 'apps/electron',
+      manifest: {
+        name: '@dsh-electron/dsh-electron',
+        dependencies: { '@deepseek-ai/dsh-runtime': 'workspace:^', '@deepseek-ai/cordis': 'workspace:^' },
+      },
+    }
+    expect(checkWorkspaceProtocol([dependency, vendor, electron])).toEqual([])
+    expect(checkWorkspaceProtocol([dependency, vendor, {
+      ...electron,
+      manifest: { ...electron.manifest, dependencies: { '@deepseek-ai/dsh-runtime': '^0.1.7' } },
+    }])).toEqual([
+      '@dsh-electron/dsh-electron: dependencies.@deepseek-ai/dsh-runtime must use workspace:^, got ^0.1.7',
+    ])
+  })
 })
 
 describe('workspace manifest discovery', () => {
@@ -220,6 +237,16 @@ describe('experimental workspace constraints', () => {
       '@deepseek-ai/dsh-python-runtime: dependencies.@deepseek-ai/dsh-experimental-prototype must not reference an experimental package',
     ])
   })
+
+  it('allows the downstream Electron installer to bundle experimental packages', () => {
+    expect(checkExperimentalDependencyIsolation([experimental, {
+      dir: 'apps/electron',
+      manifest: {
+        name: '@dsh-electron/dsh-electron',
+        dependencies: { '@deepseek-ai/dsh-experimental-prototype': 'workspace:^' },
+      },
+    }])).toEqual([])
+  })
 })
 
 describe('dsh family version coherence', () => {
@@ -255,6 +282,13 @@ describe('dsh family version coherence', () => {
 })
 
 describe('package payload constraints', () => {
+  it('requires the downstream Electron installer to remain private', () => {
+    const electron = { dir: 'apps/electron', manifest: { name: '@dsh-electron/dsh-electron', private: true } }
+    expect(checkWorkspaceManifest(electron)).toEqual([])
+    expect(checkWorkspaceManifest({ ...electron, manifest: { name: '@dsh-electron/dsh-electron' } }))
+      .toEqual(['apps/electron/package.json: @dsh-electron/dsh-electron: package.json must set "private": true'])
+  })
+
   it.each(['./art/icon.svg', 'art/icon.svg'])('includes declared icon %s in the canonical payload', (icon) => {
     expect(expectedDshPackageFiles({ icon, exports: { './locale/*.json': './locale/*.json' } })).toEqual([
       'art/icon.svg', 'locale/*.json', 'lib/index.js', 'lib/types/**/*.d.ts',
