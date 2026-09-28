@@ -1,4 +1,4 @@
-import { delimiter, isAbsolute } from 'node:path'
+import { isAbsolute, posix, win32 } from 'node:path'
 import type { LaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 
 interface ExecutablePolicy { executable: string; binDirectory: string; version: string }
@@ -57,7 +57,10 @@ function pathEntry(env: Readonly<NodeJS.ProcessEnv> | undefined, platform: NodeJ
   return Object.entries(env ?? {}).filter(([key]) => platform === 'win32' ? key.toUpperCase() === 'PATH' : key === 'PATH').at(-1)
 }
 
-/** Apply project and request PATH ahead of Desktop fallback entries, preserving explicit tombstones. */
+/**
+ * Apply project and request PATH ahead of Desktop fallback entries, preserving explicit tombstones.
+ * PATH entries join with `:` or `;` for `platform`.
+ */
 export function toolchainOverrides(
   explicit: Readonly<NodeJS.ProcessEnv> | undefined,
   policy: ToolchainPolicy,
@@ -78,7 +81,7 @@ export function toolchainOverrides(
     policy.shimDirectory, policy.nodeGlobalBinDirectory, policy.pythonUserBinDirectory,
     policy.node.binDirectory, policy.python.binDirectory,
   ]
-    .filter(Boolean).join(platform === 'win32' ? ';' : delimiter)
+    .filter(Boolean).join(platform === 'win32' ? win32.delimiter : posix.delimiter)
   if (!Object.keys(result).some(name => platform === 'win32' ? name.toUpperCase() === 'PYTHONUSERBASE' : name === 'PYTHONUSERBASE')) {
     const declared = launch.getFrom('PYTHONUSERBASE', ['project-env', 'user-env'])?.value
     if (declared !== undefined) result.PYTHONUSERBASE = declared
