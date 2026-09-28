@@ -26,4 +26,4 @@ Status: implemented
 
 ## Consequences
 
-`apps/electron/tsconfig.runtime-client.json` 只编译已挂载插件的 client 目录，CI 因此检查全部清单，嵌套的陈旧依赖不再可能掩盖 workspace API 破坏。Desktop 包含五个本地 runtime plugin、从 npm 安装的 Theme Studio package 和随包 Git package。[必需 portable UI 基础设施](2026-08-24-electron-required-portable-ui-infrastructure.zh.md)的类别定义继续有效，Theme Studio 是其唯一成员。
+`apps/electron/tsconfig.runtime-client.json` 只编译本地 runtime plugin 的 client 目录，CI 因此检查该清单，嵌套的陈旧依赖不再可能掩盖 workspace API 破坏。Theme Studio 与 Git 是由 profile 管理的 ecosystem bundle（[profile 所有权说明](2026-09-27-electron-profile-managed-ecosystem-and-ownership-overlay.zh.md)）；[必需 portable UI 基础设施](2026-08-24-electron-required-portable-ui-infrastructure.zh.md)类别目前没有成员。

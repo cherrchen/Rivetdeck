@@ -36,6 +36,8 @@ Plugins 页仅由 composition package 为 Desktop Capabilities 注册 Official `
 
 启动顺序为：迁移旧版插件状态；发现并校验随包产物；恢复 Desktop-owned package 链接；seed ecosystem 依赖（新 dependency 默认启用，已有 dependency 保留 bundle 选择）；写出按 ownership 去重的 Host overlay；以 `dsh web --patch electron-host.patch.yml` 启动。
 
+Desktop 在修复链接和 seed 期间持有 web profile 的 `package.json` 写入锁，与 `dsh plugin` 和 Plugin Manager 的 package 操作共用。发生变更的 manifest 以原子替换方式保存。
+
 每次 Electron 启动都会把 Desktop-owned package 链接恢复到 `$DSH_HOME/profiles/node_modules` 与 `$DSH_HOME/profiles/web/node_modules` 下的应用内副本。已有实体包目录会以 `.desktop-replaced-<id>` 后缀保存在新链接旁边。会话内 Plugins 页执行 `pnpm add/remove/install` 重建 `node_modules` 后，要到下次启动才会再次修复。
 
 Desktop Capabilities 的 Host half 在 profile HMR 每次重新组合时都会刷新 ownership overlay。对每个 required 包，overlay 之前的每一行都被禁用，再由静态 overlay 插入 Desktop 行。对已启用的 ecosystem 包，保留其 bundle 行，禁用额外同名行。对已禁用的 ecosystem 包，额外同名行仍会被禁用。overlay 不插入 Git 或 Theme Studio。找不到的 id 走 include 已有警告，Main 不失败。

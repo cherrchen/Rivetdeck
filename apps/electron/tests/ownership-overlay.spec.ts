@@ -16,7 +16,7 @@ import {
 } from '@deepseek-ai/dsh-app-boot'
 import type { EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
-import { seedEcosystemProfile, WEB_PROFILE_NAME } from '../src/ecosystem-profile.ts'
+import { prepareEcosystemProfile, WEB_PROFILE_NAME } from '../src/ecosystem-profile.ts'
 import { apply as applyCapabilitiesHost } from '../runtime/plugins/desktop-capabilities/src/index.ts'
 import { resolveDshInstallAnchor } from '../src/runtime.ts'
 import {
@@ -29,7 +29,6 @@ import {
 import { prepareHostRuntimeOverlay } from '../src/runtime-overlay.ts'
 import {
   discoverEcosystemPluginPackages,
-  ensureRuntimePluginsLinked,
 } from '../src/runtime-plugins.ts'
 
 const OVERLAY_INSERT_NAMES = [
@@ -75,8 +74,8 @@ describe('ownership-aware Electron overlay', () => {
     }
   })
 
-  it('disables profile and home ecosystem duplicates while keeping the bundle row', () => {
-    const home = seededHome()
+  it('disables profile and home ecosystem duplicates while keeping the bundle row', async () => {
+    const home = await seededHome()
     try {
       writeFileSync(join(resolveProfileDir(WEB_PROFILE_NAME, home), PROFILE_PATCH_FILENAME), `
 - insert:
@@ -99,7 +98,7 @@ describe('ownership-aware Electron overlay', () => {
   })
 
   it('refreshes ownership after a new same-name row arrives during Host HMR', async () => {
-    const home = seededHome()
+    const home = await seededHome()
     const ctx = new Context()
     try {
       const dir = resolveProfileDir(WEB_PROFILE_NAME, home)
@@ -129,8 +128,8 @@ describe('ownership-aware Electron overlay', () => {
     }
   })
 
-  it('keeps the enabled Git bundle row and disables extra home and user copies', () => {
-    const home = seededHome()
+  it('keeps the enabled Git bundle row and disables extra home and user copies', async () => {
+    const home = await seededHome()
     try {
       const git = discoverEcosystemPluginPackages(appPath)[0]
       if (git === undefined) throw new Error('git ecosystem plugin missing')
@@ -157,8 +156,8 @@ describe('ownership-aware Electron overlay', () => {
     }
   })
 
-  it('leaves no active ecosystem row when bundles are disabled', () => {
-    const home = seededHome()
+  it('leaves no active ecosystem row when bundles are disabled', async () => {
+    const home = await seededHome()
     try {
       const dir = resolveProfileDir(WEB_PROFILE_NAME, home)
       const manifest = readProfileManifest('dsh', dir)
@@ -190,10 +189,9 @@ describe('ownership-aware Electron overlay', () => {
   })
 })
 
-function seededHome(): string {
+async function seededHome(): Promise<string> {
   const home = mkdtempSync(join(tmpdir(), 'dsh-electron-overlay-'))
-  seedEcosystemProfile(appPath, home)
-  ensureRuntimePluginsLinked(appPath, home)
+  await prepareEcosystemProfile(appPath, home)
   return home
 }
 

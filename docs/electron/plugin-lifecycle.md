@@ -36,6 +36,8 @@ The Plugins page registers an Official `plugins.item` card only for Desktop Capa
 
 Startup runs, in order: migrate legacy plugin state; discover and validate bundled artifacts; restore Desktop-owned package links; seed ecosystem dependencies (a new dependency is enabled, an existing dependency keeps its bundle selection); write the ownership-aware Host overlay; start `dsh web --patch electron-host.patch.yml`.
 
+Desktop holds the web profile `package.json` writer lock across link repair and seeding, sharing it with `dsh plugin` and Plugin Manager package operations. A changed manifest is replaced atomically.
+
 Every Electron boot restores Desktop-owned package links under `$DSH_HOME/profiles/node_modules` and `$DSH_HOME/profiles/web/node_modules` to the application copies. An existing physical package directory is preserved beside the new link with a `.desktop-replaced-<id>` suffix. Session-time Plugin Manager `pnpm add/remove/install` rebuilds of `node_modules` are not repaired until the next boot.
 
 Desktop Capabilities' Host half refreshes the ownership overlay whenever profile HMR recomposes layers. For each required package, every pre-overlay row is disabled and the static overlay inserts its Desktop row. For an enabled ecosystem package, its own bundle row remains active and extra same-name rows are disabled. For a disabled ecosystem package, extra same-name rows remain disabled. The overlay inserts neither Git nor Theme Studio. A disable whose id is absent stays an include warning; Main does not fail.

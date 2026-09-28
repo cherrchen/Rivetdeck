@@ -22,6 +22,8 @@ Official 卡片与 Capabilities 组件名单是产品 roster，不是 Loader 行
 
 本决策延伸[Web Plugin Manager 与 Git sidebar](2026-09-13-electron-plugin-manager-and-git-sidebar.zh.md)，并保留 [npm-only ecosystem 插件](2026-09-14-electron-npm-only-ecosystem-plugins.zh.md)的发行规则。
 
+[必需 portable UI 基础设施](2026-08-24-electron-required-portable-ui-infrastructure.zh.md)类别仍可用于未来不可禁用的包；Theme Studio 则由 profile 管理。
+
 ## Alternatives considered
 
 **向上游 Plugin Manager 增加 `locked` 或 `source=desktop`。** 拒绝：Plugins 页已经用 Official `plugins.item` 卡片与 Installed bundle 区分来源。

@@ -26,4 +26,4 @@ Reintroduction requires a Client occupancy slot (Sidebar or a restored Details c
 
 ## Consequences
 
-`apps/electron/tsconfig.runtime-client.json` compiles only mounted plugin client trees, so CI type-checks the whole inventory and a nested stale dependency can no longer hide a workspace API break. Desktop has five local runtime plugins, the npm-installed Theme Studio package, and the bundled Git package. The category definition in [required portable UI infrastructure](2026-08-24-electron-required-portable-ui-infrastructure.md) remains active with Theme Studio as its only member.
+`apps/electron/tsconfig.runtime-client.json` compiles only local runtime plugin client trees, so CI type-checks that inventory and a nested stale dependency can no longer hide a workspace API break. Theme Studio and Git are profile-managed ecosystem bundles ([profile ownership note](2026-09-27-electron-profile-managed-ecosystem-and-ownership-overlay.md)); the [required portable UI infrastructure](2026-08-24-electron-required-portable-ui-infrastructure.md) category has no current member.

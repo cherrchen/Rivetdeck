@@ -22,6 +22,8 @@ The Official card and the Capabilities component list are a product roster, not 
 
 This extends [Web Plugin Manager and Git sidebar](2026-09-13-electron-plugin-manager-and-git-sidebar.md) and keeps the [npm-only ecosystem plugin](2026-09-14-electron-npm-only-ecosystem-plugins.md) distribution rule.
 
+The [required portable UI infrastructure](2026-08-24-electron-required-portable-ui-infrastructure.md) category remains available for future non-disableable packages; Theme Studio is profile-managed instead.
+
 ## Alternatives considered
 
 **Add `locked` or `source=desktop` to the upstream Plugin Manager.** Rejected because the Plugins page already distinguishes Official `plugins.item` cards from Installed bundles.
