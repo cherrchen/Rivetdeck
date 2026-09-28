@@ -12,7 +12,7 @@ describe('upstream plugin manager runtime', () => {
       const pnpmBin = join(harnessHome, 'pnpm.cjs')
       const { writeFileSync } = await import('node:fs')
       writeFileSync(pnpmBin, '')
-      const runtime = preparePluginPackageManager(harnessHome, { executable: 'C:\\node\\node.exe', env: {} }, pnpmBin, 'C:\\Windows', 'win32')
+      const runtime = preparePluginPackageManager(harnessHome, 'C:\\node\\node.exe', pnpmBin, 'C:\\Windows', 'win32')
       const shim = readFileSync(join(runtime.binDirectory, 'pnpm.cmd'), 'utf8')
       expect(shim).toContain('C:\\node\\node.exe')
       expect(shim).toContain(pnpmBin)
@@ -28,10 +28,12 @@ describe('upstream plugin manager runtime', () => {
       const pnpmBin = join(harnessHome, 'pnpm.cjs')
       const { writeFileSync } = await import('node:fs')
       writeFileSync(pnpmBin, '')
-      const runtime = preparePluginPackageManager(harnessHome, { executable: '/usr/bin/node', env: {} }, pnpmBin, '/usr/bin', 'linux')
+      const runtime = preparePluginPackageManager(harnessHome, '/bundle/bin/node', pnpmBin, '/usr/bin', 'linux')
       expect(runtime.envPath).toBe(`${runtime.binDirectory}${delimiter}/usr/bin`)
       expect(existsSync(join(runtime.binDirectory, 'pnpm'))).toBe(true)
       expect(readFileSync(join(runtime.binDirectory, 'pnpm'), 'utf8')).toContain(pnpmBin)
+      expect(readFileSync(join(runtime.binDirectory, 'pnpm'), 'utf8')).toContain('/bundle/bin/node')
+      expect(readFileSync(join(runtime.binDirectory, 'pnpm'), 'utf8')).not.toContain('ELECTRON_RUN_AS_NODE')
     } finally {
       await rm(harnessHome, { recursive: true, force: true })
     }

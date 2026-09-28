@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "node": {
+    "version": "24.17.0",
+    "targets": {
+      "darwin-arm64": { "url": "https://nodejs.org/download/release/v24.17.0/node-v24.17.0-darwin-arm64.tar.gz", "sha256": "4fc3266a3702eebc39cc37661cf4eeceeade307e242ab64e4d7ce7949197e11f", "archive": "tar.gz" },
+      "darwin-x64": { "url": "https://nodejs.org/download/release/v24.17.0/node-v24.17.0-darwin-x64.tar.gz", "sha256": "80da552fe037290cb130e9dea590f5eeeb7aa450636f0c89ab41415511c1ec27", "archive": "tar.gz" },
+      "win32-x64": { "url": "https://nodejs.org/download/release/v24.17.0/node-v24.17.0-win-x64.zip", "sha256": "f2aa33b35b75aca5f3f7b85675a6f6423201053e9381911e64961f3bda2528ab", "archive": "zip" },
+      "win32-arm64": { "url": "https://nodejs.org/download/release/v24.17.0/node-v24.17.0-win-arm64.zip", "sha256": "4957712f67fce55779cc794d9b4df9e0e802a18c841ad5a4e42f17be490e634d", "archive": "zip" },
+      "linux-x64": { "url": "https://nodejs.org/download/release/v24.17.0/node-v24.17.0-linux-x64.tar.gz", "sha256": "e0472427aa791ad80bdc426ff7cc73cdd28ed0f616d1ff9689a23a7f47f1265f", "archive": "tar.gz" },
+      "linux-arm64": { "url": "https://nodejs.org/download/release/v24.17.0/node-v24.17.0-linux-arm64.tar.gz", "sha256": "faa0d59ba7fe7045c950ed09b190578fb8eee73e4358686d38fcc99ca58c1480", "archive": "tar.gz" }
+    }
+  },
+  "python": {
+    "version": "3.14.7",
+    "distribution": "python-build-standalone",
+    "release": "20260924",
+    "flavor": "install_only_stripped",
+    "targets": {
+      "darwin-arm64": { "target": "aarch64-apple-darwin", "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260924/cpython-3.14.7%2B20260924-aarch64-apple-darwin-install_only_stripped.tar.gz", "sha256": "f0fb6b233971672dd7add4efa90f8c209a63253e457ffabd0148b9f734638319", "archive": "tar.gz" },
+      "darwin-x64": { "target": "x86_64-apple-darwin", "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260924/cpython-3.14.7%2B20260924-x86_64-apple-darwin-install_only_stripped.tar.gz", "sha256": "82745f483d2bcf39ade058ec0dbd44659d583454ea9c4562b66dae7d718ae100", "archive": "tar.gz" },
+      "win32-x64": { "target": "x86_64-pc-windows-msvc", "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260924/cpython-3.14.7%2B20260924-x86_64-pc-windows-msvc-install_only_stripped.tar.gz", "sha256": "1493fc4185edf84bbd4305c15c5fbac2d4fcd4ddd7eb6273903669a5d3106178", "archive": "tar.gz" },
+      "win32-arm64": { "target": "aarch64-pc-windows-msvc", "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260924/cpython-3.14.7%2B20260924-aarch64-pc-windows-msvc-install_only_stripped.tar.gz", "sha256": "215891f97f2f8f2b6f058dd3fc5764390c558a966d14df657c958a52c1312d39", "archive": "tar.gz" },
+      "linux-x64": { "target": "x86_64-unknown-linux-gnu", "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260924/cpython-3.14.7%2B20260924-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz", "sha256": "bd0d0568ccded07bbf1c87727230dc5dd0187e706a87da23c4de78388a229b78", "archive": "tar.gz" },
+      "linux-arm64": { "target": "aarch64-unknown-linux-gnu", "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260924/cpython-3.14.7%2B20260924-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz", "sha256": "d922413468a276e69a132b79fb7493faa46ef2e85b1a29844d3af1f7710ab5bd", "archive": "tar.gz" }
+    }
+  }
+}

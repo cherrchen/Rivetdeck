@@ -147,7 +147,7 @@ Electron Main
     │
     │ spawn
     ▼
-Windows: resources/node/node.exe with one hidden console
+Windows: resources/toolchains/node/node.exe with one hidden console
 Other platforms: Electron executable with ELECTRON_RUN_AS_NODE=1
     │
     ▼
@@ -158,6 +158,8 @@ dsh web
 ```
 
 On Windows the Host runs on the packaged Node.js, because `electron.exe` is a GUI-subsystem image: a process without a console makes Windows allocate a visible console for every console-subsystem descendant, which Windows 11 renders as a Windows Terminal window. The packaged Node.js is a console-subsystem image started with `windowsHide` and an inherited stdin device handle, so the Host holds one hidden console that job, ACL, and sandboxed child processes inherit; `CREATE_NO_WINDOW` alone leaves a console-subsystem child without any console, which a restricted token cannot create for its children. Other platforms keep Electron's Node-compatible child mode.
+
+Main resolves the packaged Node.js and Python toolchains before Host startup and sends a versioned fallback policy to the existing Desktop subprocess provider. The provider composes that policy with Agent proxy settings for executable lookup, ordinary children, and terminals. It searches request, project, user, and Main's original PATH values in that order, removes the Host-only pnpm shim from Agent PATH, and appends writable npm and Python user command directories and bundled commands as fallbacks. The application resources remain immutable; user package state lives below `$DSH_HOME/electron`.
 
 The sidecar owns upstream Harness behavior:
 
