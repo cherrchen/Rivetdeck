@@ -9,8 +9,8 @@
   en: 5c1da8593a34d32b
   zh: c92dedeb861312f2
 /deepseek-harness-desktop/status/maintenance-outlook:
-  en: 00a2d71022e2d523
-  zh: a19e31054ac6f9b2
+  en: c2d47a0208e1ba64
+  zh: 785faf3ce7cd9546
 /deepseek-harness-desktop/install:
   en: 92a328a78378eb0d
   zh: 81f39cf5e9e23ee3
@@ -21,8 +21,11 @@
   en: 3e8192a493376d80
   zh: e1765305f735967f
 /deepseek-harness-desktop/bundled-plugins:
-  en: b71bcd36479bff28
-  zh: 84e135817806d2b0
+  en: f97c70ec6ed76e78
+  zh: 051f7170ab599195
+/deepseek-harness-desktop/related-plugin:
+  en: e10dc3afa247ee81
+  zh: 5a57f2518033e263
 /deepseek-harness-desktop/development:
   en: e54f1a8d723e43ec
   zh: 4fa98c201d97fcee

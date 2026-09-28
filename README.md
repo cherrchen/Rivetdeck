@@ -14,7 +14,7 @@ This project and its upstream runtime are in developer preview.
 
 Upstream [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) now ships a first-party Desktop application in its monorepo with foundational functionality. This Electron distribution may therefore stop receiving regular updates and move to an **archived** maintenance posture. The capability it still uniquely provides is first-class Electron desktop integration (`ctx.desktop`) for portable plugins—upstream Desktop does not expose this surface today.
 
-Select standalone plugin repositories mirrored in this monorepo may continue to receive occasional updates; version bumps will be slow and irregular.
+The standalone plugin repositories may continue to receive occasional updates; version bumps will be slow and irregular.
 
 ## Install
 
@@ -48,14 +48,18 @@ Harness profiles and state live in the platform-specific application-data direct
 
 ## Bundled plugins
 
-DeepSeek Harness Desktop bundles two portable DSH plugins published from standalone canonical repositories.
+DeepSeek Harness Desktop preinstalls two portable DSH ecosystem bundles published from standalone repositories. Both appear in the web profile's Installed plugins and can be enabled or disabled there.
 
 | Plugin | Desktop role | Summary |
 |---|---|---|
-| [dsh-theme-studio](https://github.com/cherrchen/dsh-theme-studio) | Required built-in | Builtin color themes under **Settings → General → Themes**, overlaid on official Light / Dark / System Appearance. Listed in `dshElectron.runtimePlugins`. |
-| [dsh-plugin-git](https://github.com/cherrchen/dsh-plugin-git) | Ecosystem plugin | Local Git status, diffs, staging, commits, and branch controls in the right sidebar. Listed in `dshElectron.ecosystemPlugins`. |
+| [dsh-theme-studio](https://github.com/cherrchen/dsh-theme-studio) | Preinstalled ecosystem plugin | Color themes under **Settings → General → Themes**, alongside official Light / Dark / System Appearance. Listed in `dshElectron.ecosystemPlugins`. |
+| [dsh-plugin-git](https://github.com/cherrchen/dsh-plugin-git) | Preinstalled ecosystem plugin | Local Git status, diffs, staging, commits, and branch controls in the right sidebar. Listed in `dshElectron.ecosystemPlugins`. |
 
 Canonical development happens in those repositories; this monorepo installs their published npm packages and keeps no copy of their source.
+
+## Related plugin
+
+[dsh-plugin-multi-root-workspace](https://github.com/cherrchen/dsh-plugin-multi-root-workspace) extends a DSH workspace with additional folders. It is an independently installed plugin and is not bundled with this Desktop release.
 
 ## Development
 

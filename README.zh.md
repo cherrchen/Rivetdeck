@@ -14,7 +14,7 @@ DeepSeek Harness Desktop 将 [DeepSeek Harness](https://github.com/deepseek-ai/d
 
 上游 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 已在 monorepo 中提供具备基础能力的第一方 Desktop 应用。因此本 Electron 发行版可能停止常规更新，并转入 **archived（归档）** 维护状态。它目前仍独有的能力是向可移植插件暴露 Electron 桌面集成（`ctx.desktop`）；上游 Desktop 尚未提供该能力。
 
-本 monorepo 镜像的部分独立插件仓库可能仍会不定期更新；版本推进会较慢、且无固定节奏。
+这些独立插件仓库可能仍会不定期更新；版本推进会较慢、且无固定节奏。
 
 ## 安装
 
@@ -48,14 +48,18 @@ Harness profile 和状态存储在对应平台的应用数据目录。智能体 
 
 ## 内置插件
 
-DeepSeek Harness Desktop 打包两个由独立 canonical repository 发布的 portable DSH 插件。
+DeepSeek Harness Desktop 预装两个由独立仓库发布的可移植 DSH 生态 bundle。它们都显示在 web profile 的 Installed 插件中，用户可在此启用或禁用。
 
 | 插件 | 桌面角色 | 简介 |
 |---|---|---|
-| [dsh-theme-studio](https://github.com/cherrchen/dsh-theme-studio) | 必需内置 | 在**设置 → 通用 → 主题**提供内置配色主题，叠加在官方浅色 / 深色 / 跟随系统外观之上。列入 `dshElectron.runtimePlugins`。 |
-| [dsh-plugin-git](https://github.com/cherrchen/dsh-plugin-git) | 生态插件 | 在右侧边栏提供本地 Git 状态、diff、stage、commit 与 branch 操作。列入 `dshElectron.ecosystemPlugins`。 |
+| [dsh-theme-studio](https://github.com/cherrchen/dsh-theme-studio) | 预装生态插件 | 在**设置 → 通用 → 主题**提供配色主题，与官方浅色 / 深色 / 跟随系统外观并列。列入 `dshElectron.ecosystemPlugins`。 |
+| [dsh-plugin-git](https://github.com/cherrchen/dsh-plugin-git) | 预装生态插件 | 在右侧边栏提供本地 Git 状态、diff、stage、commit 与 branch 操作。列入 `dshElectron.ecosystemPlugins`。 |
 
 Canonical 开发在各自仓库进行；本 monorepo 安装它们发布的 npm package，不保留其源码副本。
+
+## 友情链接
+
+[dsh-plugin-multi-root-workspace](https://github.com/cherrchen/dsh-plugin-multi-root-workspace) 可为 DSH 工作区增加其他文件夹。它是需要独立安装的插件，不随本 Desktop 版本打包。
 
 ## 开发
 
