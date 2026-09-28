@@ -31,7 +31,8 @@ $requiredFiles = @(
   $application,
   $manifest,
   (Join-Path $installDirectory 'resources\app\node_modules\@deepseek-ai\dsh\lib\bin.js'),
-  (Join-Path $installDirectory 'resources\node\node.exe'),
+  (Join-Path $installDirectory 'resources\toolchains\node\node.exe'),
+  (Join-Path $installDirectory 'resources\toolchains\python\python.exe'),
   (Join-Path $installDirectory 'resources\network-runtime\dsh-electron-network-runtime.exe'),
   $uninstaller
 )
@@ -40,6 +41,18 @@ foreach ($path in $requiredFiles) {
     throw "Installer did not create required file: $path"
   }
 }
+
+$nodeVersion = & (Join-Path $installDirectory 'resources\toolchains\node\node.exe') --version
+if ($LASTEXITCODE -ne 0 -or $nodeVersion.Trim() -ne 'v24.17.0') {
+  throw "Packaged Node.js failed: $nodeVersion"
+}
+$python = Join-Path $installDirectory 'resources\toolchains\python\python.exe'
+$pythonVersion = & $python --version
+if ($LASTEXITCODE -ne 0 -or $pythonVersion.Trim() -ne 'Python 3.14.7') {
+  throw "Packaged Python failed: $pythonVersion"
+}
+& $python -m pip --version
+if ($LASTEXITCODE -ne 0) { throw 'Packaged pip failed.' }
 
 $packagedManifest = Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json
 if ($packagedManifest.name -ne 'deepseek-harness-desktop') {

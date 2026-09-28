@@ -60,6 +60,9 @@ import {
   type HostRuntime,
 } from './runtime.ts'
 import { preparePluginPackageManager, resolveBundledPnpmBin } from './plugin-package-manager.ts'
+import { resolveDesktopToolchains } from './toolchains/resolver.ts'
+import { prepareToolchainShims } from './toolchains/shims.ts'
+import type { DesktopToolchainPolicy } from './toolchains/domain.ts'
 import { migrateLegacyPluginState } from './legacy-plugin-migration.ts'
 import { resolveDesktopMainLocale } from './locale.ts'
 import {
@@ -102,6 +105,7 @@ async function startHarness(
   harnessHome: string,
   hostPatch: string,
   envPath: string,
+  toolchainPolicy: DesktopToolchainPolicy,
 ): Promise<{ child: HarnessProcess; url: string }> {
   const activeNetwork = network
   if (activeNetwork === undefined) throw new Error('desktop network: controller is unavailable')
@@ -114,6 +118,7 @@ async function startHarness(
       ...runtime.env,
       PATH: envPath,
       DSH_ELECTRON_AGENT_PROXY_POLICY: agentPolicy,
+      DSH_ELECTRON_TOOLCHAIN_POLICY: JSON.stringify(toolchainPolicy),
     }),
   })
 
@@ -457,6 +462,8 @@ if (!primaryInstance) {
     const networkState = network.state()
     if (networkState.effectiveMode !== 'default') await electronProxy.register(updaterNetworkSession(), 'updater')
     await electronProxy.apply(networkState.effectiveMode, networkState.runtime.gateway, network.gatewayForUpdater())
+    const basePath = process.env.PATH ?? ''
+    const toolchains = resolveDesktopToolchains({ appPath, resourcesPath: process.resourcesPath, packaged: app.isPackaged })
     const hostRuntime = resolveHostRuntime({
       appPath,
       resourcesPath: process.resourcesPath,
@@ -464,12 +471,22 @@ if (!primaryInstance) {
       override: process.env.DSH_ELECTRON_NODE_BINARY,
     })
     const harnessHome = resolveHarnessHome(app.getPath('home'))
+    const shim = prepareToolchainShims(harnessHome, toolchains, process.platform)
+    const toolchainPolicy: DesktopToolchainPolicy = {
+      version: 1,
+      mode: 'fallback',
+      basePath,
+      node: { ...toolchains.node, binDirectory: toolchains.nodeBinDirectory },
+      python: { ...toolchains.python, binDirectory: toolchains.pythonBinDirectory },
+      shimDirectory: shim.shimDirectory,
+      pythonUserBase: shim.pythonUserBase,
+    }
     await migrateLegacyPluginState(harnessHome)
     await prepareEcosystemProfile(appPath, harnessHome)
     const overlay = await prepareHostRuntimeOverlay(appPath, userDataPath, harnessHome)
     const packageManager = preparePluginPackageManager(
       harnessHome,
-      hostRuntime,
+      toolchains.node.executable,
       resolveBundledPnpmBin(appPath),
     )
     installDesktopIpc(
@@ -483,6 +500,7 @@ if (!primaryInstance) {
       harnessHome,
       overlay.patchPath,
       packageManager.envPath,
+      toolchainPolicy,
     )
     harness = started.child
     await transport.start(started.url)

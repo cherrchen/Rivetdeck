@@ -28,10 +28,13 @@
     "build": "pnpm run build:tray && pnpm run build:runtime-plugins && pnpm run build:main && pnpm run build:preload && pnpm run build:renderer",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.preload.json && tsc -p tsconfig.renderer.json && tsc -p tsconfig.runtime-host.json && tsc -p tsconfig.runtime-client.json",
     "prepare:node": "node ./scripts/prepare-node-runtime.mjs",
+    "prepare:python": "node ./scripts/prepare-python-runtime.mjs",
+    "prepare:toolchains": "node ./scripts/toolchains/prepare-toolchains.mjs",
+    "smoke:toolchains": "node ./scripts/smoke-toolchains.mjs",
     "prepare:network-runtime": "node ./scripts/prepare-network-runtime.mjs",
     "test:network-runtime": "cargo test --locked --manifest-path native/network-runtime/Cargo.toml && pnpm run prepare:network-runtime && vitest run --config vitest.network-runtime.config.ts",
-    "package": "pnpm run prepare:node && pnpm run prepare:network-runtime && electron-builder --publish never",
-    "start": "pnpm run build && pnpm run prepare:node && pnpm run prepare:network-runtime && env -u ELECTRON_RUN_AS_NODE electron .",
+    "package": "pnpm run prepare:toolchains && pnpm run prepare:network-runtime && electron-builder --publish never",
+    "start": "pnpm run build && pnpm run prepare:toolchains && pnpm run prepare:network-runtime && env -u ELECTRON_RUN_AS_NODE electron .",
     "test": "pnpm run build:runtime-plugins && vitest run --root ../.. apps/electron/tests"
   },
   "dependencies": {
@@ -182,6 +185,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "sharp": "^0.35.3",
+    "tar": "^7.5.22",
     "typescript": "^6.0.3",
     "vite": "^6.0.0",
     "vitest": "^4.1.8"
@@ -220,6 +224,14 @@
       {
         "from": ".electron-build/network-runtime/current",
         "to": "network-runtime"
+      },
+      {
+        "from": ".electron-build/toolchains/current/node",
+        "to": "toolchains/node"
+      },
+      {
+        "from": ".electron-build/toolchains/current/python",
+        "to": "toolchains/python"
       }
     ],
     "mac": {
@@ -234,12 +246,6 @@
       "icon": "build/icon.png",
       "target": [
         "nsis"
-      ],
-      "extraResources": [
-        {
-          "from": ".electron-build/node/current",
-          "to": "node"
-        }
       ]
     },
     "nsis": {

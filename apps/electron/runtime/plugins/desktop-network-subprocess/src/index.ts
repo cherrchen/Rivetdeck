@@ -3,6 +3,7 @@ import { LocalSubprocessRuntime } from '@deepseek-ai/dsh-subprocess-local'
 import type { SubprocessSpawnSpec, SubprocessTerminalSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import type { LaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
+import { parseToolchainPolicy, toolchainOverrides, type ToolchainPolicy } from './toolchains.ts'
 
 const KEYS = [
   'HTTP_PROXY', 'http_proxy', 'HTTPS_PROXY', 'https_proxy', 'ALL_PROXY', 'all_proxy',
@@ -17,16 +18,20 @@ interface AgentProxyPolicy {
 /** Desktop Host provider that applies Agent proxy policy at the shared subprocess seam. */
 export class DesktopNetworkSubprocessRuntime extends LocalSubprocessRuntime {
   private readonly policy: AgentProxyPolicy | undefined
+  private readonly toolchainPolicy: ToolchainPolicy | undefined
+  private readonly launch: LaunchEnvironmentSnapshot
 
   constructor(ctx: Context) {
     super(ctx)
+    this.launch = launchEnvironmentOf(ctx)
     const policy = parsePolicy(process.env.DSH_ELECTRON_AGENT_PROXY_POLICY)
     if (policy !== undefined && !policy.force) {
       // The Host's inherited proxy names point at the Gateway; only Main's original values
       // and the CLI's discovered file layers can supply the Agent's opt-out environment.
-      fillAgentProxyValues(policy.values, launchEnvironmentOf(ctx), process.platform)
+      fillAgentProxyValues(policy.values, this.launch, process.platform)
     }
     this.policy = policy
+    this.toolchainPolicy = parseToolchainPolicy(process.env.DSH_ELECTRON_TOOLCHAIN_POLICY)
   }
 
   override resolveExecutable(command: string, env?: Readonly<Record<string, string>>, signal?: AbortSignal): Promise<string> {
@@ -43,10 +48,10 @@ export class DesktopNetworkSubprocessRuntime extends LocalSubprocessRuntime {
   }
 
   private childOverrides(explicit?: Readonly<NodeJS.ProcessEnv>): NodeJS.ProcessEnv | undefined {
-    if (this.policy === undefined) return explicit === undefined ? undefined : { ...explicit }
-    return this.policy.force
+    const proxy = this.policy === undefined ? explicit === undefined ? undefined : { ...explicit } : this.policy.force
       ? { ...explicit, ...this.policy.values }
       : { ...this.policy.values, ...explicit }
+    return this.toolchainPolicy === undefined ? proxy : toolchainOverrides(proxy, this.toolchainPolicy, this.launch, process.platform)
   }
 }
 

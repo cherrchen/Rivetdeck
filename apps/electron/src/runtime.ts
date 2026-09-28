@@ -25,7 +25,7 @@ export interface HostRuntime {
 /**
  * Resolve the executable that carries the supervised Host and its plugin commands.
  *
- * Windows packaging ships `node.exe` under `resources/node`; development builds use the copy
+ * Windows packaging ships `node.exe` under `resources/toolchains/node`; development builds use the copy
  * created by `pnpm --filter @dsh-electron/dsh-electron prepare:node`. Other platforms keep using
  * Electron's own Node-compatible child mode, which has no console-visibility defect there.
  *
@@ -60,8 +60,8 @@ export function resolveHostRuntime(options: {
   }
   const arch = options.arch ?? process.arch
   const candidates = [
-    options.packaged ? join(options.resourcesPath, 'node', 'node.exe') : undefined,
-    join(options.appPath, '.electron-build', 'node', `win-${arch}`, 'node.exe'),
+    options.packaged ? join(options.resourcesPath, 'toolchains', 'node', 'node.exe') : undefined,
+    join(options.appPath, '.electron-build', 'toolchains', 'node', `win32-${arch}`, 'node.exe'),
   ].filter((candidate): candidate is string => candidate !== undefined)
   const executable = candidates.find(candidate => exists(candidate))
   if (executable === undefined) {

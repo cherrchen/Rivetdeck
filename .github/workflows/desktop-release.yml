@@ -188,10 +188,14 @@ jobs:
       - name: Test Electron runtime
         run: pnpm --filter @dsh-electron/dsh-electron test
 
-      - name: Prepare Windows Node runtime
+      - name: Prepare Desktop toolchains
         env:
           DSH_ELECTRON_TARGET_ARCH: ${{ matrix.arch }}
-        run: pnpm --filter @dsh-electron/dsh-electron prepare:node
+          DSH_ELECTRON_TARGET_PLATFORM: ${{ runner.os == 'Windows' && 'win32' || runner.os == 'macOS' && 'darwin' || 'linux' }}
+        run: pnpm --filter @dsh-electron/dsh-electron prepare:toolchains
+
+      - name: Smoke-test Desktop toolchains
+        run: pnpm --filter @dsh-electron/dsh-electron smoke:toolchains
 
       - name: Prepare Network Runtime
         run: pnpm --filter @dsh-electron/dsh-electron prepare:network-runtime

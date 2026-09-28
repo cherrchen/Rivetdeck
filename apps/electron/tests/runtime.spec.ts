@@ -94,8 +94,8 @@ describe('Electron Harness runtime', () => {
 })
 
 describe('Host runtime resolution', () => {
-  const packagedNode = join('/resources', 'node', 'node.exe')
-  const preparedNode = join('/app', '.electron-build', 'node', 'win-x64', 'node.exe')
+  const packagedNode = join('/resources', 'toolchains', 'node', 'node.exe')
+  const preparedNode = join('/app', '.electron-build', 'toolchains', 'node', 'win32-x64', 'node.exe')
 
   it('keeps Electron as the Host executable outside Windows', () => {
     expect(resolveHostRuntime({

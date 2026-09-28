@@ -1,4 +1,8 @@
 import { Context } from '@deepseek-ai/cordis'
+import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { createLaunchEnvironmentSnapshot, DSH_LAUNCH_ENVIRONMENT_KEY } from '@deepseek-ai/dsh-launch-environment'
 import { describe, expect, it } from 'vitest'
 import { DesktopNetworkSubprocessRuntime, fillAgentProxyValues } from '../runtime/plugins/desktop-network-subprocess/src/index.ts'
@@ -82,5 +86,71 @@ describe('Desktop Agent proxy policy fill', () => {
     ]), 'darwin')
     expect(values.HTTP_PROXY).toBe('http://original.example:8080')
     expect(values.http_proxy).toBe('http://lower.example:8080')
+  })
+})
+
+describe('Desktop Agent toolchain and proxy composition', () => {
+  it.runIf(process.platform !== 'win32')('uses the same fallback PATH for lookup, ordinary children, and terminals', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-toolchain-provider-'))
+    const shimDirectory = join(root, 'shims')
+    mkdirSync(shimDirectory)
+    const probe = join(shimDirectory, 'desktop-probe')
+    writeFileSync(probe, '#!/bin/sh\nprintf "probe\\n"\n', { mode: 0o700 })
+    chmodSync(probe, 0o700)
+    const requestedDirectory = join(root, 'requested')
+    mkdirSync(requestedDirectory)
+    const requestedProbe = join(requestedDirectory, 'desktop-probe')
+    writeFileSync(requestedProbe, '#!/bin/sh\nprintf "requested\\n"\n', { mode: 0o700 })
+    chmodSync(requestedProbe, 0o700)
+    const previousProxy = process.env.DSH_ELECTRON_AGENT_PROXY_POLICY
+    const previousToolchains = process.env.DSH_ELECTRON_TOOLCHAIN_POLICY
+    process.env.DSH_ELECTRON_AGENT_PROXY_POLICY = agentProxyPolicyForHost({}, {
+      mode: 'manual', proxyAgentTraffic: true, gateway,
+    })
+    process.env.DSH_ELECTRON_TOOLCHAIN_POLICY = JSON.stringify({
+      version: 1, mode: 'fallback', basePath: '/system/bin',
+      node: { executable: process.execPath, binDirectory: join(root, 'node'), version: '24.17.0' },
+      python: { executable: process.execPath, binDirectory: join(root, 'python'), version: '3.14.7' },
+      shimDirectory, pythonUserBase: join(root, 'python-user'),
+    })
+    const ctx = new Context()
+    ctx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, createLaunchEnvironmentSnapshot([
+      { source: 'project-env', values: { PATH: '/project/bin' } },
+    ]))
+    try {
+      const fiber = await ctx.plugin(DesktopNetworkSubprocessRuntime)
+      try {
+        expect(await ctx.subprocess.resolveExecutable('desktop-probe')).toBe(probe)
+        expect(await ctx.subprocess.resolveExecutable('desktop-probe', { PATH: requestedDirectory })).toBe(requestedProbe)
+        const script = 'console.log(JSON.stringify({path:process.env.PATH,proxy:process.env.HTTP_PROXY}))'
+        const handle = ctx.subprocess.spawn({
+          argv: [process.execPath, '-e', script], cwd: root,
+          stdio: { stdin: 'ignore', stdout: { maxBytes: 4096, spill: { maxBytes: 4096 } }, stderr: { maxBytes: 4096, spill: { maxBytes: 4096 } } },
+          graceMs: 1000,
+        })
+        expect((await handle.done).exitCode).toBe(0)
+        const observed = JSON.parse(handle.collected.stdout?.readFrom(0).text.trim() ?? '{}') as { path: string; proxy: string }
+        expect(observed.path).toBe(`/project/bin:${shimDirectory}:${join(root, 'node')}:${join(root, 'python')}`)
+        expect(observed.proxy).toBe('http://127.0.0.1:4123')
+
+        const terminal = await ctx.subprocess.spawnTerminal({
+          argv: [process.execPath, '-e', script], cwd: root,
+          rows: 24, cols: 80, terminalType: 'dumb', graceMs: 1000,
+        })
+        let terminalOutput = ''
+        terminal.output.setEncoding('utf8').on('data', (chunk: string) => { terminalOutput += chunk })
+        expect((await terminal.done).exitCode).toBe(0)
+        expect(terminalOutput).toContain(`/project/bin:${shimDirectory}`)
+        expect(terminalOutput).toContain('http://127.0.0.1:4123')
+      } finally {
+        await fiber.dispose()
+      }
+    } finally {
+      if (previousProxy === undefined) delete process.env.DSH_ELECTRON_AGENT_PROXY_POLICY
+      else process.env.DSH_ELECTRON_AGENT_PROXY_POLICY = previousProxy
+      if (previousToolchains === undefined) delete process.env.DSH_ELECTRON_TOOLCHAIN_POLICY
+      else process.env.DSH_ELECTRON_TOOLCHAIN_POLICY = previousToolchains
+      await rm(root, { recursive: true, force: true })
+    }
   })
 })
