@@ -2,7 +2,7 @@
   "name": "@dsh-electron/dsh-electron",
   "productName": "DeepSeek Harness",
   "description": "Electron desktop shell for DeepSeek Harness",
-  "version": "0.1.7-rc.2",
+  "version": "0.1.7-beta.1",
   "private": true,
   "homepage": "https://github.com/cherrchen/deepseek-harness-electron",
   "repository": {
