@@ -102,6 +102,16 @@ describe('Desktop Agent toolchain and proxy composition', () => {
     const requestedProbe = join(requestedDirectory, 'desktop-probe')
     writeFileSync(requestedProbe, '#!/bin/sh\nprintf "requested\\n"\n', { mode: 0o700 })
     chmodSync(requestedProbe, 0o700)
+    const nodeGlobalBinDirectory = join(root, 'node-global', 'bin')
+    const pythonUserBinDirectory = join(root, 'python-user', 'bin')
+    mkdirSync(nodeGlobalBinDirectory, { recursive: true })
+    mkdirSync(pythonUserBinDirectory, { recursive: true })
+    const installedNodeCommand = join(nodeGlobalBinDirectory, 'installed-node-command')
+    const installedPythonCommand = join(pythonUserBinDirectory, 'installed-python-command')
+    for (const command of [installedNodeCommand, installedPythonCommand]) {
+      writeFileSync(command, '#!/bin/sh\nexit 0\n', { mode: 0o700 })
+      chmodSync(command, 0o700)
+    }
     const previousProxy = process.env.DSH_ELECTRON_AGENT_PROXY_POLICY
     const previousToolchains = process.env.DSH_ELECTRON_TOOLCHAIN_POLICY
     process.env.DSH_ELECTRON_AGENT_PROXY_POLICY = agentProxyPolicyForHost({}, {
@@ -112,6 +122,7 @@ describe('Desktop Agent toolchain and proxy composition', () => {
       node: { executable: process.execPath, binDirectory: join(root, 'node'), version: '24.17.0' },
       python: { executable: process.execPath, binDirectory: join(root, 'python'), version: '3.14.7' },
       shimDirectory, pythonUserBase: join(root, 'python-user'),
+      nodeGlobalBinDirectory, pythonUserBinDirectory,
     })
     const ctx = new Context()
     ctx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, createLaunchEnvironmentSnapshot([
@@ -122,6 +133,8 @@ describe('Desktop Agent toolchain and proxy composition', () => {
       try {
         expect(await ctx.subprocess.resolveExecutable('desktop-probe')).toBe(probe)
         expect(await ctx.subprocess.resolveExecutable('desktop-probe', { PATH: requestedDirectory })).toBe(requestedProbe)
+        expect(await ctx.subprocess.resolveExecutable('installed-node-command')).toBe(installedNodeCommand)
+        expect(await ctx.subprocess.resolveExecutable('installed-python-command')).toBe(installedPythonCommand)
         const script = 'console.log(JSON.stringify({path:process.env.PATH,proxy:process.env.HTTP_PROXY}))'
         const handle = ctx.subprocess.spawn({
           argv: [process.execPath, '-e', script], cwd: root,
@@ -130,7 +143,7 @@ describe('Desktop Agent toolchain and proxy composition', () => {
         })
         expect((await handle.done).exitCode).toBe(0)
         const observed = JSON.parse(handle.collected.stdout?.readFrom(0).text.trim() ?? '{}') as { path: string; proxy: string }
-        expect(observed.path).toBe(`/project/bin:${shimDirectory}:${join(root, 'node')}:${join(root, 'python')}`)
+        expect(observed.path).toBe(`/project/bin:/system/bin:${shimDirectory}:${join(root, 'node-global', 'bin')}:${join(root, 'python-user', 'bin')}:${join(root, 'node')}:${join(root, 'python')}`)
         expect(observed.proxy).toBe('http://127.0.0.1:4123')
 
         const terminal = await ctx.subprocess.spawnTerminal({
@@ -140,7 +153,7 @@ describe('Desktop Agent toolchain and proxy composition', () => {
         let terminalOutput = ''
         terminal.output.setEncoding('utf8').on('data', (chunk: string) => { terminalOutput += chunk })
         expect((await terminal.done).exitCode).toBe(0)
-        expect(terminalOutput).toContain(`/project/bin:${shimDirectory}`)
+        expect(terminalOutput).toContain(`/project/bin:/system/bin:${shimDirectory}`)
         expect(terminalOutput).toContain('http://127.0.0.1:4123')
       } finally {
         await fiber.dispose()

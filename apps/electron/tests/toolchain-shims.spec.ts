@@ -22,6 +22,8 @@ describe('Desktop fallback shims', () => {
         nodeBinDirectory: root, pythonBinDirectory: root,
         npmCli: join(root, 'npm-cli.js'), npxCli: join(root, 'npx-cli.js'),
       }, 'darwin')
+      expect(paths.nodeGlobalBinDirectory).toBe(join(root, 'electron', 'node-global', 'bin'))
+      expect(paths.pythonUserBinDirectory).toBe(join(root, 'electron', 'python-user', 'bin'))
       const baseEnv = { PATH: process.env.PATH ?? '' }
       const pip = execFileSync(join(paths.shimDirectory, 'pip'), ['install', 'example'], { encoding: 'utf8', env: baseEnv })
       expect(pip).toContain(`${python}|${paths.pythonUserBase}|1|-m pip install example`)
@@ -53,6 +55,8 @@ describe('Desktop fallback shims', () => {
         nodeBinDirectory: 'C:\\bundle', pythonBinDirectory: 'C:\\bundle',
         npmCli: 'C:\\bundle\\npm-cli.js', npxCli: 'C:\\bundle\\npx-cli.js',
       }, 'win32')
+      expect(paths.nodeGlobalBinDirectory).toBe(join(root, 'electron', 'node-global'))
+      expect(paths.pythonUserBinDirectory).toBe(join(root, 'electron', 'python-user', 'Scripts'))
       expect(readFileSync(join(paths.shimDirectory, 'npm.cmd'), 'utf8')).toContain('"C:\\bundle\\node.exe" "C:\\bundle\\npm-cli.js"')
       expect(readFileSync(join(paths.shimDirectory, 'pip.cmd'), 'utf8')).toContain('"C:\\bundle\\python.exe" -m pip')
     } finally {

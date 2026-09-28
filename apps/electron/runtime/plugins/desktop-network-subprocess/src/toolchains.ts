@@ -12,6 +12,8 @@ export interface ToolchainPolicy {
   python: ExecutablePolicy
   shimDirectory: string
   pythonUserBase: string
+  nodeGlobalBinDirectory: string
+  pythonUserBinDirectory: string
 }
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -34,17 +36,20 @@ export function parseToolchainPolicy(serialized: string | undefined): ToolchainP
   if (serialized === undefined) return undefined
   let value: unknown
   try { value = JSON.parse(serialized) } catch { throw new Error('desktop toolchains: invalid policy JSON') }
-  if (!record(value) || !exactKeys(value, ['version', 'mode', 'basePath', 'node', 'python', 'shimDirectory', 'pythonUserBase'])
+  if (!record(value) || !exactKeys(value, ['version', 'mode', 'basePath', 'node', 'python', 'shimDirectory', 'pythonUserBase', 'nodeGlobalBinDirectory', 'pythonUserBinDirectory'])
     || value.version !== 1 || value.mode !== 'fallback' || typeof value.basePath !== 'string'
     || !executable(value.node, '24.17.0') || !executable(value.python, '3.14.7')
     || typeof value.shimDirectory !== 'string' || !isAbsolute(value.shimDirectory)
-    || typeof value.pythonUserBase !== 'string' || !isAbsolute(value.pythonUserBase)) {
+    || typeof value.pythonUserBase !== 'string' || !isAbsolute(value.pythonUserBase)
+    || typeof value.nodeGlobalBinDirectory !== 'string' || !isAbsolute(value.nodeGlobalBinDirectory)
+    || typeof value.pythonUserBinDirectory !== 'string' || !isAbsolute(value.pythonUserBinDirectory)) {
     throw new Error('desktop toolchains: invalid policy')
   }
   return {
     version: 1, mode: 'fallback', basePath: value.basePath,
     node: value.node, python: value.python,
     shimDirectory: value.shimDirectory, pythonUserBase: value.pythonUserBase,
+    nodeGlobalBinDirectory: value.nodeGlobalBinDirectory, pythonUserBinDirectory: value.pythonUserBinDirectory,
   }
 }
 
@@ -64,12 +69,15 @@ export function toolchainOverrides(
   if (platform === 'win32') {
     for (const key of Object.keys(result)) if (key.toUpperCase() === 'PATH') delete result[key]
   }
-  const launchPath = ['PATH', 'Path', 'path']
-    .map(key => launch.getFrom(key, ['project-env', 'user-env'])?.value)
+  const layerPath = (source: 'project-env' | 'user-env'): string | undefined => ['PATH', 'Path', 'path']
+    .map(name => launch.getFrom(name, [source])?.value)
     .find(value => value !== undefined)
-  const base = requested === undefined ? launchPath ?? policy.basePath : requested[1]
   const key = requested?.[0] ?? 'PATH'
-  result[key] = base === undefined ? undefined : [base, policy.shimDirectory, policy.node.binDirectory, policy.python.binDirectory]
+  result[key] = requested !== undefined && requested[1] === undefined ? undefined : [
+    requested?.[1], layerPath('project-env'), layerPath('user-env'), policy.basePath,
+    policy.shimDirectory, policy.nodeGlobalBinDirectory, policy.pythonUserBinDirectory,
+    policy.node.binDirectory, policy.python.binDirectory,
+  ]
     .filter(Boolean).join(platform === 'win32' ? ';' : delimiter)
   if (!Object.keys(result).some(name => platform === 'win32' ? name.toUpperCase() === 'PYTHONUSERBASE' : name === 'PYTHONUSERBASE')) {
     const declared = launch.getFrom('PYTHONUSERBASE', ['project-env', 'user-env'])?.value

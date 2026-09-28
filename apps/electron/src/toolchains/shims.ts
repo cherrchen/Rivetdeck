@@ -13,12 +13,18 @@ function cmd(value: string): string { return `"${cmdValue(value)}"` }
 export function prepareToolchainShims(harnessHome: string, toolchains: DesktopToolchains, platform: NodeJS.Platform): {
   shimDirectory: string
   pythonUserBase: string
+  nodeGlobalBinDirectory: string
+  pythonUserBinDirectory: string
 } {
   const root = join(harnessHome, 'electron')
   const shimDirectory = join(root, 'toolchains', 'bin')
   const pythonUserBase = join(root, 'python-user')
   const nodeGlobal = join(root, 'node-global')
-  for (const directory of [shimDirectory, pythonUserBase, nodeGlobal]) mkdirSync(directory, { recursive: true })
+  const nodeGlobalBinDirectory = platform === 'win32' ? nodeGlobal : join(nodeGlobal, 'bin')
+  const pythonUserBinDirectory = join(pythonUserBase, platform === 'win32' ? 'Scripts' : 'bin')
+  for (const directory of [
+    shimDirectory, pythonUserBase, nodeGlobal, nodeGlobalBinDirectory, pythonUserBinDirectory,
+  ]) mkdirSync(directory, { recursive: true })
   if (platform === 'win32') {
     for (const [name, cli] of [['npm', toolchains.npmCli], ['npx', toolchains.npxCli]] as const) {
       writeFileSync(join(shimDirectory, `${name}.cmd`), `@echo off\r\nsetlocal DisableDelayedExpansion\r\nif not defined NPM_CONFIG_PREFIX set "NPM_CONFIG_PREFIX=${cmdValue(nodeGlobal)}"\r\n${cmd(toolchains.node.executable)} ${cmd(cli)} %*\r\n`)
@@ -44,5 +50,5 @@ export function prepareToolchainShims(harnessHome: string, toolchains: DesktopTo
       chmodSync(path, 0o700)
     }
   }
-  return { shimDirectory, pythonUserBase }
+  return { shimDirectory, pythonUserBase, nodeGlobalBinDirectory, pythonUserBinDirectory }
 }

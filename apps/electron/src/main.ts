@@ -480,6 +480,8 @@ if (!primaryInstance) {
       python: { ...toolchains.python, binDirectory: toolchains.pythonBinDirectory },
       shimDirectory: shim.shimDirectory,
       pythonUserBase: shim.pythonUserBase,
+      nodeGlobalBinDirectory: shim.nodeGlobalBinDirectory,
+      pythonUserBinDirectory: shim.pythonUserBinDirectory,
     }
     await migrateLegacyPluginState(harnessHome)
     await prepareEcosystemProfile(appPath, harnessHome)

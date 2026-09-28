@@ -23,4 +23,6 @@ export interface DesktopToolchainPolicy {
   python: DesktopToolchainExecutable & { binDirectory: string }
   shimDirectory: string
   pythonUserBase: string
+  nodeGlobalBinDirectory: string
+  pythonUserBinDirectory: string
 }

@@ -1,12 +1,14 @@
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parseToolchainPolicy, toolchainOverrides } from '../runtime/plugins/desktop-network-subprocess/src/toolchains.ts'
 
 const policy = parseToolchainPolicy(JSON.stringify({
-  version: 1, mode: 'fallback', basePath: '/system/bin',
-  node: { executable: '/bundle/node/bin/node', binDirectory: '/bundle/node/bin', version: '24.17.0' },
-  python: { executable: '/bundle/python/bin/python3', binDirectory: '/bundle/python/bin', version: '3.14.7' },
-  shimDirectory: '/user/toolchains/bin', pythonUserBase: '/user/python',
+  version: 1, mode: 'fallback', basePath: resolve('/system/bin'),
+  node: { executable: resolve('/bundle/node/bin/node'), binDirectory: resolve('/bundle/node/bin'), version: '24.17.0' },
+  python: { executable: resolve('/bundle/python/bin/python3'), binDirectory: resolve('/bundle/python/bin'), version: '3.14.7' },
+  shimDirectory: resolve('/user/toolchains/bin'), pythonUserBase: resolve('/user/python'),
+  nodeGlobalBinDirectory: resolve('/user/node-global/bin'), pythonUserBinDirectory: resolve('/user/python/bin'),
 }))
 if (policy === undefined) throw new Error('policy fixture missing')
 const empty = createLaunchEnvironmentSnapshot([])
@@ -14,18 +16,28 @@ const empty = createLaunchEnvironmentSnapshot([])
 describe('Desktop Agent PATH fallback', () => {
   it('keeps system PATH first and appends managed commands', () => {
     expect(toolchainOverrides(undefined, policy, empty, 'linux').PATH).toBe(
-      '/system/bin:/user/toolchains/bin:/bundle/node/bin:/bundle/python/bin',
+      [policy.basePath, policy.shimDirectory, policy.nodeGlobalBinDirectory, policy.pythonUserBinDirectory, policy.node.binDirectory, policy.python.binDirectory].join(':'),
     )
   })
 
   it('places project PATH ahead of bundled assets', () => {
-    const launch = createLaunchEnvironmentSnapshot([{ source: 'project-env', values: { PATH: '/project/bin' } }])
-    expect(toolchainOverrides(undefined, policy, launch, 'linux').PATH?.startsWith('/project/bin:')).toBe(true)
+    const launch = createLaunchEnvironmentSnapshot([
+      { source: 'project-env', values: { PATH: '/project/bin' } },
+      { source: 'user-env', values: { PATH: '/user/bin' } },
+    ])
+    expect(toolchainOverrides(undefined, policy, launch, 'linux').PATH).toBe(
+      ['/project/bin', '/user/bin', policy.basePath, policy.shimDirectory, policy.nodeGlobalBinDirectory, policy.pythonUserBinDirectory, policy.node.binDirectory, policy.python.binDirectory].join(':'),
+    )
   })
 
   it('gives an explicit request PATH highest priority', () => {
-    const launch = createLaunchEnvironmentSnapshot([{ source: 'project-env', values: { PATH: '/project/bin' } }])
-    expect(toolchainOverrides({ PATH: '/request/bin' }, policy, launch, 'linux').PATH?.startsWith('/request/bin:')).toBe(true)
+    const launch = createLaunchEnvironmentSnapshot([
+      { source: 'project-env', values: { PATH: '/project/bin' } },
+      { source: 'user-env', values: { PATH: '/user/bin' } },
+    ])
+    expect(toolchainOverrides({ PATH: '/request/bin' }, policy, launch, 'linux').PATH).toBe(
+      ['/request/bin', '/project/bin', '/user/bin', policy.basePath, policy.shimDirectory, policy.nodeGlobalBinDirectory, policy.pythonUserBinDirectory, policy.node.binDirectory, policy.python.binDirectory].join(':'),
+    )
   })
 
   it('preserves a PATH tombstone', () => {
@@ -43,7 +55,7 @@ describe('Desktop Agent PATH fallback', () => {
     for (const spelling of ['PATH', 'Path', 'path']) {
       const values = toolchainOverrides({ [spelling]: 'C:\\Project' }, policy, empty, 'win32')
       expect(Object.keys(values).filter(key => key.toUpperCase() === 'PATH')).toEqual([spelling])
-      expect(values[spelling]).toBe('C:\\Project;/user/toolchains/bin;/bundle/node/bin;/bundle/python/bin')
+      expect(values[spelling]).toBe(['C:\\Project', policy.basePath, policy.shimDirectory, policy.nodeGlobalBinDirectory, policy.pythonUserBinDirectory, policy.node.binDirectory, policy.python.binDirectory].join(';'))
     }
     expect(toolchainOverrides({ path: undefined }, policy, empty, 'win32').path).toBeUndefined()
     const launch = createLaunchEnvironmentSnapshot([{ source: 'project-env', values: { Path: 'C:\\ProjectEnv' } }])
