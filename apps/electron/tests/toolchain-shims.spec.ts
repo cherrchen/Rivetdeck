@@ -1,10 +1,13 @@
 import { execFileSync } from 'node:child_process'
-import { chmodSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { prepareToolchainShims } from '../src/toolchains/shims.ts'
+
+const posixShimNames = ['npm', 'npx', 'pip', 'pip3', 'python', 'python3']
+const windowsShimNames = posixShimNames.map(name => `${name}.cmd`)
 
 describe('Desktop fallback shims', () => {
   it.runIf(process.platform !== 'win32')('uses exact executables and writable package locations', async () => {
@@ -22,6 +25,7 @@ describe('Desktop fallback shims', () => {
         nodeBinDirectory: root, pythonBinDirectory: root,
         npmCli: join(root, 'npm-cli.js'), npxCli: join(root, 'npx-cli.js'),
       }, 'darwin')
+      expect(readdirSync(paths.shimDirectory).sort()).toEqual(posixShimNames)
       expect(paths.nodeGlobalBinDirectory).toBe(join(root, 'electron', 'node-global', 'bin'))
       expect(paths.pythonUserBinDirectory).toBe(join(root, 'electron', 'python-user', 'bin'))
       const baseEnv = { PATH: process.env.PATH ?? '' }
@@ -41,12 +45,14 @@ describe('Desktop fallback shims', () => {
         encoding: 'utf8', env: baseEnv,
       })
       expect(venv).toContain(`${python}|${paths.pythonUserBase}||-m venv .venv`)
+      expect(readFileSync(join(paths.shimDirectory, 'python3'), 'utf8'))
+        .toBe(readFileSync(join(paths.shimDirectory, 'python'), 'utf8'))
     } finally {
       await rm(root, { recursive: true, force: true })
     }
   })
 
-  it('writes Windows npm and pip commands against their exact runtimes', async () => {
+  it('writes Windows fallback commands against their exact runtimes', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-toolchain-win-shims-'))
     try {
       const paths = prepareToolchainShims(root, {
@@ -55,10 +61,20 @@ describe('Desktop fallback shims', () => {
         nodeBinDirectory: 'C:\\bundle', pythonBinDirectory: 'C:\\bundle',
         npmCli: 'C:\\bundle\\npm-cli.js', npxCli: 'C:\\bundle\\npx-cli.js',
       }, 'win32')
+      expect(readdirSync(paths.shimDirectory).sort()).toEqual(windowsShimNames)
       expect(paths.nodeGlobalBinDirectory).toBe(join(root, 'electron', 'node-global'))
       expect(paths.pythonUserBinDirectory).toBe(join(root, 'electron', 'python-user', 'Scripts'))
       expect(readFileSync(join(paths.shimDirectory, 'npm.cmd'), 'utf8')).toContain('"C:\\bundle\\node.exe" "C:\\bundle\\npm-cli.js"')
-      expect(readFileSync(join(paths.shimDirectory, 'pip.cmd'), 'utf8')).toContain('"C:\\bundle\\python.exe" -m pip')
+      const pip = readFileSync(join(paths.shimDirectory, 'pip.cmd'), 'utf8')
+      expect(pip).toContain(`set "PYTHONUSERBASE=${paths.pythonUserBase}"`)
+      expect(pip).toContain('\r\nset "PIP_USER=1"\r\n"C:\\bundle\\python.exe" -m pip %*')
+      const python = readFileSync(join(paths.shimDirectory, 'python.cmd'), 'utf8')
+      expect(python).toContain(`set "PYTHONUSERBASE=${paths.pythonUserBase}"`)
+      expect(python).toContain('if /I "%~1"=="-m" if /I "%~2"=="pip" set "PIP_USER=1"')
+      expect(python).toContain('"C:\\bundle\\python.exe" %*')
+      expect(python).not.toContain('\r\nset "PIP_USER=1"\r\n')
+      expect(readFileSync(join(paths.shimDirectory, 'python3.cmd'), 'utf8')).toBe(python)
+      expect(readFileSync(join(paths.shimDirectory, 'pip3.cmd'), 'utf8')).toBe(pip)
     } finally {
       await rm(root, { recursive: true, force: true })
     }
