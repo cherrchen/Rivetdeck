@@ -14,8 +14,8 @@ Desktop 每次启动都将 `dshElectron.ecosystemPlugins` 链接进共享的 `$D
 
 拆分三条 ownership 轴：
 
-- **Persistence** 仍属于共享 web profile（`package.json`、lock、`node_modules`）。共享的 `dsh plugin` 操作首次预装缺失包并修复旧版 Desktop 链接；manifest、lockfile 和包目录均由该操作写入。用户移除后保持移除状态。
-- **Activation** 仍属于 `dsh.profile.bundles`。Disable 对 CLI 与 Desktop 同时生效；Desktop 不得重新挂载已禁用的 ecosystem 插件。
+- **Persistence** 仍属于共享 web profile（`package.json`、lock、`node_modules`）。共享的 `dsh plugin` 操作首次预装缺失包并修复旧版 Desktop 链接；manifest、lockfile 和包目录均由该操作写入。用户移除后共享 profile 保持移除状态；Desktop 仍仅在私有 Host 投影中选择随包副本。
+- **Activation** 使用各宿主自己的 bundle 列表。已安装但被 Disable 的 ecosystem dependency 在两个宿主中均保持禁用。移除的 dependency 对 CLI 保持缺席，Desktop 仅在私有 Host manifest 中选择随包副本。
 - **Runtime implementation** 是进程本地的。CLI 解析 profile 安装副本。受监督 Desktop Host 通过 `apps/electron/src/host.ts` 启动，构建 `$DSH_HOME/electron/host-profile`（位于 `profiles/` 之外），转发普通 web 包，并将 ecosystem 名称指向 Electron 随包目录。`ProfileContext.dir` 仍指向共享 web profile，供 Plugin Manager 与已安装版本列表使用。
 
 `ensureRuntimePluginsLinked` 只链接 required runtime 插件。ownership overlay 继续抑制重复 Cordis 行，不负责选择物理 package 来源。存在已应用的 Host 投影层时，ecosystem 规范 id 来自该层。

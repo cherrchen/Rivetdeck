@@ -68,7 +68,7 @@ export function loadPreElectronPatchLayers(
     : prepareHostProfileProjection(appPath, harnessHome)
   const profileDir = hostDir ?? webDir
   const profile = loadProfileDirectory(BIN_NAME, profileDir, installAnchor)
-  const manifest = readProfileManifest(BIN_NAME, webDir)
+  const manifest = readProfileManifest(BIN_NAME, profileDir)
   return {
     layers: [
       ...profile.layers.map(layer => layer.patches),

@@ -345,7 +345,7 @@ src/host.ts                supervised Host entry with split persistence vs resol
 src/ownership-overlay.ts   generate ownership patches for current profile layers
 ```
 
-启动时先校验并仅将 **required runtime 插件** 链接到 `$DSH_HOME/profiles/node_modules/<package-name>` 与 `$DSH_HOME/profiles/web/node_modules/<package-name>`，然后启动受监督 Host。共享的 dsh plugin 包操作首次预装缺失的 ecosystem 插件并修复旧版 Desktop 链接；Desktop 不直接写入它们的共享安装状态。受监督 Host 通过 `$DSH_HOME/electron/host-profile` 解析 ecosystem 包，共享 profile 包保持不变，以便并发 CLI `dsh web` 使用。`host.patch.yml` 挂载必需的 Desktop 插件。这些 ecosystem bundle 以及之后安装的插件由上游 Web profile 管理启用状态（[插件生命周期](plugin-lifecycle.zh.md)）。
+启动时先校验并仅将 **required runtime 插件** 链接到 `$DSH_HOME/profiles/node_modules/<package-name>` 与 `$DSH_HOME/profiles/web/node_modules/<package-name>`，然后启动受监督 Host。共享的 dsh plugin 包操作首次预装缺失的 ecosystem 插件并修复旧版 Desktop 链接；Desktop 不直接写入它们的共享安装状态。受监督 Host 通过 `$DSH_HOME/electron/host-profile` 解析 ecosystem 包，共享 profile 包保持不变，以便并发 CLI `dsh web` 使用。`host.patch.yml` 挂载必需的 Desktop 插件。web profile 管理已安装 ecosystem bundle 和后续安装插件的启用状态；从 profile 卸载 ecosystem 包后，Desktop Host 仅在私有投影中选择其随包副本（[插件生命周期](plugin-lifecycle.zh.md)）。
 
 Desktop Capabilities 包（`@dsh-electron/dsh-electron-desktop-capabilities`）是 Desktop Client 的 composition root。它把 `window.deepseekDesktop` 适配为 `ctx.desktop`，并挂载内部 feature 插件。只有 Renderer 基础设施与该包可直接读取全局 bridge。
 

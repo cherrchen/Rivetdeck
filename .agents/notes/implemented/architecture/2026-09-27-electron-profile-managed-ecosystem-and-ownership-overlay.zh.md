@@ -16,7 +16,7 @@ Desktop Capabilities 的 Host half 在每次 profile 组合（包括 HMR）时�
 
 Host half 通过 launcher 提供的 `profileContext.overlays` 属性返回当前 overlay，并在 dispose 时恢复原属性。HMR 在串行的 profile 重载期间读取该属性，因此后来新增的同名行会被禁用，而无需修改上游 CLI 或 boot 包。
 
-Disable 持久保存在 `dsh.profile.bundles`。Uninstall 会去掉 dependency，且 Desktop 重启后仍保持移除状态。Electron 不隐藏 Uninstall。required runtime 插件继续在 `profiles/node_modules` 与 `profiles/web/node_modules` 下使用 Desktop-owned 链接。ecosystem 包在磁盘上由 profile 拥有；受监督 Host 仅通过 [Electron process-local ecosystem runtime ownership](2026-09-29-electron-process-local-ecosystem-runtime-ownership.zh.md) 中的进程私有投影覆盖它们。
+Disable 持久保存在 `dsh.profile.bundles`。Uninstall 会去掉共享 dependency，且 Desktop 重启后 CLI 仍保持移除状态；Desktop Host 仅在私有投影中启用随包副本。Electron 不隐藏 Uninstall。required runtime 插件继续在 `profiles/node_modules` 与 `profiles/web/node_modules` 下使用 Desktop-owned 链接。ecosystem 包在磁盘上由 profile 拥有；受监督 Host 仅通过 [Electron process-local ecosystem runtime ownership](2026-09-29-electron-process-local-ecosystem-runtime-ownership.zh.md) 中的进程私有投影覆盖它们。
 
 Official 卡片与 Capabilities 组件名单是产品 roster，不是 Loader 行清单。Desktop Capabilities 详情页带有版本、桌面能力标签和白话的组件说明。组件实时运行状态见 [Desktop Capabilities composition root](2026-09-27-electron-desktop-capabilities-composition-root.zh.md)。
 

@@ -233,6 +233,36 @@ describe('ownership-aware Electron overlay', () => {
 })
 
 describe('concurrent CLI and Desktop resolution ownership', () => {
+  it('loads a removed ecosystem bundle only in Desktop while CLI keeps the shared removal', async () => {
+    const home = await seededHome()
+    try {
+      const webDir = resolveProfileDir(WEB_PROFILE_NAME, home)
+      const before = readProfileManifest('dsh', webDir)
+      writeProfileManifest(webDir, {
+        ...before,
+        dependencies: Object.fromEntries(Object.entries(before.dependencies ?? {}).filter(([name]) => name !== GIT)),
+        dsh: { ...before.dsh, profile: { ...before.dsh?.profile,
+          bundles: (before.dsh?.profile?.bundles ?? []).filter(name => name !== GIT) } },
+      })
+      rmSync(join(webDir, 'node_modules', ...GIT.split('/')), { recursive: true, force: true })
+      const sharedManifest = readFileSync(join(webDir, 'package.json'), 'utf8')
+      const hostDir = prepareHostProfileProjection(appPath, home)
+      if (hostDir === undefined) throw new Error('Host profile missing')
+      const anchor = resolveDshInstallAnchor(appPath)
+      const cliProfile = loadProfileDirectory('dsh', webDir, anchor)
+      const desktopProfile = loadProfileDirectory('dsh', hostDir, anchor)
+      const bundledGit = discoverEcosystemPluginPackages(appPath).find(plugin => plugin.name === GIT)
+      if (bundledGit === undefined) throw new Error('bundled Git missing')
+      expect(cliProfile.layers.some(layer => layer.packageName === GIT)).toBe(false)
+      expect(desktopProfile.layers.find(layer => layer.packageName === GIT)?.packageDir).toBe(bundledGit.rootPath)
+      expect(active(named(composeWithOverlay(appPath, home), GIT))).toEqual(['dsh-plugin-git'])
+      expect(readFileSync(join(webDir, 'package.json'), 'utf8')).toBe(sharedManifest)
+      expect(existsSync(join(webDir, 'node_modules', ...GIT.split('/')))).toBe(false)
+    } finally {
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
   it('resolves profile and Electron package directories without rewriting shared node_modules', async () => {
     const home = await seededHome()
     try {

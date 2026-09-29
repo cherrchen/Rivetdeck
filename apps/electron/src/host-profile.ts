@@ -18,7 +18,9 @@ import {
 import { dirname, join } from 'node:path'
 import {
   PROFILE_PATCH_FILENAME,
+  readProfileManifest,
   resolveProfileDir,
+  writeProfileManifest,
 } from '@deepseek-ai/dsh-app-boot'
 import { WEB_PROFILE_NAME } from './ecosystem-profile.ts'
 import {
@@ -54,6 +56,8 @@ export function resolveHostProfileDir(harnessHome: string): string {
 /**
  * Materialize a Host-only profile directory whose ecosystem packages resolve to
  * Electron bundles while every other package forwards to the shared web profile.
+ * A removed ecosystem dependency is selected only in this private projection;
+ * an installed but disabled dependency remains disabled.
  * Shared `$DSH_HOME/profiles/web` is never rewritten for ecosystem ownership.
  * @param appPath - Electron application root.
  * @param harnessHome - Active `$DSH_HOME`.
@@ -67,10 +71,21 @@ export function prepareHostProfileProjection(
   if (!existsSync(join(webDir, 'package.json'))) return undefined
   const hostDir = resolveHostProfileDir(harnessHome)
   mkdirSync(hostDir, { recursive: true })
+  const ecosystem = discoverEcosystemPluginPackages(appPath)
   syncProfileFile(join(webDir, 'package.json'), join(hostDir, 'package.json'))
+  const manifest = readProfileManifest('dsh', webDir)
+  const bundles = manifest.dsh?.profile?.bundles ?? []
+  const desktopOnly = ecosystem.filter(plugin => !Object.hasOwn(manifest.dependencies ?? {}, plugin.name)
+    && !bundles.includes(plugin.name))
+  if (desktopOnly.length > 0) {
+    writeProfileManifest(hostDir, {
+      ...manifest,
+      dsh: { ...manifest.dsh, profile: { ...manifest.dsh?.profile,
+        bundles: [...bundles, ...desktopOnly.map(plugin => plugin.name)] } },
+    })
+  }
   syncOptionalProfileFile(join(webDir, PROFILE_PATCH_FILENAME), join(hostDir, PROFILE_PATCH_FILENAME))
   writeFileSync(join(hostDir, HOST_PROFILE_ROOT_FILENAME), HOST_PROFILE_ROOT_CONFIG)
-  const ecosystem = discoverEcosystemPluginPackages(appPath)
   materializeHostNodeModules(webDir, hostDir, ecosystem)
   return hostDir
 }

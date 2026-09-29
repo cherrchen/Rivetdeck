@@ -14,8 +14,8 @@ Upstream `packages/boot/app-boot` cannot gain a Desktop-only override in this do
 
 Split three ownership axes:
 
-- **Persistence** stays on the shared web profile (`package.json`, lock, `node_modules`). The shared `dsh plugin` operation preinstalls missing packages once and repairs legacy Desktop links; it owns manifest, lockfile, and package writes. User removal persists.
-- **Activation** stays on `dsh.profile.bundles`. Disable removes the bundle for both CLI and Desktop; Desktop must not remount a disabled ecosystem plugin.
+- **Persistence** stays on the shared web profile (`package.json`, lock, `node_modules`). The shared `dsh plugin` operation preinstalls missing packages once and repairs legacy Desktop links; it owns manifest, lockfile, and package writes. User removal persists in the shared profile; Desktop still selects its bundled copy in the private Host projection.
+- **Activation** uses each host's bundle list. An installed but disabled ecosystem dependency remains disabled in both hosts. A removed dependency remains absent for CLI, while Desktop selects the bundled copy only in its private Host manifest.
 - **Runtime implementation** is process-local. CLI resolves the profile-installed copy. The supervised Desktop Host boots through `apps/electron/src/host.ts`, builds `$DSH_HOME/electron/host-profile` (outside `profiles/`), forwards ordinary web packages, and points ecosystem names at Electron-bundled directories. `ProfileContext.dir` remains the shared web profile for Plugin Manager and installed-version listing.
 
 `ensureRuntimePluginsLinked` links only required runtime plugins. The ownership overlay continues to suppress duplicate Cordis rows and never selects the physical package source. Canonical ecosystem ids come from the applied Host projection layer when present.
