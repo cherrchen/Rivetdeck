@@ -335,15 +335,17 @@ Desktop 从两处汇集其所需的 runtime 插件：`apps/electron/runtime/plug
 
 ```text
 runtime/plugins/*          Desktop adapters, Electron carriers, and Desktop-only integration (build + link)
-node_modules/@dsh-electron/*  runtime plugins (dshElectron.runtimePlugins) and ecosystem plugins (dshElectron.ecosystemPlugins), prebuilt + link
+node_modules/@dsh-electron/*  runtime plugins (dshElectron.runtimePlugins) and ecosystem plugins (dshElectron.ecosystemPlugins)
 runtime/host.patch.yml     Host overlay: required Desktop plugins only
 scripts/build-runtime-plugins.mjs
-src/runtime-plugins.ts     discovery, validation, and profile linking
-src/ecosystem-profile.ts   seed ecosystem plugins into the web profile
+src/runtime-plugins.ts     discovery, validation, and required-plugin profile linking
+src/ecosystem-profile.ts   seed ecosystem plugins into the web profile as profile-owned installs
+src/host-profile.ts        process-private Host resolution projection for ecosystem packages
+src/host.ts                supervised Host entry with split persistence vs resolution dirs
 src/ownership-overlay.ts   generate ownership patches for current profile layers
 ```
 
-启动时先校验这三个来源发现的每个插件，再将其链接到 `$DSH_HOME/profiles/node_modules/<package-name>` 与 `$DSH_HOME/profiles/web/node_modules/<package-name>`，然后启动受监督 Host。`host.patch.yml` 挂载必需的 Desktop 插件。Git 等 ecosystem 插件被 seed 进 web profile。这些 bundle 以及之后安装的插件由上游 Web profile 管理启用状态（[插件生命周期](plugin-lifecycle.zh.md)）。
+启动时先校验并仅将 **required runtime 插件** 链接到 `$DSH_HOME/profiles/node_modules/<package-name>` 与 `$DSH_HOME/profiles/web/node_modules/<package-name>`，然后启动受监督 Host。ecosystem 插件以实体安装 seed 进共享 web profile，不会被 symlink 进这些共享树。受监督 Host 通过 `$DSH_HOME/electron/host-profile` 解析 ecosystem 包，共享 profile 包保持不变，以便并发 CLI `dsh web` 使用。`host.patch.yml` 挂载必需的 Desktop 插件。这些 ecosystem bundle 以及之后安装的插件由上游 Web profile 管理启用状态（[插件生命周期](plugin-lifecycle.zh.md)）。
 
 Desktop Capabilities 包（`@dsh-electron/dsh-electron-desktop-capabilities`）是 Desktop Client 的 composition root。它把 `window.deepseekDesktop` 适配为 `ctx.desktop`，并挂载内部 feature 插件。只有 Renderer 基础设施与该包可直接读取全局 bridge。
 

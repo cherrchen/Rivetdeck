@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -12,7 +12,8 @@ import {
   writeProfileManifest,
 } from '@deepseek-ai/dsh-app-boot'
 import { prepareEcosystemProfile, WEB_PROFILE_NAME } from '../src/ecosystem-profile.ts'
-import { webProfileModuleLinkPath } from '../src/runtime-plugins.ts'
+import { prepareHostProfileProjection, resolveHostProfileDir } from '../src/host-profile.ts'
+import { discoverEcosystemPluginPackages, webProfileModuleLinkPath } from '../src/runtime-plugins.ts'
 
 const appPath = fileURLToPath(new URL('..', import.meta.url))
 const GIT = '@dsh-electron/dsh-plugin-git'
@@ -23,11 +24,15 @@ describe('ecosystem web profile seed', () => {
     const home = mkdtempSync(join(tmpdir(), 'dsh-electron-seed-new-'))
     try {
       await prepareEcosystemProfile(appPath, home)
-      const manifest = readProfileManifest('dsh', resolveProfileDir(WEB_PROFILE_NAME, home))
+      const dir = resolveProfileDir(WEB_PROFILE_NAME, home)
+      const manifest = readProfileManifest('dsh', dir)
       expect(manifest.dependencies?.[GIT]).toBe('0.2.3')
       expect(manifest.dsh?.profile?.bundles).toContain(GIT)
       expect(manifest.dependencies?.[THEME]).toBe('0.1.2')
       expect(manifest.dsh?.profile?.bundles).toContain(THEME)
+      expect(existsSync(join(dir, 'node_modules', ...GIT.split('/'), 'package.json'))).toBe(true)
+      expect(lstatSync(join(dir, 'node_modules', ...GIT.split('/'))).isSymbolicLink()).toBe(false)
+      expect(readProfileManifest('dsh', join(dir, 'node_modules', ...GIT.split('/'))).version).toBe('0.2.3')
     } finally {
       rmSync(home, { recursive: true, force: true })
     }
@@ -85,7 +90,7 @@ describe('ecosystem web profile seed', () => {
     }
   })
 
-  it('waits for a profile package operation before repairing links and seeding', async () => {
+  it('waits for a profile package operation before seeding without ecosystem symlinks', async () => {
     const home = mkdtempSync(join(tmpdir(), 'dsh-electron-seed-locked-'))
     const dir = resolveProfileDir(WEB_PROFILE_NAME, home)
     const template = PROFILE_TEMPLATES[WEB_PROFILE_NAME]
@@ -115,10 +120,32 @@ describe('ecosystem web profile seed', () => {
       const seeded = readProfileManifest('dsh', dir)
       expect(seeded.dependencies?.['fixture-package']).toBe('1.0.0')
       expect(seeded.dependencies?.[GIT]).toBe('0.2.3')
-      expect(existsSync(webProfileModuleLinkPath(home, GIT))).toBe(true)
+      expect(lstatSync(join(dir, 'node_modules', ...GIT.split('/'))).isSymbolicLink()).toBe(false)
+      expect(existsSync(join(dir, 'node_modules', ...GIT.split('/'), 'package.json'))).toBe(true)
     } finally {
       release()
       await Promise.allSettled([holder, ...(preparation === undefined ? [] : [preparation])])
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps the shared profile package after host-profile materialization', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'dsh-electron-seed-projection-'))
+    try {
+      await prepareEcosystemProfile(appPath, home)
+      const dir = resolveProfileDir(WEB_PROFILE_NAME, home)
+      const profileGit = join(dir, 'node_modules', ...GIT.split('/'))
+      writeFileSync(join(profileGit, 'marker.txt'), 'profile-owned')
+      const before = readFileSync(join(profileGit, 'package.json'), 'utf8')
+      const hostDir = prepareHostProfileProjection(appPath, home)
+      const plugin = discoverEcosystemPluginPackages(appPath).find(item => item.name === GIT)
+      expect(plugin).toBeDefined()
+      expect(hostDir).toBe(resolveHostProfileDir(home))
+      expect(readlinkSync(join(hostDir!, 'node_modules', ...GIT.split('/')))).toBe(plugin!.rootPath)
+      expect(lstatSync(profileGit).isSymbolicLink()).toBe(false)
+      expect(readFileSync(join(profileGit, 'marker.txt'), 'utf8')).toBe('profile-owned')
+      expect(readFileSync(join(profileGit, 'package.json'), 'utf8')).toBe(before)
+    } finally {
       rmSync(home, { recursive: true, force: true })
     }
   })

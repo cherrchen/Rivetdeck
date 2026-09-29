@@ -51,7 +51,7 @@ import { prepareHostRuntimeOverlay } from './runtime-overlay.ts'
 import {
   HARNESS_START_TIMEOUT_MS,
   harnessArguments,
-  resolveDshBin,
+  resolveHostModule,
   resolveHarnessHome,
   resolveHostRuntime,
   scanHarnessStartupChunk,
@@ -98,10 +98,10 @@ const desktop = new DesktopServices({
 
 registerRendererScheme()
 
-/** Start dsh and resolve only after its complete Web composition is ready. */
+/** Start the Desktop Host and resolve only after its complete Web composition is ready. */
 async function startHarness(
   runtime: HostRuntime,
-  dshBin: string,
+  appPath: string,
   harnessHome: string,
   hostPatch: string,
   envPath: string,
@@ -110,17 +110,21 @@ async function startHarness(
   const activeNetwork = network
   if (activeNetwork === undefined) throw new Error('desktop network: controller is unavailable')
   const agentPolicy = activeNetwork.agentProxyPolicyForHost(process.env)
-  const child = spawnHarnessChild(runtime.executable, harnessArguments(dshBin, hostPatch), {
-    cwd: app.getPath('home'),
-    env: activeNetwork.environmentForHarness({
-      ...process.env,
-      DSH_HOME: harnessHome,
-      ...runtime.env,
-      PATH: envPath,
-      DSH_ELECTRON_AGENT_PROXY_POLICY: agentPolicy,
-      DSH_ELECTRON_TOOLCHAIN_POLICY: JSON.stringify(toolchainPolicy),
-    }),
-  })
+  const child = spawnHarnessChild(
+    runtime.executable,
+    harnessArguments(appPath, resolveHostModule(appPath), hostPatch),
+    {
+      cwd: app.getPath('home'),
+      env: activeNetwork.environmentForHarness({
+        ...process.env,
+        DSH_HOME: harnessHome,
+        ...runtime.env,
+        PATH: envPath,
+        DSH_ELECTRON_AGENT_PROXY_POLICY: agentPolicy,
+        DSH_ELECTRON_TOOLCHAIN_POLICY: JSON.stringify(toolchainPolicy),
+      }),
+    },
+  )
 
   return await new Promise((resolve, reject) => {
     const scan: HarnessStartupScan = { output: '', settled: false }
@@ -498,7 +502,7 @@ if (!primaryInstance) {
     )
     const started = await startHarness(
       hostRuntime,
-      resolveDshBin(appPath),
+      appPath,
       harnessHome,
       overlay.patchPath,
       packageManager.envPath,

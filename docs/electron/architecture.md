@@ -335,15 +335,17 @@ Desktop assembles its required runtime plugins from two sources: directories und
 
 ```text
 runtime/plugins/*          Desktop adapters, Electron carriers, and Desktop-only integration (build + link)
-node_modules/@dsh-electron/*  runtime plugins (dshElectron.runtimePlugins) and ecosystem plugins (dshElectron.ecosystemPlugins), prebuilt + link
+node_modules/@dsh-electron/*  runtime plugins (dshElectron.runtimePlugins) and ecosystem plugins (dshElectron.ecosystemPlugins)
 runtime/host.patch.yml     Host overlay: required Desktop plugins only
 scripts/build-runtime-plugins.mjs
-src/runtime-plugins.ts     discovery, validation, and profile linking
-src/ecosystem-profile.ts   seed ecosystem plugins into the web profile
+src/runtime-plugins.ts     discovery, validation, and required-plugin profile linking
+src/ecosystem-profile.ts   seed ecosystem plugins into the web profile as profile-owned installs
+src/host-profile.ts        process-private Host resolution projection for ecosystem packages
+src/host.ts                supervised Host entry with split persistence vs resolution dirs
 src/ownership-overlay.ts   generate ownership patches for current profile layers
 ```
 
-Startup validates and links every discovered plugin from those three sources into `$DSH_HOME/profiles/node_modules/<package-name>` and `$DSH_HOME/profiles/web/node_modules/<package-name>` before the supervised Host starts. `host.patch.yml` mounts required Desktop plugins. Ecosystem plugins such as Git are seeded into the web profile. The upstream Web profile manages enablement for those bundles and for subsequently installed plugins ([plugin lifecycle](plugin-lifecycle.md)).
+Startup validates and links **required runtime plugins** into `$DSH_HOME/profiles/node_modules/<package-name>` and `$DSH_HOME/profiles/web/node_modules/<package-name>` before the supervised Host starts. Ecosystem plugins are seeded into the shared web profile as real installs and are not symlinked into those shared trees. The supervised Host resolves ecosystem packages through `$DSH_HOME/electron/host-profile`, which leaves shared profile packages untouched for concurrent CLI `dsh web`. `host.patch.yml` mounts required Desktop plugins. The upstream Web profile manages enablement for ecosystem bundles and for subsequently installed plugins ([plugin lifecycle](plugin-lifecycle.md)).
 
 The Desktop Capabilities package (`@dsh-electron/dsh-electron-desktop-capabilities`) is the Desktop Client composition root. It adapts `window.deepseekDesktop` into `ctx.desktop` and mounts internal feature plugins. Only renderer infrastructure and this package read the global bridge directly.
 

@@ -16,7 +16,7 @@ Desktop Capabilities 的 Host half 在每次 profile 组合（包括 HMR）时�
 
 Host half 通过 launcher 提供的 `profileContext.overlays` 属性返回当前 overlay，并在 dispose 时恢复原属性。HMR 在串行的 profile 重载期间读取该属性，因此后来新增的同名行会被禁用，而无需修改上游 CLI 或 boot 包。
 
-Disable 持久保存在 `dsh.profile.bundles`。Uninstall 会去掉 dependency；下次 Desktop 启动会再次 seed 并启用。Electron 不隐藏 Uninstall。每次启动都会恢复 `profiles/node_modules` 与 `profiles/web/node_modules` 下的 Desktop-owned 链接，并在替换实体目录时将其保存在链接旁边。
+Disable 持久保存在 `dsh.profile.bundles`。Uninstall 会去掉 dependency；下次 Desktop 启动会再次 seed 并启用。Electron 不隐藏 Uninstall。required runtime 插件继续在 `profiles/node_modules` 与 `profiles/web/node_modules` 下使用 Desktop-owned 链接。ecosystem 包在磁盘上由 profile 拥有；受监督 Host 仅通过 [Electron process-local ecosystem runtime ownership](2026-09-29-electron-process-local-ecosystem-runtime-ownership.zh.md) 中的进程私有投影覆盖它们。
 
 Official 卡片与 Capabilities 组件名单是产品 roster，不是 Loader 行清单。Desktop Capabilities 详情页带有版本、桌面能力标签和白话的组件说明。组件实时运行状态见 [Desktop Capabilities composition root](2026-09-27-electron-desktop-capabilities-composition-root.zh.md)。
 
@@ -38,4 +38,4 @@ Official 卡片与 Capabilities 组件名单是产品 roster，不是 Loader 行
 
 ## Consequences
 
-共享 `$DSH_HOME` 的 CLI `dsh web` 也能看到 Git 与 Theme Studio。Uninstall 只是临时移除，直到下次 Desktop 启动。会话内 `pnpm` 重建 `node_modules` 要到下次启动才会修复。required 插件在 disable 后再 insert 可能留下一个已禁用的同 id 前驱行，与 overlay 行并存；仍然只有一份 active canonical 副本。
+共享 `$DSH_HOME` 的 CLI `dsh web` 仍能看到 Git 与 Theme Studio，并加载 profile 安装副本。Uninstall 只是临时移除，直到下次 Desktop 启动。required 插件在会话内 `pnpm` 重建共享 `node_modules` 后，要到下次启动才会修复。required 插件在 disable 后再 insert 可能留下一个已禁用的同 id 前驱行，与 overlay 行并存；仍然只有一份 active canonical 副本。Desktop Host 对 ecosystem 的 runtime ownership 是进程本地的；见 [Electron process-local ecosystem runtime ownership](2026-09-29-electron-process-local-ecosystem-runtime-ownership.zh.md)。

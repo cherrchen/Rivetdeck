@@ -3,6 +3,8 @@
  * Required runtime names are fully suppressed in the pre-Electron tree, then the
  * static overlay inserts their Desktop copies. Ecosystem bundle rows stay when
  * enabled; extra same-name rows from profile or home patches are disabled.
+ * Physical package selection is owned by the process-private host-profile
+ * projection; this overlay only dedupes Cordis config rows.
  */
 
 import { existsSync, readFileSync } from 'node:fs'
@@ -16,11 +18,13 @@ import {
   PROFILE_PATCH_FILENAME,
   readProfileManifest,
   resolveProfileDir,
+  type ProfileLayer,
 } from '@deepseek-ai/dsh-app-boot'
 import type { EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import { dump, load } from 'js-yaml'
 import { WEB_PROFILE_NAME } from './ecosystem-profile.ts'
+import { resolveHostProfileDir, prepareHostProfileProjection } from './host-profile.ts'
 import { resolveDshInstallAnchor } from './runtime.ts'
 import {
   discoverEcosystemPluginPackages,
@@ -42,6 +46,8 @@ interface BundleDeclaringManifest {
  * without command-line overlays or the telemetry switch: bundle layers, the web
  * profile patch, then `$DSH_HOME/cordis.patch.yml`. A missing profile or home
  * patch is an empty layer.
+ * Desktop Host generation prefers the process-private projection so ecosystem
+ * layers match the packages the Host will import.
  * @param appPath - Electron application root.
  * @param harnessHome - Active `$DSH_HOME`.
  * @returns Ordered patch layers and the profile's selected bundle names.
@@ -49,15 +55,20 @@ interface BundleDeclaringManifest {
 export function loadPreElectronPatchLayers(
   appPath: string,
   harnessHome: string,
-): { layers: PatchOptions[][]; bundles: readonly string[] } {
-  const dir = resolveProfileDir(WEB_PROFILE_NAME, harnessHome)
+): { layers: PatchOptions[][]; bundles: readonly string[]; profileLayers: readonly ProfileLayer[] } {
+  const webDir = resolveProfileDir(WEB_PROFILE_NAME, harnessHome)
   const homePatches = loadOptionalPatches(BIN_NAME, join(harnessHome, PROFILE_PATCH_FILENAME)) ?? []
-  if (!existsSync(join(dir, 'package.json'))) {
-    return { layers: [[], homePatches], bundles: [] }
+  if (!existsSync(join(webDir, 'package.json'))) {
+    return { layers: [[], homePatches], bundles: [], profileLayers: [] }
   }
   const installAnchor = resolveDshInstallAnchor(appPath)
-  const profile = loadProfileDirectory(BIN_NAME, dir, installAnchor)
-  const manifest = readProfileManifest(BIN_NAME, dir)
+  const existingHost = resolveHostProfileDir(harnessHome)
+  const hostDir = existsSync(join(existingHost, 'package.json'))
+    ? existingHost
+    : prepareHostProfileProjection(appPath, harnessHome)
+  const profileDir = hostDir ?? webDir
+  const profile = loadProfileDirectory(BIN_NAME, profileDir, installAnchor)
+  const manifest = readProfileManifest(BIN_NAME, webDir)
   return {
     layers: [
       ...profile.layers.map(layer => layer.patches),
@@ -65,6 +76,7 @@ export function loadPreElectronPatchLayers(
       homePatches,
     ],
     bundles: manifest.dsh?.profile?.bundles ?? [],
+    profileLayers: profile.layers,
   }
 }
 
@@ -74,8 +86,8 @@ export function loadPreElectronPatchLayers(
  * @returns Package names the overlay inserts, in file order.
  */
 export function staticOverlayInsertNames(yaml: string): string[] {
-  const parsed: unknown = load(yaml)
   const names: string[] = []
+  const parsed: unknown = load(yaml)
   if (!Array.isArray(parsed)) return names
   for (const item of parsed) {
     if (!isRecord(item) || !Array.isArray(item.insert)) continue
@@ -91,18 +103,19 @@ export function staticOverlayInsertNames(yaml: string): string[] {
  * Missing ids are never emitted; include already warns when a disable targets nothing.
  * @param appPath - Electron application root.
  * @param harnessHome - Active `$DSH_HOME`.
- * @returns Overlay YAML passed to `dsh web --patch`.
+ * @returns Overlay YAML passed to the supervised Host.
  */
 export function generateOwnershipOverlay(appPath: string, harnessHome: string): string {
   const staticYaml = readFileSync(join(appPath, HOST_PATCH_RELATIVE), 'utf8')
   const requiredNames = new Set(staticOverlayInsertNames(staticYaml))
-  const { layers, bundles } = loadPreElectronPatchLayers(appPath, harnessHome)
+  const { layers, bundles, profileLayers } = loadPreElectronPatchLayers(appPath, harnessHome)
   const composed = composeEntries(layers)
   const suppressions = ownershipSuppressions(
     composed,
     requiredNames,
     discoverEcosystemPluginPackages(appPath),
     new Set(bundles),
+    profileLayers,
   )
   if (suppressions.length === 0) return staticYaml
   return `${dump(suppressions, { lineWidth: -1, noRefs: true }).trimEnd()}\n${staticYaml}`
@@ -110,13 +123,14 @@ export function generateOwnershipOverlay(appPath: string, harnessHome: string): 
 
 /**
  * Build `{ id, disabled: true }` patches for pre-Electron rows that Desktop must not leave active.
- * Required runtime names are all suppressed. An enabled ecosystem package keeps the ids its own
- * `dsh.bundle.patch` inserts and suppresses every other same-name row. A disabled ecosystem
+ * Required runtime names are all suppressed. An enabled ecosystem package keeps the ids its
+ * applied bundle layer inserts and suppresses every other same-name row. A disabled ecosystem
  * package suppresses every remaining copy; the overlay never inserts those packages.
  * @param composed - Pre-Electron composed entries.
  * @param requiredNames - Package names the static overlay inserts.
  * @param ecosystem - Desktop-owned ecosystem plugins.
  * @param enabledBundles - Names currently listed in `dsh.profile.bundles`.
+ * @param profileLayers - Bundle layers actually applied for this Host composition.
  * @returns Disable patches targeting existing row ids only.
  */
 export function ownershipSuppressions(
@@ -124,10 +138,16 @@ export function ownershipSuppressions(
   requiredNames: ReadonlySet<string>,
   ecosystem: readonly RuntimePluginManifest[],
   enabledBundles: ReadonlySet<string>,
+  profileLayers: readonly ProfileLayer[] = [],
 ): PatchOptions[] {
+  const layerByName = new Map(profileLayers.map(layer => [layer.packageName, layer]))
   const canonicalByName = new Map<string, ReadonlySet<string>>()
   for (const plugin of ecosystem) {
-    canonicalByName.set(plugin.name, ecosystemCanonicalIds(plugin))
+    const layer = layerByName.get(plugin.name)
+    canonicalByName.set(
+      plugin.name,
+      layer !== undefined ? canonicalIdsFromPatches(layer.patches) : ecosystemCanonicalIds(plugin),
+    )
   }
   const suppressions: PatchOptions[] = []
   const seen = new Set<string>()
@@ -149,6 +169,19 @@ export function ownershipSuppressions(
 }
 
 /**
+ * Row ids a patch list inserts.
+ * @param patches - Bundle or user patches.
+ * @returns Inserted entry ids.
+ */
+export function canonicalIdsFromPatches(patches: readonly PatchOptions[]): Set<string> {
+  const ids = new Set<string>()
+  for (const entry of flattenEntries(composeEntries([[...patches].filter(patch => patch.insert !== undefined)]))) {
+    if (typeof entry.id === 'string') ids.add(entry.id)
+  }
+  return ids
+}
+
+/**
  * Ids the ecosystem package's own bundle patch inserts.
  * @param plugin - Installed ecosystem plugin.
  * @returns Row ids from `dsh.bundle.patch` insert lists.
@@ -160,11 +193,7 @@ export function ecosystemCanonicalIds(plugin: RuntimePluginManifest): Set<string
   const patches = bundlePatchPaths(plugin.rootPath, bundle)
     .flatMap(file => loadOverlayPatches(BIN_NAME, file))
     .filter(patch => patch.insert !== undefined)
-  const ids = new Set<string>()
-  for (const entry of flattenEntries(composeEntries([patches]))) {
-    if (typeof entry.id === 'string') ids.add(entry.id)
-  }
-  return ids
+  return canonicalIdsFromPatches(patches)
 }
 
 /**

@@ -16,7 +16,7 @@ Desktop Capabilities' Host half refreshes the ownership overlay on every profile
 
 The Host half supplies the current overlay through the launcher-provided `profileContext.overlays` property and restores the original property on disposal. HMR reads that property during its serialized profile reload, so a later same-name row is suppressed without changing the upstream CLI or boot packages.
 
-Disable persists in `dsh.profile.bundles`. Uninstall drops the dependency; the next Desktop boot seeds and enables it again. Electron does not hide Uninstall. Every boot restores Desktop-owned links under `profiles/node_modules` and `profiles/web/node_modules`, preserving a physical package directory beside its replacement link.
+Disable persists in `dsh.profile.bundles`. Uninstall drops the dependency; the next Desktop boot seeds and enables it again. Electron does not hide Uninstall. Required runtime plugins keep Desktop-owned links under `profiles/node_modules` and `profiles/web/node_modules`. Ecosystem packages are profile-owned on disk; the supervised Host overrides them only through the process-private projection in [Electron process-local ecosystem runtime ownership](2026-09-29-electron-process-local-ecosystem-runtime-ownership.md).
 
 The Official card and the Capabilities component list are a product roster, not a dump of Loader rows. Desktop Capabilities' detail page carries a version, a Desktop badge, and plain-language component descriptions. Live component phase is recorded in [Desktop Capabilities composition root](2026-09-27-electron-desktop-capabilities-composition-root.md).
 
@@ -38,4 +38,4 @@ The [required portable UI infrastructure](2026-08-24-electron-required-portable-
 
 ## Consequences
 
-Git and Theme Studio are visible to CLI `dsh web` that shares `$DSH_HOME`. Uninstall is temporary until the next Desktop start. Session-time `pnpm` rebuilds of `node_modules` are not repaired until the next boot. Duplicate-id disable-then-insert for required plugins can leave a disabled predecessor beside the overlay row; one active canonical copy remains.
+Git and Theme Studio remain visible to CLI `dsh web` that shares `$DSH_HOME`, and CLI loads the profile-installed copy. Uninstall is temporary until the next Desktop start. Required-plugin session-time `pnpm` rebuilds of shared `node_modules` are not repaired until the next boot. Duplicate-id disable-then-insert for required plugins can leave a disabled predecessor beside the overlay row; one active canonical copy remains. Ecosystem runtime ownership for the Desktop Host is process-local; see [Electron process-local ecosystem runtime ownership](2026-09-29-electron-process-local-ecosystem-runtime-ownership.md).

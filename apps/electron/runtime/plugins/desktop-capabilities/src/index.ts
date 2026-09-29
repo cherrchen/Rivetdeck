@@ -5,6 +5,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ProfileContext } from '@deepseek-ai/dsh-app-boot'
 import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import { load } from 'js-yaml'
+import { prepareHostProfileProjection } from '../../../../src/host-profile.ts'
 import { generateOwnershipOverlay } from '../../../../src/ownership-overlay.ts'
 
 /**
@@ -28,6 +29,8 @@ export function apply(ctx: Context): void {
 }
 
 function readOwnershipPatches(appPath: string, profile: ProfileContext): PatchOptions[] {
+  // Keep the private Host projection aligned with shared web activation state.
+  prepareHostProfileProjection(appPath, profile.home)
   const parsed: unknown = load(generateOwnershipOverlay(appPath, profile.home))
   if (!Array.isArray(parsed)) throw new Error('Desktop ownership overlay must be a patch list')
   return parsed as PatchOptions[]

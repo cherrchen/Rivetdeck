@@ -1,10 +1,12 @@
 /**
  * Seed Desktop-preinstalled ecosystem plugins into the shared web profile.
  * A new dependency is enabled; an existing dependency keeps its bundle selection.
+ * Profile package persistence stays on disk; Desktop runtime ownership uses the
+ * process-private host-profile projection instead of shared profile symlinks.
  */
 
-import { existsSync, mkdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import {
   initProfile,
@@ -13,9 +15,13 @@ import {
   resolveProfileDir,
   type ProfileManifest,
 } from '@deepseek-ai/dsh-app-boot'
-import { discoverEcosystemPluginPackages, ensureRuntimePluginsLinked } from './runtime-plugins.ts'
+import {
+  discoverEcosystemPluginPackages,
+  ensureRuntimePluginsLinked,
+  type RuntimePluginManifest,
+} from './runtime-plugins.ts'
 
-/** Profile name the supervised `dsh web` process loads. */
+/** Profile name the supervised Host and CLI share for persistence. */
 export const WEB_PROFILE_NAME = 'web'
 
 /** Diagnostic prefix shared with the supervised CLI. */
@@ -26,7 +32,7 @@ interface ElectronAppManifest {
 }
 
 /**
- * Restore Desktop-owned package links and seed the web profile under the same
+ * Link required runtime plugins and seed ecosystem dependencies under the same
  * package lock used by CLI and Plugin Manager operations.
  * @param appPath - Electron application root holding `dshElectron.ecosystemPlugins`.
  * @param harnessHome - Active `$DSH_HOME`.
@@ -42,7 +48,8 @@ export async function prepareEcosystemProfile(appPath: string, harnessHome: stri
 }
 
 /**
- * Ensure the web profile lists each Desktop ecosystem plugin as a pinned dependency.
+ * Ensure the web profile lists each Desktop ecosystem plugin as a pinned dependency
+ * and owns a real installed package directory (not a Desktop symlink).
  * A missing profile is initialized from the shipped web template. A name that is
  * not yet a dependency is pinned to the Desktop application version and appended
  * to `dsh.profile.bundles` (enabled). A name already in `dependencies` is left
@@ -72,22 +79,43 @@ async function seedEcosystemProfile(appPath: string, dir: string): Promise<void>
   const dependencies = { ...manifest.dependencies }
   const bundles = [...(manifest.dsh?.profile?.bundles ?? [])]
   let changed = false
+  const seeded: RuntimePluginManifest[] = []
   for (const plugin of discoverEcosystemPluginPackages(appPath)) {
-    if (Object.hasOwn(dependencies, plugin.name)) continue
-    const pin = appManifest.dependencies?.[plugin.name]
-    if (typeof pin !== 'string' || pin.length === 0) {
-      throw new Error(`ecosystem profile: ${plugin.name} has no exact pin in ${join(appPath, 'package.json')}`)
+    if (!Object.hasOwn(dependencies, plugin.name)) {
+      const pin = appManifest.dependencies?.[plugin.name]
+      if (typeof pin !== 'string' || pin.length === 0) {
+        throw new Error(`ecosystem profile: ${plugin.name} has no exact pin in ${join(appPath, 'package.json')}`)
+      }
+      dependencies[plugin.name] = pin
+      if (!bundles.includes(plugin.name)) bundles.push(plugin.name)
+      changed = true
     }
-    dependencies[plugin.name] = pin
-    if (!bundles.includes(plugin.name)) bundles.push(plugin.name)
-    changed = true
+    seeded.push(plugin)
   }
-  if (!changed) return
-  await writeFileAtomic(
-    manifestPath,
-    JSON.stringify(withProfileDependencies(manifest, dependencies, bundles), undefined, 2) + '\n',
-    { mode: 0o600 },
-  )
+  if (changed) {
+    await writeFileAtomic(
+      manifestPath,
+      JSON.stringify(withProfileDependencies(manifest, dependencies, bundles), undefined, 2) + '\n',
+      { mode: 0o600 },
+    )
+  }
+  for (const plugin of seeded) {
+    ensureProfileOwnedPackage(dir, plugin)
+  }
+}
+
+/**
+ * Ensure the shared profile holds a real package directory for one ecosystem plugin.
+ * Copies the Desktop bundled artifact when the profile has no installed package yet.
+ * Never replaces an existing profile-owned install with a Desktop symlink.
+ * @param profileDir - Shared web profile directory.
+ * @param plugin - Desktop-bundled ecosystem plugin.
+ */
+export function ensureProfileOwnedPackage(profileDir: string, plugin: RuntimePluginManifest): void {
+  const dest = join(profileDir, 'node_modules', ...plugin.name.split('/'))
+  if (existsSync(join(dest, 'package.json'))) return
+  mkdirSync(dirname(dest), { recursive: true })
+  cpSync(realpathSync(plugin.rootPath), dest, { recursive: true })
 }
 
 /**

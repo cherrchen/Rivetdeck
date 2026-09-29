@@ -30,17 +30,17 @@ Desktop-required 不等于每个包一张 Official 卡。四件事分开：compo
 
 Plugins 页仅由 composition package 为 Desktop Capabilities 注册 Official `plugins.item` 卡片。Desktop Capabilities 详情页显示版本、桌面能力标签、包名和一句说明，再以组合包「包含的组件」同样的标题与计数列出产品 Components（网络访问、系统文件夹窗口、选择工作文件夹、应用图标和名称、网络设置）。Capabilities 每一行显示这句说明、短 id 和包名：内部 feature 为 `@dsh-electron/dsh-electron-desktop-capabilities/<feature>`，独立 Loader adapter 用各自的 npm 名。Loader 行的运行状态来自 Host `pluginInventory/list`；directory-picker、brand、network-settings 来自 Client feature fiber。Capabilities 条目不能 Enable、Disable 或 Uninstall。
 
-**Desktop-preinstalled ecosystem。** `dshElectron.ecosystemPlugins` 中的包（Git 与 Theme Studio）写入 web profile 的 pinned `dependencies`，并在首次 seed 时写入 `dsh.profile.bundles`。它们出现在 Installed/Bundle 卡片中。Enable 与 Disable 持久保存在 `dsh.profile.bundles`。Uninstall 会去掉 dependency；下次 Desktop 启动会再次 seed 并默认启用。同一 `$DSH_HOME` 下 CLI `dsh web` 也会看到这些 portable bundle。
+**Desktop-preinstalled ecosystem。** `dshElectron.ecosystemPlugins` 中的包（Git 与 Theme Studio）写入 web profile 的 pinned `dependencies`，并在首次 seed 时写入 `dsh.profile.bundles`，同时在 `profiles/web/node_modules` 下安装 profile 拥有的实体包。它们出现在 Installed/Bundle 卡片中。Enable 与 Disable 持久保存在 `dsh.profile.bundles`。Uninstall 会去掉 dependency；下次 Desktop 启动会再次 seed 并默认启用。同一 `$DSH_HOME` 下 CLI `dsh web` 加载 profile 安装副本。受监督 Desktop Host 通过 `$DSH_HOME/electron/host-profile` 下的进程私有 host-profile 投影加载 Electron 随包副本，不为 ecosystem ownership 改写共享 profile package。
 
 ## 启动组合
 
-启动顺序为：迁移旧版插件状态；发现并校验随包产物；恢复 Desktop-owned package 链接；seed ecosystem 依赖（新 dependency 默认启用，已有 dependency 保留 bundle 选择）；写出按 ownership 去重的 Host overlay；以 `dsh web --patch electron-host.patch.yml` 启动。
+启动顺序为：迁移旧版插件状态；发现并校验随包产物；将 required runtime 插件链接进共享 profile resolution；seed ecosystem 依赖（新 dependency 默认启用并安装为 profile 拥有的实体包，已有 dependency 保留 bundle 选择）；物化进程私有 host-profile 投影；写出按 ownership 去重的 Host overlay；以该 overlay 启动 Desktop Host 入口。
 
-Desktop 在修复链接和 seed 期间持有 web profile 的 `package.json` 写入锁，与 `dsh plugin` 和 Plugin Manager 的 package 操作共用。发生变更的 manifest 以原子替换方式保存。
+Desktop 在修复 required 插件链接和 seed 期间持有 web profile 的 `package.json` 写入锁，与 `dsh plugin` 和 Plugin Manager 的 package 操作共用。发生变更的 manifest 以原子替换方式保存。
 
-每次 Electron 启动都会把 Desktop-owned package 链接恢复到 `$DSH_HOME/profiles/node_modules` 与 `$DSH_HOME/profiles/web/node_modules` 下的应用内副本。已有实体包目录会以 `.desktop-replaced-<id>` 后缀保存在新链接旁边。会话内 Plugins 页执行 `pnpm add/remove/install` 重建 `node_modules` 后，要到下次启动才会再次修复。
+每次 Electron 启动仅为 **required runtime 插件** 恢复 `$DSH_HOME/profiles/node_modules` 与 `$DSH_HOME/profiles/web/node_modules` 下的 Desktop-owned 链接。ecosystem 包不再被 symlink 进这些共享树。`$DSH_HOME/electron/host-profile` 下的 Host resolution 投影转发普通 web 包，并将 ecosystem 名称指向 Electron 随包目录，且仅作用于该 Host 进程。Desktop 退出后共享 web profile 保持不变，无需 restore。
 
-Desktop Capabilities 的 Host half 在 profile HMR 每次重新组合时都会刷新 ownership overlay。对每个 required 包，overlay 之前的每一行都被禁用，再由静态 overlay 插入 Desktop 行。对已启用的 ecosystem 包，保留其 bundle 行，禁用额外同名行。对已禁用的 ecosystem 包，额外同名行仍会被禁用。overlay 不插入 Git 或 Theme Studio。找不到的 id 走 include 已有警告，Main 不失败。
+Desktop Capabilities 的 Host half 在 profile HMR 每次重新组合时都会刷新 ownership overlay。对每个 required 包，overlay 之前的每一行都被禁用，再由静态 overlay 插入 Desktop 行。对已启用的 ecosystem 包，保留已应用 bundle 层自身的行，禁用额外同名行。对已禁用的 ecosystem 包，额外同名行仍会被禁用。overlay 不插入 Git 或 Theme Studio。找不到的 id 走 include 已有警告，Main 不失败。
 
 Theme Studio 作为 `@dsh-electron/dsh-theme-studio@0.1.2` 从 npm 安装，并声明在 `dshElectron.ecosystemPlugins` 中；其已发布的 peer 声明包含 `0.1.7-rc.2`。缺失随包产物会使启动报错。
 

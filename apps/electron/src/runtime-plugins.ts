@@ -203,8 +203,8 @@ export function profileModuleLinkPath(harnessHome: string, packageName: string):
 
 /**
  * Resolve the web profile node_modules link path for one npm package name.
- * Desktop boot restores this link so a same-named CLI install cannot shadow
- * the application copy.
+ * Required runtime plugins keep Desktop-owned links here so a same-named
+ * profile install cannot shadow application infrastructure.
  * @param harnessHome - `$DSH_HOME` root used by the supervised Host.
  * @param packageName - Scoped or unscoped npm package name.
  * @returns Absolute symlink path under profiles/web/node_modules.
@@ -214,9 +214,10 @@ export function webProfileModuleLinkPath(harnessHome: string, packageName: strin
 }
 
 /**
- * Validate and link bundled Desktop plugins into profile resolution before Host boot.
- * Every Electron boot restores Desktop-owned package links under both
- * `$DSH_HOME/profiles/node_modules` and `$DSH_HOME/profiles/web/node_modules`.
+ * Validate and link required Desktop runtime plugins into shared profile resolution.
+ * Only `runtime/plugins/**` and `dshElectron.runtimePlugins` are linked.
+ * Ecosystem plugins stay profile-owned on disk; the supervised Host overrides
+ * them through the process-private host-profile projection.
  * @param appPath - Electron application root.
  * @param harnessHome - Active Harness home.
  */
@@ -224,7 +225,6 @@ export function ensureRuntimePluginsLinked(appPath: string, harnessHome: string)
   const plugins = [
     ...discoverRuntimePluginDirectories(appPath),
     ...discoverRuntimePluginPackages(appPath),
-    ...discoverEcosystemPluginPackages(appPath),
   ]
   if (plugins.length === 0) throw new Error(`runtime plugins: no bundled plugins under ${runtimePluginsRoot(appPath)}`)
   for (const plugin of plugins) validateRuntimePlugin(plugin)
