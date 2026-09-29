@@ -488,13 +488,18 @@ if (!primaryInstance) {
       pythonUserBinDirectory: shim.pythonUserBinDirectory,
     }
     await migrateLegacyPluginState(harnessHome)
-    await prepareEcosystemProfile(appPath, harnessHome)
-    const overlay = await prepareHostRuntimeOverlay(appPath, userDataPath, harnessHome)
+    const pnpmBin = resolveBundledPnpmBin(appPath)
     const packageManager = preparePluginPackageManager(
       harnessHome,
       toolchains.node.executable,
-      resolveBundledPnpmBin(appPath),
+      pnpmBin,
     )
+    await prepareEcosystemProfile(appPath, harnessHome, {
+      command: toolchains.node.executable,
+      args: [pnpmBin],
+      env: { PATH: packageManager.envPath },
+    })
+    const overlay = await prepareHostRuntimeOverlay(appPath, userDataPath, harnessHome)
     installDesktopIpc(
       transport,
       desktop,

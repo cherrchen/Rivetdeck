@@ -14,7 +14,7 @@ Desktop 每次启动都将 `dshElectron.ecosystemPlugins` 链接进共享的 `$D
 
 拆分三条 ownership 轴：
 
-- **Persistence** 仍属于共享 web profile（`package.json`、lock、`node_modules`）。Seed 写入 pin 并安装 profile 拥有的实体副本；Desktop 不得用 symlink 替换该副本。
+- **Persistence** 仍属于共享 web profile（`package.json`、lock、`node_modules`）。共享的 `dsh plugin` 操作首次预装缺失包并修复旧版 Desktop 链接；manifest、lockfile 和包目录均由该操作写入。用户移除后保持移除状态。
 - **Activation** 仍属于 `dsh.profile.bundles`。Disable 对 CLI 与 Desktop 同时生效；Desktop 不得重新挂载已禁用的 ecosystem 插件。
 - **Runtime implementation** 是进程本地的。CLI 解析 profile 安装副本。受监督 Desktop Host 通过 `apps/electron/src/host.ts` 启动，构建 `$DSH_HOME/electron/host-profile`（位于 `profiles/` 之外），转发普通 web 包，并将 ecosystem 名称指向 Electron 随包目录。`ProfileContext.dir` 仍指向共享 web profile，供 Plugin Manager 与已安装版本列表使用。
 
@@ -22,7 +22,7 @@ Desktop 每次启动都将 `dshElectron.ecosystemPlugins` 链接进共享的 `$D
 
 未来上游 app-boot 的 `RuntimePackageOverride` 可替换该私有投影；在此之前 Desktop 将投影保留在 `$DSH_HOME/electron/host-profile`。
 
-本决策部分取代 [Electron profile-managed ecosystem and ownership overlay](2026-09-27-electron-profile-managed-ecosystem-and-ownership-overlay.zh.md) 中关于文件系统 takeover 的表述。该笔记中的 profile seed、Enable/Disable 与 overlay 去重仍然有效。
+本决策更新 [Electron profile-managed ecosystem and ownership overlay](2026-09-27-electron-profile-managed-ecosystem-and-ownership-overlay.zh.md) 中的 profile 预装和文件系统 ownership。该笔记中的 Enable/Disable 与 overlay 去重仍然有效。
 
 ## Alternatives considered
 

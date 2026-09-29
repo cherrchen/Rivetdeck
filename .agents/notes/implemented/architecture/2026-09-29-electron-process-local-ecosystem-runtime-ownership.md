@@ -14,7 +14,7 @@ Upstream `packages/boot/app-boot` cannot gain a Desktop-only override in this do
 
 Split three ownership axes:
 
-- **Persistence** stays on the shared web profile (`package.json`, lock, `node_modules`). Seed writes pins and installs a real profile-owned copy; Desktop never replaces that copy with a symlink.
+- **Persistence** stays on the shared web profile (`package.json`, lock, `node_modules`). The shared `dsh plugin` operation preinstalls missing packages once and repairs legacy Desktop links; it owns manifest, lockfile, and package writes. User removal persists.
 - **Activation** stays on `dsh.profile.bundles`. Disable removes the bundle for both CLI and Desktop; Desktop must not remount a disabled ecosystem plugin.
 - **Runtime implementation** is process-local. CLI resolves the profile-installed copy. The supervised Desktop Host boots through `apps/electron/src/host.ts`, builds `$DSH_HOME/electron/host-profile` (outside `profiles/`), forwards ordinary web packages, and points ecosystem names at Electron-bundled directories. `ProfileContext.dir` remains the shared web profile for Plugin Manager and installed-version listing.
 
@@ -22,7 +22,7 @@ Split three ownership axes:
 
 A future upstream `RuntimePackageOverride` in app-boot can replace the private projection; until then Desktop keeps the projection under `$DSH_HOME/electron/host-profile`.
 
-This partially supersedes the filesystem-takeover sentences in [Electron profile-managed ecosystem and ownership overlay](2026-09-27-electron-profile-managed-ecosystem-and-ownership-overlay.md). Profile seeding, Enable/Disable, and overlay dedupe from that note remain.
+This updates the profile seeding and filesystem ownership described in [Electron profile-managed ecosystem and ownership overlay](2026-09-27-electron-profile-managed-ecosystem-and-ownership-overlay.md). Enable/Disable and overlay dedupe from that note remain.
 
 ## Alternatives considered
 

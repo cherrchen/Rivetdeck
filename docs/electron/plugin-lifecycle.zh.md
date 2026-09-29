@@ -30,13 +30,13 @@ Desktop-required 不等于每个包一张 Official 卡。四件事分开：compo
 
 Plugins 页仅由 composition package 为 Desktop Capabilities 注册 Official `plugins.item` 卡片。Desktop Capabilities 详情页显示版本、桌面能力标签、包名和一句说明，再以组合包「包含的组件」同样的标题与计数列出产品 Components（网络访问、系统文件夹窗口、选择工作文件夹、应用图标和名称、网络设置）。Capabilities 每一行显示这句说明、短 id 和包名：内部 feature 为 `@dsh-electron/dsh-electron-desktop-capabilities/<feature>`，独立 Loader adapter 用各自的 npm 名。Loader 行的运行状态来自 Host `pluginInventory/list`；directory-picker、brand、network-settings 来自 Client feature fiber。Capabilities 条目不能 Enable、Disable 或 Uninstall。
 
-**Desktop-preinstalled ecosystem。** `dshElectron.ecosystemPlugins` 中的包（Git 与 Theme Studio）写入 web profile 的 pinned `dependencies`，并在首次 seed 时写入 `dsh.profile.bundles`，同时在 `profiles/web/node_modules` 下安装 profile 拥有的实体包。它们出现在 Installed/Bundle 卡片中。Enable 与 Disable 持久保存在 `dsh.profile.bundles`。Uninstall 会去掉 dependency；下次 Desktop 启动会再次 seed 并默认启用。同一 `$DSH_HOME` 下 CLI `dsh web` 加载 profile 安装副本。受监督 Desktop Host 通过 `$DSH_HOME/electron/host-profile` 下的进程私有 host-profile 投影加载 Electron 随包副本，不为 ecosystem ownership 改写共享 profile package。
+**Desktop-preinstalled ecosystem。** Desktop 首次启动时，共享的 `dsh plugin` 包操作按随包精确版本安装 `dshElectron.ecosystemPlugins` 中缺失的包（Git 与 Theme Studio）。该操作负责 web profile 的 manifest、lockfile 与已安装包；新 bundle 默认启用。已有 dependency 的版本和 Disable 选择保持不变。预装完成记录在 profile 外，因此用户之后 Uninstall 的结果会保留。同一包操作还会修复旧版 Desktop 留下的 ecosystem 链接。CLI `dsh web` 加载 profile 安装副本；受监督 Desktop Host 通过 `$DSH_HOME/electron/host-profile` 加载 Electron 随包副本。Installed 卡片显示 profile 安装版本。
 
 ## 启动组合
 
-启动顺序为：迁移旧版插件状态；发现并校验随包产物；将 required runtime 插件链接进共享 profile resolution；seed ecosystem 依赖（新 dependency 默认启用并安装为 profile 拥有的实体包，已有 dependency 保留 bundle 选择）；物化进程私有 host-profile 投影；写出按 ownership 去重的 Host overlay；以该 overlay 启动 Desktop Host 入口。
+启动顺序为：迁移旧版插件状态；发现并校验随包产物；将 required runtime 插件链接进共享 profile resolution；通过 `dsh plugin` 执行首次 ecosystem 预装和旧链接修复；物化 Host profile 投影；写出按 ownership 去重的 Host overlay；以该 overlay 启动 Desktop Host 入口。包操作失败时，Desktop 启动会显示诊断并停止。
 
-Desktop 在修复 required 插件链接和 seed 期间持有 web profile 的 `package.json` 写入锁，与 `dsh plugin` 和 Plugin Manager 的 package 操作共用。发生变更的 manifest 以原子替换方式保存。
+共享包操作持有 web profile 的 `package.json` 写入锁，并更新其 manifest 与 lockfile。Desktop 的预装标记位于 `$DSH_HOME/electron` 下。
 
 每次 Electron 启动仅为 **required runtime 插件** 恢复 `$DSH_HOME/profiles/node_modules` 与 `$DSH_HOME/profiles/web/node_modules` 下的 Desktop-owned 链接。ecosystem 包不再被 symlink 进这些共享树。`$DSH_HOME/electron/host-profile` 下的 Host resolution 投影转发普通 web 包，并将 ecosystem 名称指向 Electron 随包目录，且仅作用于该 Host 进程。Desktop 退出后共享 web profile 保持不变，无需 restore。
 

@@ -1,6 +1,6 @@
-import { existsSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { load } from 'js-yaml'
@@ -8,7 +8,9 @@ import { Context } from '@deepseek-ai/cordis'
 import {
   composeEntries,
   createRuntimeResolution,
+  initProfile,
   loadProfileDirectory,
+  PROFILE_TEMPLATES,
   PROFILE_PATCH_FILENAME,
   readProfilePatches,
   readProfileManifest,
@@ -18,9 +20,9 @@ import {
 } from '@deepseek-ai/dsh-app-boot'
 import type { EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
-import { prepareEcosystemProfile, WEB_PROFILE_NAME } from '../src/ecosystem-profile.ts'
+import { WEB_PROFILE_NAME } from '../src/ecosystem-profile.ts'
 import { apply as applyCapabilitiesHost } from '../runtime/plugins/desktop-capabilities/src/index.ts'
-import { prepareHostProfileProjection } from '../src/host-profile.ts'
+import { materializeHostNodeModules, prepareHostProfileProjection } from '../src/host-profile.ts'
 import { resolveDshInstallAnchor } from '../src/runtime.ts'
 import {
   ecosystemCanonicalIds,
@@ -34,6 +36,7 @@ import { prepareHostRuntimeOverlay } from '../src/runtime-overlay.ts'
 import {
   discoverEcosystemPluginPackages,
   discoverRuntimePluginDirectories,
+  ensureRuntimePluginsLinked,
   profileModuleLinkPath,
   webProfileModuleLinkPath,
 } from '../src/runtime-plugins.ts'
@@ -47,6 +50,25 @@ const OVERLAY_INSERT_NAMES = [
 const appPath = fileURLToPath(new URL('..', import.meta.url))
 const GIT = '@dsh-electron/dsh-plugin-git'
 const THEME = '@dsh-electron/dsh-theme-studio'
+
+it('refreshes Host links without deleting their target directories', () => {
+  const home = mkdtempSync(join(tmpdir(), 'dsh-electron-host-links-'))
+  try {
+    const webDir = join(home, 'profiles', 'web')
+    const hostDir = join(home, 'electron', 'host-profile')
+    const target = join(home, 'external-package')
+    mkdirSync(join(hostDir, 'node_modules'), { recursive: true })
+    mkdirSync(join(hostDir, 'node_modules', '@external'), { recursive: true })
+    mkdirSync(target, { recursive: true })
+    writeFileSync(join(target, 'marker.txt'), 'keep')
+    symlinkSync(target, join(hostDir, 'node_modules', 'old-link'), 'junction')
+    symlinkSync(target, join(hostDir, 'node_modules', '@external', 'old-link'), 'junction')
+    materializeHostNodeModules(webDir, hostDir, [])
+    expect(readFileSync(join(target, 'marker.txt'), 'utf8')).toBe('keep')
+    expect(existsSync(join(hostDir, 'node_modules', 'old-link'))).toBe(false)
+    expect(existsSync(join(hostDir, 'node_modules', '@external'))).toBe(false)
+  } finally { rmSync(home, { recursive: true, force: true }) }
+})
 
 describe('Desktop overlay insert names', () => {
   it('inserts the three required Loader packages and omits ecosystem bundles', () => {
@@ -233,7 +255,7 @@ describe('concurrent CLI and Desktop resolution ownership', () => {
       const electronResolution = await createRuntimeResolution({ installAnchor, profile: electronProfile, home })
       const plugin = discoverEcosystemPluginPackages(appPath).find(item => item.name === GIT)
       expect(plugin).toBeDefined()
-      expect(JSON.parse(readFileSync(join(profileGit, 'package.json'), 'utf8')).version).toBe('0.3.1')
+      expect(readProfileManifest('dsh', profileGit).version).toBe('0.3.1')
       expect(lstatSync(profileGit).isSymbolicLink()).toBe(false)
       expect(readlinkSync(join(hostDir!, 'node_modules', ...GIT.split('/')))).toBe(plugin!.rootPath)
       expect(electronProfile.layers.find(layer => layer.packageName === GIT)?.packageDir).toBe(plugin!.rootPath)
@@ -265,7 +287,25 @@ describe('concurrent CLI and Desktop resolution ownership', () => {
 
 async function seededHome(): Promise<string> {
   const home = mkdtempSync(join(tmpdir(), 'dsh-electron-overlay-'))
-  await prepareEcosystemProfile(appPath, home)
+  const dir = resolveProfileDir(WEB_PROFILE_NAME, home)
+  const template = PROFILE_TEMPLATES[WEB_PROFILE_NAME]
+  if (template === undefined) throw new Error('web template missing')
+  initProfile(dir, template.bundles)
+  const plugins = discoverEcosystemPluginPackages(appPath)
+  const manifest = readProfileManifest('dsh', dir)
+  writeProfileManifest(dir, {
+    ...manifest,
+    dependencies: { ...manifest.dependencies, ...Object.fromEntries(plugins.map(plugin => [plugin.name, plugin.version])) },
+    dsh: { ...manifest.dsh, profile: { ...manifest.dsh?.profile, bundles: [
+      ...(manifest.dsh?.profile?.bundles ?? []), ...plugins.map(plugin => plugin.name),
+    ] } },
+  })
+  for (const plugin of plugins) {
+    const dest = join(dir, 'node_modules', ...plugin.name.split('/'))
+    mkdirSync(dirname(dest), { recursive: true })
+    cpSync(realpathSync(plugin.rootPath), dest, { recursive: true })
+  }
+  ensureRuntimePluginsLinked(appPath, home)
   return home
 }
 
@@ -281,5 +321,5 @@ function named(rows: readonly EntryOptions[], name: string): EntryOptions[] {
 }
 
 function active(rows: readonly EntryOptions[]): string[] {
-  return rows.filter(row => row.disabled !== true).map(row => String(row.id))
+  return rows.flatMap(row => row.disabled !== true && typeof row.id === 'string' ? [row.id] : [])
 }

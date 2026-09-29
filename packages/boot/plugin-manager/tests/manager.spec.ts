@@ -1,5 +1,5 @@
 /** Persistent manager behavior through a real profile Include and Loader. */
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { realpath } from 'node:fs/promises'
 import { once } from 'node:events'
 import { createServer } from 'node:http'
@@ -300,6 +300,26 @@ it('lists bundle versions and current-profile plugin targets', async () => {
       rows: [{ rowId: 'managed', moduleName: pathToFileURL(join(dir, 'node_modules', 'extra', 'plugin.mjs')).href, entryId: 'include:managed' }], overrides: [],
     },
   ])
+})
+
+it('reports the managed profile version when its runtime installation carries another copy', async () => {
+  const { manager } = await fixture('startup', false, undefined, {}, undefined, (dir) => {
+    const profileCopy = join(dir, 'node_modules', 'extra')
+    const runtimeCopy = join(dir, '..', '..', 'node_modules', 'extra')
+    mkdirSync(join(runtimeCopy, '..'), { recursive: true })
+    cpSync(profileCopy, runtimeCopy, { recursive: true })
+    const profileManifest = JSON.parse(readFileSync(join(profileCopy, 'package.json'), 'utf8')) as { version: string; description?: string }
+    profileManifest.version = '0.3.1'
+    profileManifest.description = 'Profile package'
+    writeFileSync(join(profileCopy, 'package.json'), JSON.stringify(profileManifest))
+    const runtimeManifest = JSON.parse(readFileSync(join(runtimeCopy, 'package.json'), 'utf8')) as { version: string; description?: string }
+    runtimeManifest.version = '0.2.3'
+    runtimeManifest.description = 'Runtime package'
+    writeFileSync(join(runtimeCopy, 'package.json'), JSON.stringify(runtimeManifest))
+  })
+  expect((await manager.listBundles()).find(bundle => bundle.name === 'extra')).toMatchObject({
+    version: '0.3.1', description: 'Profile package',
+  })
 })
 
 it('describes a bundle by its manifest and patch: one-liner, rows without a live entry, and the built-in rows it changes', async () => {

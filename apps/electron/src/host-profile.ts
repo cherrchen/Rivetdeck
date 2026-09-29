@@ -11,7 +11,7 @@ import {
   mkdirSync,
   readdirSync,
   readlinkSync,
-  rmSync,
+  rmdirSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs'
@@ -95,7 +95,7 @@ function syncProfileFile(source: string, destination: string): void {
  */
 function syncOptionalProfileFile(source: string, destination: string): void {
   if (!existsSync(source)) {
-    if (existsSync(destination)) rmSync(destination, { force: true })
+    removeHostLink(destination)
     return
   }
   mkdirSync(dirname(destination), { recursive: true })
@@ -134,8 +134,19 @@ export function materializeHostNodeModules(
 function clearHostModuleTree(hostModules: string): void {
   if (!existsSync(hostModules)) return
   for (const entry of readdirSync(hostModules, { withFileTypes: true })) {
-    rmSync(join(hostModules, entry.name), { recursive: true, force: true })
+    removeHostEntry(join(hostModules, entry.name))
   }
+}
+
+/** Remove an owned projection entry without traversing symlinks inside scope directories. */
+function removeHostEntry(path: string): void {
+  const entry = lstatSync(path)
+  if (entry.isSymbolicLink() || !entry.isDirectory()) {
+    unlinkSync(path)
+    return
+  }
+  for (const name of readdirSync(path)) removeHostEntry(join(path, name))
+  rmdirSync(path)
 }
 
 /**
@@ -185,8 +196,8 @@ export function symlinkPointsTo(link: string, expected: string): boolean {
 }
 
 /**
- * Remove a private Host module link when present.
- * @param link - Symlink path under the private projection.
+ * Remove a private Host file or link when present.
+ * @param link - File or symlink path under the private projection.
  */
 export function removeHostLink(link: string): void {
   try {
