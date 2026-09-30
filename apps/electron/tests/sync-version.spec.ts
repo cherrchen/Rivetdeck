@@ -2,11 +2,25 @@ import { describe, expect, it } from 'vitest'
 import { nextBetaTag } from '../scripts/next-beta-tag-lib.mjs'
 import {
   DESKTOP_ENTRY_WORKSPACE_DEPENDENCIES,
+  collectWorkspacePeers,
   assertResolvedWorkspaceDependencies,
   synchronizeDependencies,
 } from '../scripts/sync-version-dependencies.mjs'
 
 describe('Electron dependency synchronization', () => {
+  it('excludes experimental peers while retaining stable peers of optional bundles', () => {
+    const experimental = '@deepseek-ai/dsh-experimental-bundle'
+    const manifests = new Map([
+      ['@deepseek-ai/dsh', { dependencies: { '@deepseek-ai/dsh-stable': '*', [experimental]: '*' } }],
+      ['@deepseek-ai/dsh-stable', { peerDependencies: { '@deepseek-ai/dsh-shared': '*', [experimental]: '*' } }],
+      [experimental, { peerDependencies: { '@deepseek-ai/dsh-experimental-service': '*', '@deepseek-ai/dsh-opt-in-only': '*' } }],
+      ['@deepseek-ai/dsh-shared', {}],
+      ['@deepseek-ai/dsh-experimental-service', {}],
+      ['@deepseek-ai/dsh-opt-in-only', {}],
+    ])
+    expect(collectWorkspacePeers(manifests)).toEqual(['@deepseek-ai/dsh-opt-in-only', '@deepseek-ai/dsh-shared'])
+  })
+
   it('replaces workspace dependencies and retains desktop registry dependencies', () => {
     const dependencies = synchronizeDependencies(
       {
@@ -64,6 +78,7 @@ describe('Electron dependency synchronization', () => {
     expect(dependencies).toEqual({
       '@deepseek-ai/dsh': 'workspace:^',
       '@deepseek-ai/dsh-client-web': 'workspace:^',
+      '@deepseek-ai/dsh-plugin-manager': 'workspace:^',
       '@deepseek-ai/dsh-subprocess-local': 'workspace:^',
       'electron-updater': '^6.8.9',
     })
@@ -83,6 +98,7 @@ describe('Electron dependency synchronization', () => {
     expect(dependencies).toEqual({
       '@deepseek-ai/dsh': 'workspace:^',
       '@deepseek-ai/dsh-client-web': 'workspace:^',
+      '@deepseek-ai/dsh-plugin-manager': 'workspace:^',
       '@deepseek-ai/dsh-subprocess-local': 'workspace:^',
       '@dsh-electron/dsh-plugin-git': '0.2.4',
       'electron-updater': '^6.8.9',

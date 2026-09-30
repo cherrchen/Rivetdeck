@@ -69,7 +69,7 @@ function parseJsonValue(source: string, start: number): unknown {
     throw new Error('desktop bootstrap: could not locate end of globalThis["__DSH_BOOT__"] JSON')
   }
   try {
-    return JSON.parse(slice.slice(0, end).trim().replace(/;?\s*$/, '')) as unknown
+    return JSON.parse(slice.slice(0, end).trim().replace(/;?\s*$/, ''))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     throw new Error(`desktop bootstrap: invalid globalThis["__DSH_BOOT__"] JSON (${message})`)

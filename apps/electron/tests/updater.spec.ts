@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => {
     autoDownload: false,
     autoInstallOnAppQuit: true,
     checkForUpdates: vi.fn(),
-    logger: undefined as unknown,
+    logger: undefined,
     on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       const eventHandlers = handlers.get(event) ?? []
       eventHandlers.push(handler)

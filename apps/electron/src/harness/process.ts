@@ -2,6 +2,10 @@
 
 import type { ChildProcess } from 'node:child_process'
 
+type HarnessChild = Pick<ChildProcess, 'exitCode' | 'signalCode' | 'kill'> & {
+  once(event: 'exit', listener: () => void): void
+}
+
 /** Grace period before a supervised Harness process receives SIGKILL. */
 export const HARNESS_STOP_TIMEOUT_MS = 5_000
 
@@ -11,7 +15,7 @@ export const HARNESS_STOP_TIMEOUT_MS = 5_000
  * @param gracefulTimeoutMs - Time allowed after SIGTERM before SIGKILL.
  */
 export async function stopHarness(
-  child: ChildProcess,
+  child: HarnessChild,
   gracefulTimeoutMs = HARNESS_STOP_TIMEOUT_MS,
 ): Promise<void> {
   if (hasExited(child)) return
@@ -25,11 +29,11 @@ export async function stopHarness(
   await exited
 }
 
-function hasExited(child: ChildProcess): boolean {
+function hasExited(child: HarnessChild): boolean {
   return child.exitCode !== null || child.signalCode !== null
 }
 
-function signalChild(child: ChildProcess, signal: NodeJS.Signals): void {
+function signalChild(child: HarnessChild, signal: NodeJS.Signals): void {
   if (child.kill(signal) || hasExited(child)) return
   throw new Error(`Harness process did not accept ${signal}.`)
 }

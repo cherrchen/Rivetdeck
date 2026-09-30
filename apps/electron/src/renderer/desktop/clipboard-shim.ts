@@ -24,10 +24,7 @@ export function installDesktopClipboardShim(): void {
     })
   } catch {
     // Some Chromium builds expose a non-configurable clipboard; fall back.
-    const target = navigator.clipboard as unknown as {
-      readText: () => Promise<string>
-      writeText: (text: string) => Promise<void>
-    }
+    const target = navigator.clipboard
     target.readText = desktopClipboard.readText
     target.writeText = desktopClipboard.writeText
   }

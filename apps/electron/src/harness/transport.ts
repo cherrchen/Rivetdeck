@@ -19,7 +19,7 @@ export interface HarnessTransport {
   /** Unary Host request. */
   request(init: HostHttpRequest): Promise<HostHttpResponse>
   /** Open a Host event stream onto a transferred MessagePort. */
-  openStream(path: '/api/remote.mux', port: MessagePortMain): void
+  openStream(path: '/api/remote.mux', port: Pick<MessagePortMain, 'postMessage' | 'start' | 'close' | 'on'>): void
   /** Absolute Harness origin when the HTTP carrier is active. */
   requireOrigin(): string
 }
@@ -59,7 +59,7 @@ export class HttpHarnessTransport implements HarnessTransport {
     return this.proxy.request(init)
   }
 
-  openStream(path: '/api/remote.mux', port: MessagePortMain): void {
+  openStream(path: '/api/remote.mux', port: Pick<MessagePortMain, 'postMessage' | 'start' | 'close' | 'on'>): void {
     this.proxy.openStream(path, port)
   }
 

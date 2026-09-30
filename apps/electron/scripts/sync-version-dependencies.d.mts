@@ -17,3 +17,15 @@ export function assertResolvedWorkspaceDependencies(
   dependencies: Readonly<Record<string, string>>,
   workspaceNames: ReadonlySet<string>,
 ): void
+
+/**
+ * Collect non-experimental workspace peers from the complete CLI production graph.
+ * @param manifests - Workspace manifests indexed by package name.
+ * @returns Sorted non-experimental peer package names.
+ */
+export function collectWorkspacePeers(
+  manifests: ReadonlyMap<string, {
+    dependencies?: Record<string, string>
+    peerDependencies?: Record<string, string>
+  }>,
+): string[]

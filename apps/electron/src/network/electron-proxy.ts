@@ -2,19 +2,21 @@ import type { App, ProxyConfig, Session } from 'electron'
 import type { DesktopNetworkMode } from './domain.ts'
 import type { DesktopGatewayEndpoint } from './environment.ts'
 
+type ProxySession = Pick<Session, 'setProxy' | 'closeAllConnections'>
+
 /** Applies one Desktop route to Chromium's app and every registered Session. */
 export class ElectronProxyApplier {
-  private readonly sessions = new Set<Session>()
-  private readonly updaterSessions = new Set<Session>()
+  private readonly sessions = new Set<ProxySession>()
+  private readonly updaterSessions = new Set<ProxySession>()
   private config: ProxyConfig | undefined
   private updaterConfig: ProxyConfig | undefined
 
-  constructor(private readonly application: Pick<App, 'setProxy'>, defaultSession: Session) {
+  constructor(private readonly application: Pick<App, 'setProxy'>, defaultSession: ProxySession) {
     this.sessions.add(defaultSession)
   }
 
   /** Register a Session before its first request. @returns a disposer for its ownership. */
-  async register(session: Session, purpose: 'general' | 'updater' = 'general'): Promise<() => void> {
+  async register(session: ProxySession, purpose: 'general' | 'updater' = 'general'): Promise<() => void> {
     const owned = purpose === 'updater' ? this.updaterSessions : this.sessions
     owned.add(session)
     try {

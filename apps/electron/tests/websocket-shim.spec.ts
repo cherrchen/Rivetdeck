@@ -12,6 +12,7 @@ describe('desktop WebSocket stand-in', () => {
   const originalWebSocket = globalThis.WebSocket
 
   afterEach(() => {
+    vi.unstubAllGlobals()
     globalThis.WebSocket = originalWebSocket
     delete globalThis.window.deepseekDesktop
   })
@@ -27,8 +28,8 @@ describe('desktop WebSocket stand-in', () => {
           return { close, send }
         },
       },
-    } as unknown as DeepseekDesktopBridge
-    globalThis.window.deepseekDesktop = bridge
+    } satisfies { host: Pick<DeepseekDesktopBridge['host'], 'openStream'> }
+    Object.defineProperty(globalThis.window, 'deepseekDesktop', { configurable: true, value: bridge })
     installDesktopWebSocket()
 
     const socket = new WebSocket('dsh-electron://localhost/api/remote.mux')
@@ -57,13 +58,13 @@ describe('desktop WebSocket stand-in', () => {
   })
 
   it('emits error and close when openStream throws', async () => {
-    globalThis.window.deepseekDesktop = {
+    Object.defineProperty(globalThis.window, 'deepseekDesktop', { configurable: true, value: {
       host: {
         openStream: () => {
           throw new Error('bridge unavailable')
         },
       },
-    } as unknown as DeepseekDesktopBridge
+    } satisfies { host: Pick<DeepseekDesktopBridge['host'], 'openStream'> } })
     installDesktopWebSocket()
 
     const socket = new WebSocket('dsh-electron://localhost/api/remote.mux')
@@ -77,12 +78,13 @@ describe('desktop WebSocket stand-in', () => {
   })
 
   it('returns a native WebSocket for non-Host URLs so send and readyState work', async () => {
+    const sent = vi.fn()
     class FakeNativeWebSocket {
       static CONNECTING = 0
       static OPEN = 1
       url: string
       readyState = FakeNativeWebSocket.CONNECTING
-      readonly send = vi.fn()
+      readonly send = sent
       readonly close = vi.fn()
       readonly addEventListener = vi.fn()
       readonly removeEventListener = vi.fn()
@@ -93,10 +95,10 @@ describe('desktop WebSocket stand-in', () => {
         })
       }
     }
-    globalThis.WebSocket = FakeNativeWebSocket as unknown as typeof WebSocket
-    globalThis.window.deepseekDesktop = {
+    vi.stubGlobal('WebSocket', FakeNativeWebSocket)
+    Object.defineProperty(globalThis.window, 'deepseekDesktop', { configurable: true, value: {
       host: { openStream: vi.fn() },
-    } as unknown as DeepseekDesktopBridge
+    } satisfies { host: Pick<DeepseekDesktopBridge['host'], 'openStream'> } })
     installDesktopWebSocket()
 
     const socket = new WebSocket('ws://127.0.0.1:9/plugin-socket')
@@ -105,6 +107,6 @@ describe('desktop WebSocket stand-in', () => {
       expect(socket.readyState).toBe(FakeNativeWebSocket.OPEN)
     })
     socket.send('hello')
-    expect((socket as unknown as FakeNativeWebSocket).send).toHaveBeenCalledWith('hello')
+    expect(sent).toHaveBeenCalledWith('hello')
   })
 })

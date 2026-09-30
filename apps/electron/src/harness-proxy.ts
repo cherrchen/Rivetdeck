@@ -10,7 +10,14 @@ import { extractHostBootstrap } from './bootstrap-extract.ts'
 
 const EVENT_PATHS = new Set(['/api/remote.mux'])
 
-type WebSocketFactory = (url: URL, cookie: string | undefined) => WebSocket
+interface HostWebSocket {
+  readonly readyState: number
+  close(): void
+  send(data: string): void
+  addEventListener(type: 'open' | 'close' | 'error' | 'message', listener: (event: { type: string; data?: unknown }) => void): void
+}
+
+type WebSocketFactory = (url: URL, cookie: string | undefined) => HostWebSocket
 
 interface ActiveStream {
   stop(): Promise<void>
@@ -31,7 +38,7 @@ export class HarnessProxy {
   constructor(
     createWebSocket: WebSocketFactory = (url, cookie) => new NodeWebSocket(url, {
       headers: cookie === undefined ? undefined : { cookie },
-    }) as unknown as WebSocket,
+    }),
     fetchImpl: typeof fetch = fetch,
   ) {
     this.createWebSocket = createWebSocket
@@ -157,7 +164,7 @@ export class HarnessProxy {
    * @param path - `/api/remote.mux`.
    * @param port - MessagePort transferred from the preload bridge.
    */
-  openStream(path: string, port: MessagePortMain): void {
+  openStream(path: string, port: Pick<MessagePortMain, 'postMessage' | 'start' | 'close' | 'on'>): void {
     if (!EVENT_PATHS.has(path)) {
       port.postMessage({ type: 'error', message: `harness proxy: unsupported stream path ${path}` } satisfies HostStreamPortMessage)
       port.close()
