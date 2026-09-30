@@ -130,8 +130,9 @@ export class DesktopRuntime {
         const successor = next.packages.find(candidate => candidate.name === pkg.name)
         return successor === undefined || successor.dir !== pkg.dir || successor.manifest.version !== pkg.manifest.version
       }).map(pkg => pkg.name))
-      for (const entry of ctx.loader.entries()) {
-        if (![...changed].some(name => entry.options.name === name || entry.options.name.startsWith(name + '/'))) continue
+      const replacedEntries = [...ctx.loader.entries()].filter(entry =>
+        [...changed].some(name => entry.options.name === name || entry.options.name.startsWith(name + '/')))
+      for (const entry of replacedEntries) {
         const fiber = entry.fiber
         await entry.update({ disabled: true })
         await fiber?.dispose()
@@ -153,6 +154,13 @@ export class DesktopRuntime {
       if (this.resolution === undefined) throw new Error('Electron runtime resolution is not initialized')
       ctx.pluginPackages.replace(this.resolution)
       try {
+        // An unchanged Include patch list does not reapply options mutated for disposal.
+        // Restore surviving rows from the next composition after publishing the resolver.
+        const rows = flattenEntries(composeEntries([next.patches]))
+        for (const entry of replacedEntries) {
+          const row = rows.find(row => row.id === entry.options.id && row.name === entry.options.name)
+          if (row !== undefined) await entry.update(structuredClone(row), true, true)
+        }
         await reconcileProfilePatches(ctx.root, next.patches, 'dsh')
       } finally {
         this.writeDiagnostics(ctx)
