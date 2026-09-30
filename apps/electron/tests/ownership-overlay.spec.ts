@@ -2,7 +2,9 @@ import { cpSync, existsSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, re
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { PluginManager } from '@deepseek-ai/dsh-plugin-manager'
+import { DesktopPluginManager } from '../src/desktop-plugin-manager.ts'
 import { load } from 'js-yaml'
 import { Context } from '@deepseek-ai/cordis'
 import {
@@ -146,6 +148,22 @@ describe('ownership-aware Electron overlay', () => {
 `)
       prepareHostProfileProjection(appPath, home)
       const runtime = new DesktopRuntime(appPath, profile)
+      ctx.provide('desktopRuntime', runtime)
+      ctx.provide('loader', { entries: () => [] })
+      const diagnostics = vi.spyOn(runtime, 'writeDiagnostics').mockImplementation(() => {})
+      const upstreamBundles = vi.spyOn(PluginManager.prototype, 'listBundles').mockResolvedValue([])
+      try {
+        const manager = new DesktopPluginManager(ctx, { fallbackRegistries: [] })
+        const bundles = await manager.listBundles()
+        expect(bundles.map(pkg => pkg.name)).toEqual([GIT, THEME])
+        expect(bundles.every(pkg => pkg.installed && pkg.readOnlyReason === undefined)).toBe(true)
+        expect(runtime.packages().filter(pkg => pkg.required).map(pkg => pkg.name)).toContain(
+          '@dsh-electron/dsh-electron-desktop-capabilities',
+        )
+      } finally {
+        diagnostics.mockRestore()
+        upstreamBundles.mockRestore()
+      }
       const composed = composeEntries([runtime.patches()])
       expect(active(named(composed, THEME))).toEqual(['theme-studio'])
       expect(active(named(composed, '@dsh-electron/dsh-electron-desktop-capabilities'))).toEqual(['desktop-capabilities'])

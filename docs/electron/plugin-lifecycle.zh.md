@@ -10,13 +10,13 @@
 
 ## 目的
 
-Desktop 将 Electron-owned 包与普通 profile-owned 插件组合运行。共享 web profile 拥有包持久化与用户启停意图。Electron Installed 展示有效运行时清单，包含已禁用的包，并使用实际解析的包元数据与 Loader/Fiber 状态。
+Desktop 将 Electron-owned 包与普通 profile-owned 插件组合运行。共享 web profile 拥有包持久化与用户启停意图。Electron Installed 展示有效的 ecosystem 与 profile bundle 清单，包含已禁用的包，并使用实际解析的包元数据与 Loader/Fiber 状态。
 
 ## 插件类别
 
 **Profile-managed。** `dsh plugin` 与 Plugins 页通过上游包操作写入 `$DSH_HOME/profiles/web`。不属于 Electron 声明 owned set 的普通第三方 bundle 参与 Electron 组合，并解析到 profile 包。外部 CLI add、remove、update 操作触发实时协调；删除该包会卸载其 Loader 条目，并移除 Installed 卡片。
 
-**Desktop-required。** `runtime/plugins/` 目录、`dshElectron.runtimePlugins` 中的包，以及 overlay 必需 adapter（含 `directory-picker-browse`）属于应用组合。Electron overlay 始终挂载它们。这些插件不能关闭。
+**Desktop-required。** `runtime/plugins/` 目录、`dshElectron.runtimePlugins` 中的包，以及 overlay 必需 adapter（含 `directory-picker-browse`）属于应用组合。Electron overlay 始终挂载它们。这些插件不能关闭，也不会单独显示为 Installed 卡片。它们的 Loader 行仍可通过插件清单读取。
 
 Desktop-required 不等于每个包一张 Official 卡。四件事分开：composition package、internal feature、独立 Host adapter、以及 portable runtime / ecosystem 插件。
 

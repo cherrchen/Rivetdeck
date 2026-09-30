@@ -10,13 +10,13 @@ English | [中文](plugin-lifecycle.zh.md)
 
 ## Purpose
 
-Desktop combines Electron-owned packages with ordinary profile-owned plugins. The shared web profile owns package persistence and user activation intent. Electron Installed reports the effective runtime inventory, including disabled packages, using resolved package metadata and live Loader/Fiber state.
+Desktop combines Electron-owned packages with ordinary profile-owned plugins. The shared web profile owns package persistence and user activation intent. Electron Installed reports the effective ecosystem and profile bundle inventory, including disabled packages, using resolved package metadata and live Loader/Fiber state.
 
 ## Plugin classes
 
 **Profile-managed.** `dsh plugin` and the Plugins page write `$DSH_HOME/profiles/web` through upstream package operations. An ordinary third-party bundle outside Electron’s declared owned set participates in Electron composition and resolves to the profile package. External CLI add, remove, and update operations trigger live reconciliation; removing that package unloads its Loader entries and removes its Installed card.
 
-**Desktop-required.** Directories under `runtime/plugins/`, packages listed in `dshElectron.runtimePlugins`, and required overlay adapters (including `directory-picker-browse`) are application composition. Electron's overlay always mounts them. These plugins cannot be turned off.
+**Desktop-required.** Directories under `runtime/plugins/`, packages listed in `dshElectron.runtimePlugins`, and required overlay adapters (including `directory-picker-browse`) are application composition. Electron's overlay always mounts them. These plugins cannot be turned off and do not appear as separate Installed cards. Their Loader rows remain available through the plugin inventory.
 
 Desktop-required is not one Official card per package. Keep four facts separate: the composition package, internal features, independent Host adapters, and portable runtime or ecosystem plugins.
 

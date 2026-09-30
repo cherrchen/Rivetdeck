@@ -36,9 +36,12 @@ export class DesktopPluginManager extends PluginManager {
     })
   }
 
+  /** List manageable packages; required Desktop components use the Official card and plugin inventory.
+   * @returns Ecosystem and profile bundles, plus available optional bundles.
+   */
   override async listBundles(): Promise<BundleInfo[]> {
     this.host.desktopRuntime.writeDiagnostics(this.host)
-    const effective = this.host.desktopRuntime.packages().map(pkg => this.bundleInfo(pkg))
+    const effective = this.host.desktopRuntime.packages().filter(pkg => !pkg.required).map(pkg => this.bundleInfo(pkg))
     const optional = (await super.listBundles()).filter(pkg => pkg.optional && !effective.some(row => row.name === pkg.name))
     return [...effective, ...optional]
   }
