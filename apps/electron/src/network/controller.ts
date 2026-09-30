@@ -33,11 +33,14 @@ import type { DesktopSecretStore } from './secret-store.ts'
 import { consumeNetworkStartupOverride } from './startup-override.ts'
 import { writeDefaultStartupOverride } from './startup-override.ts'
 import { normalizeNetworkConfigInput } from './validation.ts'
-import { NetworkRuntimeClient } from './runtime-client.ts'
+import type { NetworkRuntimeClient } from './runtime-client.ts'
 import type { NetworkRuntimeObservation } from './runtime-client.ts'
 import { DesktopNetworkOperationError } from './errors.ts'
 import type { RuntimeSystemSnapshot } from './runtime-protocol.ts'
 import { runNetworkTests, type NetworkDiagnosticFetch } from './test-service.ts'
+
+type ControllerRuntime = Pick<NetworkRuntimeClient,
+  'start' | 'configure' | 'diagnostics' | 'getSystemSnapshot' | 'reloadSystem' | 'submitCredential' | 'onEvent' | 'shutdown'>
 
 /** Dependencies that keep the controller independent of Electron globals. */
 export interface DesktopNetworkControllerOptions {
@@ -56,7 +59,7 @@ export class DesktopNetworkController {
   private current: DesktopNetworkState | undefined
   private gateway: DesktopGatewayEndpoint | undefined
   private updaterGateway: DesktopGatewayEndpoint | undefined
-  private runtime: NetworkRuntimeClient | undefined
+  private runtime: ControllerRuntime | undefined
   private readonly epochs = new NetworkEpochManager()
   private readonly incidents = new NetworkIncidentManager()
   private lastRoute: DesktopNetworkIncidentSummary['route']
@@ -152,7 +155,7 @@ export class DesktopNetworkController {
   }
 
   /** Start the native Gateway before any managed Desktop or Harness request can run. */
-  async startRuntime(runtime: NetworkRuntimeClient): Promise<void> {
+  async startRuntime(runtime: ControllerRuntime): Promise<void> {
     const state = this.state()
     if (state.effectiveMode === 'default' || state.effectiveMode === 'direct') return
     this.setCurrent({ ...state, runtime: { status: 'starting' } })
@@ -532,9 +535,9 @@ function route(value: unknown): DesktopNetworkIncidentSummary['route'] {
   return { kind: value.kind as 'http' | 'https' | 'socks5', host: value.host, port: Number(value.port), ...(source === undefined ? {} : { source }) }
 }
 
-function systemSnapshot(value: unknown): RuntimeSystemSnapshot | undefined {
+function systemSnapshot(value: unknown): Pick<RuntimeSystemSnapshot, 'policyFingerprint' | 'networkFingerprint'> | undefined {
   if (!isRecord(value) || typeof value.policyFingerprint !== 'string' || typeof value.networkFingerprint !== 'string') return undefined
-  return value as unknown as RuntimeSystemSnapshot
+  return { policyFingerprint: value.policyFingerprint, networkFingerprint: value.networkFingerprint }
 }
 
 function sanitizedManualFields(manual: PersistedManualProxy | undefined, active: boolean): {

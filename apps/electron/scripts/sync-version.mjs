@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   DESKTOP_ENTRY_WORKSPACE_DEPENDENCIES,
+  collectWorkspacePeers,
   synchronizeDependencies,
   assertResolvedWorkspaceDependencies,
 } from './sync-version-dependencies.mjs'
@@ -39,29 +40,6 @@ async function discoverManifests(root) {
   return manifests
 }
 
-/** Collect workspace peers from the complete CLI production graph. */
-function collectWorkspacePeers(manifests) {
-  const pending = ['@deepseek-ai/dsh']
-  const visited = new Set()
-  const peers = new Set()
-  while (pending.length > 0) {
-    const name = pending.pop()
-    if (name === undefined || visited.has(name)) continue
-    visited.add(name)
-    const manifest = manifests.get(name)
-    if (manifest === undefined) continue
-    for (const dependency of Object.keys(manifest.dependencies ?? {})) {
-      if (manifests.has(dependency)) pending.push(dependency)
-    }
-    for (const dependency of Object.keys(manifest.peerDependencies ?? {})) {
-      if (!manifests.has(dependency)) continue
-      peers.add(dependency)
-      pending.push(dependency)
-    }
-  }
-  return [...peers].sort()
-}
-
 const manifests = await discoverManifests(repositoryRoot)
 const workspaceDependencies = [
   '@deepseek-ai/dsh',
@@ -73,6 +51,7 @@ const dependencies = synchronizeDependencies(
   workspaceDependencies,
   workspaceNames,
   DESKTOP_ENTRY_WORKSPACE_DEPENDENCIES,
+  collectWorkspacePeers,
 )
 assertResolvedWorkspaceDependencies(dependencies, workspaceNames)
 const changed = electronManifest.version !== upstreamManifest.version

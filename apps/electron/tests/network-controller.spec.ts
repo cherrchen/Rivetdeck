@@ -5,7 +5,6 @@ import { describe, expect, it, vi } from 'vitest'
 import { DesktopPreferencesStore } from '../src/preferences.ts'
 import { DesktopNetworkController } from '../src/network/controller.ts'
 import type { DesktopSecretStore } from '../src/network/secret-store.ts'
-import type { NetworkRuntimeClient } from '../src/network/runtime-client.ts'
 import { MANUAL_PROXY_PASSWORD_REF } from '../src/network/domain.ts'
 
 describe('Desktop Network controller foundation', () => {
@@ -46,10 +45,14 @@ describe('Desktop Network controller foundation', () => {
           systemBackend: 'unsupported', capabilities: { manual: { http: true, https: true, socks5: true, socks5Auth: false }, system: { manual: false, pac: false, wpad: false, watchers: false }, auth: { basic: true, digest: false, ntlm: false, negotiate: false } },
         }),
         configure: vi.fn().mockResolvedValue(undefined),
-        onEvent: vi.fn(),
+        onEvent: vi.fn(() => () => undefined),
+        diagnostics: vi.fn().mockResolvedValue({ configured: true }),
+        getSystemSnapshot: vi.fn().mockRejectedValue(new Error('System is inactive')),
+        reloadSystem: vi.fn().mockRejectedValue(new Error('System is inactive')),
+        submitCredential: vi.fn().mockResolvedValue(undefined),
         shutdown: vi.fn().mockResolvedValue(undefined),
-      }
-      await fixture.controller.startRuntime(runtime as unknown as NetworkRuntimeClient)
+      } satisfies Parameters<DesktopNetworkController['startRuntime']>[0]
+      await fixture.controller.startRuntime(runtime)
       expect(runtime.configure).toHaveBeenCalledWith({
         mode: 'manual', strictFallback: true,
         proxy: { protocol: 'https', host: 'proxy.example', port: 443, username: 'alice', password: 'secret-value' },

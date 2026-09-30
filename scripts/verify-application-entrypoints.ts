@@ -33,6 +33,10 @@ const MANIFEST_BIN_ALLOWLIST = new Map<string, ManifestBin>([
 const EXECUTABLE_SOURCE_ALLOWLIST = new Map<string, string>([
   ['apps/cli/src/bin.ts', 'supported dsh application launcher'],
   ['apps/desktop/scripts/logged-notarytool.mjs', 'build-only notarization logging wrapper'],
+  ['apps/electron/scripts/next-beta-tag.mjs', 'build-only desktop release tag planner'],
+  ['apps/electron/scripts/restore-agents-downstream.mjs', 'build-only downstream instruction restoration'],
+  ['apps/electron/scripts/set-version.mjs', 'build-only desktop release version setter'],
+  ['apps/electron/scripts/sync-version.mjs', 'build-only desktop dependency and version synchronization'],
   ['packages/context/time-context/tests/fixtures/driver.ts', 'test-only subprocess driver'],
   ['packages/experimental/webworker-packer/bin.js', 'build-only wrapper'],
   ['packages/experimental/webworker-packer/src/bin.ts', 'build-only implementation'],

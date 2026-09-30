@@ -61,7 +61,7 @@ describe('Electron packaging', () => {
       expect(manifest.dependencies?.[name]).not.toMatch(/^workspace:/)
       expect(existsSync(join(electronRoot, 'node_modules', ...name.split('/'), 'package.json'))).toBe(true)
     }
-    expect(manifest.dependencies?.['@dsh-electron/dsh-plugin-git']).toBe('0.2.3')
-    expect(manifest.dependencies?.['@dsh-electron/dsh-theme-studio']).toBe('0.1.2')
+    expect(manifest.dependencies?.['@dsh-electron/dsh-plugin-git']).toBe('0.2.4')
+    expect(manifest.dependencies?.['@dsh-electron/dsh-theme-studio']).toBe('0.1.3')
   })
 })

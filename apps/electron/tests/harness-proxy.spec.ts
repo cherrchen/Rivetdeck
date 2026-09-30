@@ -5,7 +5,7 @@ import { HarnessProxy } from '../src/harness-proxy.ts'
 import { HttpHarnessTransport } from '../src/harness/transport.ts'
 
 class FakeWebSocket extends EventTarget {
-  readyState = WebSocket.CONNECTING
+  readyState: number = WebSocket.CONNECTING
   readonly send = vi.fn()
   readonly close = vi.fn(() => {
     this.readyState = WebSocket.CLOSING
@@ -17,13 +17,13 @@ class FakeWebSocket extends EventTarget {
   }
 }
 
-function createPort(): { port: MessagePortMain; emitClose: () => void; emitMessage: (data: unknown) => void } {
+function createPort(): { port: Pick<MessagePortMain, 'postMessage' | 'start' | 'close' | 'on'>; emitClose: () => void; emitMessage: (data: unknown) => void } {
   const emitter = new EventEmitter()
   const port = Object.assign(emitter, {
     postMessage: vi.fn(),
     start: vi.fn(),
     close: vi.fn(() => { emitter.emit('close') }),
-  }) as unknown as MessagePortMain
+  })
   return {
     port,
     emitClose: () => { emitter.emit('close') },
@@ -55,7 +55,7 @@ describe('HarnessProxy', () => {
 
   it('keeps Host cookies on the loopback origin for scheme-relative renderer URLs', async () => {
     const requested: string[] = []
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       requested.push(String(input instanceof Request ? input.url : input))
       return new Response('{}', { status: 200 })
     })
@@ -88,8 +88,8 @@ describe('HarnessProxy', () => {
   })
 
   it('exchanges the launch token and authenticates HTTP and WebSocket requests', async () => {
-    const requests: RequestInfo[] = []
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const requests: Array<RequestInfo | URL> = []
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       requests.push(input)
       if (requests.length === 1) {
         return new Response(null, {
@@ -100,7 +100,7 @@ describe('HarnessProxy', () => {
       return new Response('{}', { status: 200 })
     })
     const socket = new FakeWebSocket()
-    const createWebSocket = vi.fn(() => socket as unknown as WebSocket)
+    const createWebSocket = vi.fn(() => socket)
     const proxy = new HarnessProxy(createWebSocket, fetchMock)
     const transport = new HttpHarnessTransport(proxy)
 
@@ -131,7 +131,7 @@ describe('HarnessProxy', () => {
 
   it('closes the Host WebSocket when the renderer port closes', async () => {
     const socket = new FakeWebSocket()
-    const proxy = new HarnessProxy(() => socket as unknown as WebSocket)
+    const proxy = new HarnessProxy(() => socket)
     const { port, emitClose } = createPort()
     proxy.setOrigin('http://127.0.0.1:43127')
     proxy.openStream('/api/remote.mux', port)
@@ -145,7 +145,7 @@ describe('HarnessProxy', () => {
   it('forwards renderer text frames to the open Host WebSocket', () => {
     const socket = new FakeWebSocket()
     socket.readyState = WebSocket.OPEN
-    const proxy = new HarnessProxy(() => socket as unknown as WebSocket)
+    const proxy = new HarnessProxy(() => socket)
     const { port, emitMessage } = createPort()
     proxy.setOrigin('http://127.0.0.1:43127')
     proxy.openStream('/api/remote.mux', port)
@@ -157,7 +157,7 @@ describe('HarnessProxy', () => {
 
   it('waits for active WebSockets to close when the transport stops', async () => {
     const socket = new FakeWebSocket()
-    const proxy = new HarnessProxy(() => socket as unknown as WebSocket)
+    const proxy = new HarnessProxy(() => socket)
     const transport = new HttpHarnessTransport(proxy)
     const { port } = createPort()
     await transport.start('http://127.0.0.1:43127')

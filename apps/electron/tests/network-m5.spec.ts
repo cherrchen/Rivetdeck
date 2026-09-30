@@ -10,7 +10,7 @@ import { classifyNetworkFailure } from '../src/network/failure.ts'
 import { presentNetworkFailure } from '../src/network/failure-dialog.ts'
 import { NetworkIncidentManager } from '../src/network/incidents.ts'
 import { resolveDesktopMainLocale } from '../src/locale.ts'
-import type { NetworkRuntimeClient, NetworkRuntimeObservation } from '../src/network/runtime-client.ts'
+import type { NetworkRuntimeObservation } from '../src/network/runtime-client.ts'
 import type { DesktopSecretStore } from '../src/network/secret-store.ts'
 import { DesktopNetworkOperationError } from '../src/network/errors.ts'
 
@@ -225,6 +225,7 @@ function runtimeFixture() {
       systemBackend: 'linux-gnome', capabilities: { manual: { http: true, https: true, socks5: true, socks5Auth: false }, system: { manual: true, pac: true, wpad: false, watchers: true }, auth: { basic: true, digest: false, ntlm: false, negotiate: false } },
     }),
     configure: vi.fn().mockResolvedValue(undefined),
+    diagnostics: vi.fn().mockResolvedValue({ configured: true }),
     getSystemSnapshot: vi.fn().mockResolvedValue(snapshot('policy-a', 'network-a')),
     reloadSystem: vi.fn().mockResolvedValue(snapshot('policy-b', 'network-a')),
     submitCredential: vi.fn().mockResolvedValue(undefined),
@@ -233,9 +234,9 @@ function runtimeFixture() {
       return () => listeners.delete(listener)
     }),
     shutdown: vi.fn().mockResolvedValue(undefined),
-  }
+  } satisfies Parameters<DesktopNetworkController['startRuntime']>[0]
   return {
-    client: client as unknown as NetworkRuntimeClient,
+    client,
     emit: (event: NetworkRuntimeObservation) => { for (const listener of listeners) listener(event) },
     calls: client,
   }

@@ -42,7 +42,7 @@ Plugins 页仅由 composition package 为 Desktop Capabilities 注册 Official `
 
 `DesktopRuntime` 拥有启动与后续组合代次。Desktop Capabilities 在现有 HMR 队列上注册共享 profile manifest、lockfile、启停 patch、兼容性文件与 home patch 的 watcher。协调在 CLI/包操作释放 profile 写入锁后获取该锁，刷新私有投影，卸载已删除或替换的包条目，使包查询缓存失效，并等待 Loader 稳定。上游 HMR profile reader 被隔离，避免从持久化目录重新组合。私有目录只包含可丢弃的投影文件，没有另一份包数据库或 lockfile。对每个 required 包，overlay 之前的每一行都被禁用，再由静态 overlay 插入 Desktop 行。对已启用的 ecosystem 包，保留已应用 bundle 层自身的行，禁用额外同名行。对已禁用的 ecosystem 包，额外同名行仍会被禁用。overlay 不插入 Git 或 Theme Studio。找不到的 id 走 include 已有警告，Main 不失败。
 
-Theme Studio 作为 `@dsh-electron/dsh-theme-studio@0.1.2` 从 npm 安装，并声明在 `dshElectron.ecosystemPlugins` 中；其已发布的 peer 声明包含 `0.1.7-rc.2`。缺失随包产物会使启动报错。
+Theme Studio 作为 `@dsh-electron/dsh-theme-studio@0.1.3` 从 npm 安装，并声明在 `dshElectron.ecosystemPlugins` 中；其已发布的 peer 声明包含 `0.1.7-rc.2`。缺失随包产物会使启动报错。
 
 上游 Web bundle 挂载自己的插件管理 UI 和 agent tool。Main 将随包 pnpm 加入受监督 Host 的 `PATH`，使上游 profile manager 无需全局安装 pnpm 即可执行 package 命令。升级后首次启动时，Main 将旧版 `$DSH_HOME/electron/plugin-state.json` 的 `profileManaged` 条目迁入 `$DSH_HOME/profiles/web/cordis.patch.yml`，并保留各条目的禁用状态。旧文件留作恢复依据；迁移标记防止用户后来移除的插件再次被加入。如果已安装包缺失，迁移会在 Host 启动前停止，旧文件和 patch 保留以供修复。
 

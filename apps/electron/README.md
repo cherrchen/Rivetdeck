@@ -52,7 +52,7 @@ pnpm --filter @dsh-electron/dsh-electron test
 pnpm --filter @dsh-electron/dsh-electron test:ownership
 ```
 
-The Electron application is a private installer, not an npm release member. Its dependency sync copies upstream CLI workspace dependencies using `workspace:^`; the repository's `constraints` check applies that range to this application and keeps the upstream publication rules on upstream packages.
+The Electron application is a private installer, not an npm release member. Its dependency sync copies upstream CLI workspace dependencies using `workspace:^`, excludes experimental peers, and retains stable peers required by optional bundles; the repository's `constraints` check applies that range to this application and keeps the upstream publication rules on upstream packages.
 
 Repository Python integration tests require CPython 3.10+ selected by `python3` on PATH. If mise reports an inactive shim, activate an installed version for the command, for example `mise exec python@3.13.12 -- pnpm test packages/experimental/code-runtime-python/tests/runtime.spec.ts packages/experimental/code-runtime-python/tests/boot-write-failure.spec.ts`. Use a version installed on your machine; `python3 --version` must succeed before running the tests.
 

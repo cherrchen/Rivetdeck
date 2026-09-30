@@ -35,7 +35,7 @@ export function installDesktopWebSocket(): void {
       return protocols === undefined ? new native(url) : new native(url, protocols)
     }
     return new DesktopWebSocketImpl(String(url), bridge)
-  } as unknown as typeof WebSocket
+  }
 
   Object.defineProperties(StandIn, {
     CONNECTING: { value: native?.CONNECTING ?? DESKTOP_WS_CONNECTING },
@@ -43,7 +43,7 @@ export function installDesktopWebSocket(): void {
     CLOSING: { value: native?.CLOSING ?? DESKTOP_WS_CLOSING },
     CLOSED: { value: native?.CLOSED ?? DESKTOP_WS_CLOSED },
   })
-  globalThis.WebSocket = StandIn
+  Object.defineProperty(globalThis, 'WebSocket', { configurable: true, writable: true, value: StandIn })
 }
 
 class DesktopWebSocketImpl {

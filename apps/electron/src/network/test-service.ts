@@ -15,7 +15,7 @@ const TEST_TIMEOUT_MS = 12_000
 /** Validated diagnostic request accepted across the IPC boundary. */
 export function parseNetworkTestRequest(value: unknown): DesktopNetworkTestRequest {
   if (!isRecord(value) || !Array.isArray(value.tests) || value.tests.length > TEST_KINDS.length
-    || value.tests.some(kind => !TEST_KINDS.includes(kind as typeof TEST_KINDS[number]))
+    || !value.tests.every((kind): kind is typeof TEST_KINDS[number] => TEST_KINDS.some(allowed => allowed === kind))
     || new Set(value.tests).size !== value.tests.length) {
     throw new DesktopNetworkConfigError('INVALID_CONFIG', 'Select valid connection tests.')
   }
@@ -34,7 +34,21 @@ export function parseNetworkTestRequest(value: unknown): DesktopNetworkTestReque
       throw new DesktopNetworkConfigError('INVALID_CONFIG', 'Invalid LLM test settings.')
     }
   }
-  return value as unknown as DesktopNetworkTestRequest
+  return {
+    tests: value.tests,
+    ...(overrides === undefined ? {} : {
+      overrides: {
+        ...(typeof overrides.internet204Url === 'string' ? { internet204Url: overrides.internet204Url } : {}),
+        ...(typeof overrides.githubUrl === 'string' ? { githubUrl: overrides.githubUrl } : {}),
+        ...(isRecord(overrides.llm) ? {
+          llm: {
+            ...(typeof overrides.llm.providerId === 'string' ? { providerId: overrides.llm.providerId } : {}),
+            ...(typeof overrides.llm.healthUrl === 'string' ? { healthUrl: overrides.llm.healthUrl } : {}),
+          },
+        } : {}),
+      },
+    }),
+  }
 }
 
 /** Fetch injected by Main with an isolated Session whose Gateway suppresses incidents. */

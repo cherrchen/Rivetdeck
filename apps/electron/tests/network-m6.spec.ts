@@ -144,6 +144,13 @@ describe('Network diagnostic and draft contracts', () => {
       base.testSettings, fetchOne)
     expect(result.results.map(item => [item.status, item.httpStatus])).toEqual([['reachable', 204], ['reachable', 401]])
     expect(fetchOne).toHaveBeenCalledTimes(2)
+    const request = {
+      tests: ['internet', 'github', 'llm'] as const,
+      overrides: { internet204Url: 'https://example.com/204', githubUrl: 'https://github.com',
+        llm: { providerId: 'test', healthUrl: 'https://example.com/health' } },
+    }
+    expect(parseNetworkTestRequest(request)).toEqual(request)
+    expect(() => parseNetworkTestRequest({ tests: [1] })).toThrow()
     expect(() => parseNetworkTestRequest({ tests: ['internet', 'internet'] })).toThrow()
     expect(() => parseNetworkTestRequest({ tests: ['internet'], overrides: { unexpected: 'x' } })).toThrow()
   })
