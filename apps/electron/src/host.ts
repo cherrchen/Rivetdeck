@@ -10,14 +10,12 @@ import { FiberState, type Context } from '@deepseek-ai/cordis'
 import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import {
   boot,
-  createRuntimeResolution,
   installFailLoud,
   loadLayeredEnv,
   loadOverlayPatches,
   loadProfileDirectory,
   PluginPackages,
   PROFILE_PATCH_FILENAME,
-  readProfilePatches,
   reportSkippedBundles,
   resolveProfileDir,
   type ProfileContext,
@@ -33,6 +31,8 @@ import {
   prepareHostProfileProjection,
 } from './host-profile.ts'
 import { resolveDshInstallAnchor } from './runtime.ts'
+import { DesktopRuntime } from './desktop-runtime.ts'
+import { DesktopPluginManager } from './desktop-plugin-manager.ts'
 
 const NAME = 'dsh'
 
@@ -159,11 +159,6 @@ export async function runDesktopHost(options: HostLaunchOptions): Promise<{ ctx:
   const installAnchor = resolveDshInstallAnchor(options.appPath)
   const resolutionProfile = loadProfileDirectory(NAME, hostDir, installAnchor)
   reportSkippedBundles(NAME, resolutionProfile)
-  const resolution = await createRuntimeResolution({
-    installAnchor,
-    profile: resolutionProfile,
-    home,
-  })
   const overlays: PatchOptions[] = loadOverlayPatches(NAME, options.patchPath)
 
   const app: { current?: Context } = {}
@@ -203,21 +198,24 @@ export async function runDesktopHost(options: HostLaunchOptions): Promise<{ ctx:
       overlays,
       telemetryDisabledEnv: process.env.DSH_TELEMETRY_DISABLED,
     }
-    // Persistence stays on the shared web profile. Resolution used the private
-    // projection above so ecosystem imports hit Electron-bundled packages.
+    const runtime = new DesktopRuntime(options.appPath, profileContext)
+    const resolution = await runtime.initialResolution()
     const ctx = await boot(
       NAME,
       rootConfig,
-      readProfilePatches(NAME, {
-        ...profileContext,
-        dir: hostDir,
-        patchPath: join(hostDir, PROFILE_PATCH_FILENAME),
-      }, resolutionProfile),
+      runtime.patches(),
       async (hostCtx) => {
         app.current = hostCtx
         hostCtx.provide('profileContext', profileContext)
+        hostCtx.provide('desktopRuntime', runtime)
+        hostCtx.effect(() => {
+          const builtins = hostCtx.loader.builtins
+          builtins['desktop-plugin-manager'] = DesktopPluginManager
+          return () => { delete builtins['desktop-plugin-manager'] }
+        }, 'Electron Plugin Manager implementation')
         hostCtx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, environment)
         await hostCtx.plugin(PluginPackages, { resolution })
+        runtime.install(hostCtx)
         provideCmdline(hostCtx, {
           args: options.args,
           exit: code => void shutdown.shutdown(code),
@@ -233,6 +231,7 @@ export async function runDesktopHost(options: HostLaunchOptions): Promise<{ ctx:
     }
     return { ctx }
   } catch (error) {
+    console.error('electron host startup failed:', error)
     try { await dispose() } catch (cleanupError) {
       throw new AggregateError([error, cleanupError], 'dsh: profile startup and cleanup failed')
     }

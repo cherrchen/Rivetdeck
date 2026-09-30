@@ -49,6 +49,7 @@ pnpm --filter @dsh-electron/dsh-electron start
 ```sh
 pnpm --filter @dsh-electron/dsh-electron build
 pnpm --filter @dsh-electron/dsh-electron test
+pnpm --filter @dsh-electron/dsh-electron test:ownership
 ```
 
 Electron 应用是私有安装程序，不作为 npm 发布成员。依赖同步使用 `workspace:^` 复制上游 CLI 的 workspace 依赖；仓库的 `constraints` 检查对该应用执行此范围要求，并继续对上游包执行上游发布规则。
@@ -62,7 +63,7 @@ Electron 应用是私有安装程序，不作为 npm 发布成员。依赖同步
 
 主窗口使用隐藏标题栏，不绘制独立 Heading。侧栏背景延伸至窗口顶部：macOS 在侧栏顶部保留可拖拽的“交通信号灯”区域，Windows 和 Linux 则把侧栏右侧的各列下移到原生控件行之下，使该区域留空并可拖拽；全屏右侧面板会在自身盒内保留同样的留白行。活动会话 Header 的非交互部分可拖拽，空白会话背景与留空区域由透明命中面覆盖。Header 控件被明确排除拖拽；模态对话框打开期间，页面的所有拖拽区域均会暂停，使对话框遮罩和控件能够保持指针输入。关闭主窗口会隐藏窗口，Harness 进程继续运行。通过托盘菜单可以重新打开窗口，也可以退出应用并停止受监管的子进程。
 
-操作系统桌面能力由 Electron Main 拥有，并通过类型化的 `window.deepseekDesktop` preload 桥暴露。Desktop Capabilities 包（`runtime/plugins/desktop-capabilities`）将该桥适配为 `ctx.desktop`、挂载 Desktop Client feature，并在 profile HMR 时刷新 Host ownership overlay。受监督 Host 接收生成的 `electron-host.patch.yml`，其中挂载必需的 Desktop Loader 行。启动时 Main 校验随包构建产物，将 required runtime 插件链接至 `$DSH_HOME/profiles/node_modules` 与 `$DSH_HOME/profiles/web/node_modules`，通过共享的 dsh plugin 包操作首次预装 Git 与 Theme Studio 等缺失的 ecosystem bundle，并修复旧版 Desktop 链接，并物化 `$DSH_HOME/electron/host-profile`，使 Host 将 ecosystem 包解析到 Electron 随包副本而不改写共享 profile package。Main 会将旧版由 Desktop 管理的运行时插件一次性迁入 Web profile patch，并保留其启用或禁用状态。此后由上游 Web profile 管理插件及其 UI；Main 将随包 pnpm 加入 Host 的 `PATH`。`scripts/build-runtime-plugins.mjs` 从源码构建本地 Desktop 插件，Theme Studio 与 Git 则使用已发布的 Host 和 Client 产物。上游 UI 的剪贴板写入通过 Renderer shim 到达 Main。以新窗口打开的外部 URL 使用 `https:`、`http:` 或 `mailto:`。
+操作系统桌面能力由 Electron Main 拥有，并通过类型化的 `window.deepseekDesktop` preload 桥暴露。Desktop Capabilities 包（`runtime/plugins/desktop-capabilities`）将该桥适配为 `ctx.desktop`、挂载 Desktop Client feature，并在 profile HMR 时刷新 Host ownership overlay。受监督 Host 接收生成的 `electron-host.patch.yml`，其中挂载必需的 Desktop Loader 行。启动时 Main 校验随包构建产物，将 required runtime 插件链接至 `$DSH_HOME/profiles/node_modules` 与 `$DSH_HOME/profiles/web/node_modules`，通过共享的 dsh plugin 包操作首次预装 Git 与 Theme Studio 等缺失的 ecosystem bundle，并修复旧版 Desktop 链接，并物化 `$DSH_HOME/electron/host-profile`，使 Host 将 ecosystem 包解析到 Electron 随包副本而不改写共享 profile package。Main 会将旧版由 Desktop 管理的运行时插件一次性迁入 Web profile patch，并保留其启用或禁用状态。共享 web profile 拥有包持久化；DesktopRuntime 拥有混合运行时组合与实时 CLI 协调，DesktopPluginManager 为上游 UI 提供有效运行时清单；Main 将随包 pnpm 加入 Host 的 `PATH`。`scripts/build-runtime-plugins.mjs` 从源码构建本地 Desktop 插件，Theme Studio 与 Git 则使用已发布的 Host 和 Client 产物。上游 UI 的剪贴板写入通过 Renderer shim 到达 Main。以新窗口打开的外部 URL 使用 `https:`、`http:` 或 `mailto:`。
 
 随包提供的 Desktop 网络子进程插件在运行时导入已安装的 `dsh-subprocess-local` 和 `dsh-subprocess` 包。它们必须与 Host 共用“找不到可执行文件”的错误类，终端 shell 发现流程才能跳过未安装的候选项。
 
@@ -102,6 +103,6 @@ Desktop 为六个发布目标打包独立的 Node.js 24.17.0 和 CPython 3.14.7�
 
 构建准备流程下载固定 HTTPS 归档，并在解压前使用 [`toolchains.lock.json`](toolchains.lock.json) 中的 SHA256 校验。Node distribution 保留 `LICENSE`；python-build-standalone distribution 保留 `LICENSE.txt` 及随包依赖的许可证元数据。上游资产见 [Node.js release](https://nodejs.org/download/release/v24.17.0/) 与 [python-build-standalone release](https://github.com/astral-sh/python-build-standalone/releases/tag/20260924)。打包前运行 `pnpm --filter @dsh-electron/dsh-electron prepare:toolchains` 和 `pnpm --filter @dsh-electron/dsh-electron smoke:toolchains`，以验证当前原生目标。
 
-受监督进程将 `$DSH_HOME` 设为操作系统用户主目录下的 `.dsh`，因此 Harness profile、设置、会话等状态在 macOS/Linux 使用 `~/.dsh`，在 Windows 使用 `%USERPROFILE%\.dsh`。Electron 将 Chromium 数据、缓存与桌面更新偏好保留在其平台专属 `userData` 目录。Agent shell 命令以当前用户主目录为初始工作区；用户可通过 Harness UI 选择其他工作区。
+Main 保留显式 `$DSH_HOME`；否则受监督进程使用操作系统用户主目录下的 `.dsh`，因此 Harness profile、设置、会话等状态在 macOS/Linux 使用 `~/.dsh`，在 Windows 使用 `%USERPROFILE%\.dsh`。Electron 将 Chromium 数据、缓存与桌面更新偏好保留在其平台专属 `userData` 目录。Agent shell 命令以当前用户主目录为初始工作区；用户可通过 Harness UI 选择其他工作区。
 
 Host 启动超时后，Desktop 会先停止受监督的子进程，再报告故障。上游 profile manager 拥有 package 事务和 profile 文件。

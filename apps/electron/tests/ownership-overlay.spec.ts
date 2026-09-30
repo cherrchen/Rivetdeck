@@ -12,7 +12,6 @@ import {
   loadProfileDirectory,
   PROFILE_TEMPLATES,
   PROFILE_PATCH_FILENAME,
-  readProfilePatches,
   readProfileManifest,
   resolveProfileDir,
   writeProfileManifest,
@@ -21,7 +20,7 @@ import {
 import type { EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import { WEB_PROFILE_NAME } from '../src/ecosystem-profile.ts'
-import { apply as applyCapabilitiesHost } from '../runtime/plugins/desktop-capabilities/src/index.ts'
+import { DesktopRuntime } from '../src/desktop-runtime.ts'
 import { materializeHostNodeModules, prepareHostProfileProjection } from '../src/host-profile.ts'
 import { resolveDshInstallAnchor } from '../src/runtime.ts'
 import {
@@ -45,6 +44,7 @@ const OVERLAY_INSERT_NAMES = [
   '@dsh-electron/dsh-electron-network-subprocess',
   '@deepseek-ai/dsh-host-directory-picker-browse',
   '@dsh-electron/dsh-electron-desktop-capabilities',
+  'cordis:desktop-plugin-manager',
 ] as const
 
 const appPath = fileURLToPath(new URL('..', import.meta.url))
@@ -71,12 +71,16 @@ it('refreshes Host links without deleting their target directories', () => {
 })
 
 describe('Desktop overlay insert names', () => {
-  it('inserts the three required Loader packages and omits ecosystem bundles', () => {
+  it('mounts the Desktop manager instead of the profile manager and omits ecosystem inserts', () => {
     const yaml = readFileSync(join(appPath, 'runtime', 'host.patch.yml'), 'utf8')
     const names = staticOverlayInsertNames(yaml)
     expect(names).toEqual([...OVERLAY_INSERT_NAMES])
     expect(names).not.toContain(GIT)
     expect(names).not.toContain(THEME)
+    const rows = composeEntries([[{ insert: [{ id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager' }] }],
+      load(yaml) as PatchOptions[]])
+    expect(rows.find(row => row.id === 'plugin-manager')?.disabled).toBe(true)
+    expect(rows.find(row => row.id === 'desktop-plugin-manager')?.name).toBe('cordis:desktop-plugin-manager')
   })
 })
 
@@ -119,7 +123,7 @@ describe('ownership-aware Electron overlay', () => {
     }
   })
 
-  it('refreshes ownership after a new same-name row arrives during Host HMR', async () => {
+  it('builds ownership suppressions from the runtime composition authority', async () => {
     const home = await seededHome()
     const ctx = new Context()
     try {
@@ -133,7 +137,6 @@ describe('ownership-aware Electron overlay', () => {
         startedBundles: [], overlays: initial as PatchOptions[], telemetryDisabledEnv: undefined,
       }
       ctx.provide('profileContext', profile)
-      applyCapabilitiesHost(ctx)
       writeFileSync(profile.patchPath, `
 - insert:
     - id: later-theme
@@ -142,7 +145,8 @@ describe('ownership-aware Electron overlay', () => {
       name: '@dsh-electron/dsh-electron-desktop-capabilities'
 `)
       prepareHostProfileProjection(appPath, home)
-      const composed = composeEntries([readProfilePatches('dsh', profile)])
+      const runtime = new DesktopRuntime(appPath, profile)
+      const composed = composeEntries([runtime.patches()])
       expect(active(named(composed, THEME))).toEqual(['theme-studio'])
       expect(active(named(composed, '@dsh-electron/dsh-electron-desktop-capabilities'))).toEqual(['desktop-capabilities'])
       expect(named(composed, THEME).find(row => row.id === 'later-theme')?.disabled).toBe(true)

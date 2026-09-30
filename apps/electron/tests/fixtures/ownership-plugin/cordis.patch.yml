@@ -1,0 +1,5 @@
+- insert:
+    - id: ownership-plugin
+      name: '@dsh-test/ownership-plugin/plugin'
+      config:
+        events: !!js dshHomePath('ownership-events.txt')

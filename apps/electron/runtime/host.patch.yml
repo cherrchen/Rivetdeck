@@ -14,3 +14,15 @@
       name: '@deepseek-ai/dsh-host-directory-picker-browse'
     - id: desktop-capabilities
       name: '@dsh-electron/dsh-electron-desktop-capabilities'
+
+- id: plugin-manager
+  disabled: true
+
+- insert:
+    - id: desktop-plugin-manager
+      name: 'cordis:desktop-plugin-manager'
+
+- id: hmr
+  disabled: false
+  isolate:
+    profileContext: true

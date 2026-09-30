@@ -1,7 +1,7 @@
 /**
  * Process-private Host profile projection for Desktop ecosystem runtime ownership.
  * Persistence stays on the shared web profile; only this Host process resolves
- * ecosystem packages through Electron-bundled copies under userData.
+ * ecosystem packages through Electron-bundled copies through `$DSH_HOME/electron/host-profile`.
  */
 
 import {
@@ -18,6 +18,7 @@ import {
 import { dirname, join } from 'node:path'
 import {
   PROFILE_PATCH_FILENAME,
+  PROFILE_COMPATIBILITY_FILENAME,
   readProfileManifest,
   resolveProfileDir,
   writeProfileManifest,
@@ -85,6 +86,7 @@ export function prepareHostProfileProjection(
     })
   }
   syncOptionalProfileFile(join(webDir, PROFILE_PATCH_FILENAME), join(hostDir, PROFILE_PATCH_FILENAME))
+  syncOptionalProfileFile(join(webDir, PROFILE_COMPATIBILITY_FILENAME), join(hostDir, PROFILE_COMPATIBILITY_FILENAME))
   writeFileSync(join(hostDir, HOST_PROFILE_ROOT_FILENAME), HOST_PROFILE_ROOT_CONFIG)
   materializeHostNodeModules(webDir, hostDir, ecosystem)
   return hostDir

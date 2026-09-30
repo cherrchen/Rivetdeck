@@ -35,7 +35,8 @@
     "test:network-runtime": "cargo test --locked --manifest-path native/network-runtime/Cargo.toml && pnpm run prepare:network-runtime && vitest run --config vitest.network-runtime.config.ts",
     "package": "pnpm run prepare:toolchains && pnpm run prepare:network-runtime && electron-builder --publish never",
     "start": "pnpm run build && pnpm run prepare:toolchains && pnpm run prepare:network-runtime && env -u ELECTRON_RUN_AS_NODE electron .",
-    "test": "pnpm run build:runtime-plugins && vitest run --root ../.. apps/electron/tests"
+    "test": "pnpm run build:runtime-plugins && vitest run --root ../.. apps/electron/tests",
+    "test:ownership": "vitest run --config vitest.ownership.config.ts"
   },
   "dependencies": {
     "@deepseek-ai/cordis": "workspace:^",

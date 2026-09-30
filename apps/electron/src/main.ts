@@ -7,7 +7,7 @@
 import { readFileSync } from 'node:fs'
 import type { ChildProcessByStdio } from 'node:child_process'
 import type { Readable } from 'node:stream'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import {
   app,
   BrowserWindow,
@@ -400,6 +400,9 @@ app.on('before-quit', (event) => {
   }).finally(() => { app.quit() })
 })
 
+const userDataOverride = app.commandLine.getSwitchValue('user-data-dir')
+if (userDataOverride !== '') app.setPath('userData', resolve(userDataOverride))
+
 const primaryInstance = app.requestSingleInstanceLock()
 if (!primaryInstance) {
   app.quit()
@@ -474,7 +477,7 @@ if (!primaryInstance) {
       packaged: app.isPackaged,
       override: process.env.DSH_ELECTRON_NODE_BINARY,
     })
-    const harnessHome = resolveHarnessHome(app.getPath('home'))
+    const harnessHome = process.env.DSH_HOME ?? resolveHarnessHome(app.getPath('home'))
     const shim = prepareToolchainShims(harnessHome, toolchains, process.platform)
     const toolchainPolicy: DesktopToolchainPolicy = {
       version: 1,

@@ -1,0 +1,7 @@
+{
+  "name": "@dsh-test/ownership-plugin",
+  "version": "1.5.0",
+  "type": "module",
+  "exports": { ".": "./index.mjs", "./plugin": "./index.mjs" },
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } }
+}

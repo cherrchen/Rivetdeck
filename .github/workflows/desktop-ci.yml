@@ -74,6 +74,9 @@ jobs:
       - name: Test Electron runtime
         run: pnpm --filter @dsh-electron/dsh-electron test
 
+      - name: Test live plugin ownership
+        run: pnpm --filter @dsh-electron/dsh-electron test:ownership
+
       - name: Install GNOME development libraries
         run: sudo apt-get update && sudo apt-get install -y libglib2.0-dev libglib2.0-bin gsettings-desktop-schemas
 
@@ -132,6 +135,9 @@ jobs:
 
       - name: Test Electron runtime
         run: pnpm --filter @dsh-electron/dsh-electron test
+
+      - name: Test live plugin ownership
+        run: pnpm --filter @dsh-electron/dsh-electron test:ownership
 
       - name: Install GNOME development libraries
         run: sudo apt-get update && sudo apt-get install -y libglib2.0-dev libglib2.0-bin gsettings-desktop-schemas
