@@ -335,15 +335,17 @@ Desktop assembles its required runtime plugins from two sources: directories und
 
 ```text
 runtime/plugins/*          Desktop adapters, Electron carriers, and Desktop-only integration (build + link)
-node_modules/@dsh-electron/*  runtime plugins (dshElectron.runtimePlugins) and ecosystem plugins (dshElectron.ecosystemPlugins), prebuilt + link
+node_modules/@dsh-electron/*  runtime plugins (dshElectron.runtimePlugins) and ecosystem plugins (dshElectron.ecosystemPlugins)
 runtime/host.patch.yml     Host overlay: required Desktop plugins only
 scripts/build-runtime-plugins.mjs
-src/runtime-plugins.ts     discovery, validation, and profile linking
-src/ecosystem-profile.ts   seed ecosystem plugins into the web profile
+src/runtime-plugins.ts     discovery, validation, and required-plugin profile linking
+src/ecosystem-profile.ts   seed ecosystem plugins into the web profile as profile-owned installs
+src/host-profile.ts        process-private Host resolution projection for ecosystem packages
+src/host.ts                supervised Host entry with split persistence vs resolution dirs
 src/ownership-overlay.ts   generate ownership patches for current profile layers
 ```
 
-Startup validates and links every discovered plugin from those three sources into `$DSH_HOME/profiles/node_modules/<package-name>` and `$DSH_HOME/profiles/web/node_modules/<package-name>` before the supervised Host starts. `host.patch.yml` mounts required Desktop plugins. Ecosystem plugins such as Git are seeded into the web profile. The upstream Web profile manages enablement for those bundles and for subsequently installed plugins ([plugin lifecycle](plugin-lifecycle.md)).
+Startup validates and links **required runtime plugins** into `$DSH_HOME/profiles/node_modules/<package-name>` and `$DSH_HOME/profiles/web/node_modules/<package-name>` before the supervised Host starts. The shared dsh plugin package operation preinstalls missing ecosystem plugins once and repairs old Desktop links; Desktop does not write their shared installation state directly. The supervised Host resolves ecosystem packages through `$DSH_HOME/electron/host-profile`, which leaves shared profile packages untouched for concurrent CLI `dsh web`. `host.patch.yml` mounts required Desktop plugins. The web profile manages enablement for installed ecosystem bundles and subsequently installed plugins; after an ecosystem package is removed from that profile, the Desktop Host selects its bundled copy only in its private projection ([plugin lifecycle](plugin-lifecycle.md)).
 
 The Desktop Capabilities package (`@dsh-electron/dsh-electron-desktop-capabilities`) is the Desktop Client composition root. It adapts `window.deepseekDesktop` into `ctx.desktop` and mounts internal feature plugins. Only renderer infrastructure and this package read the global bridge directly.
 
@@ -351,13 +353,13 @@ The directory-picker feature fills workspace directory-flow slots and calls `ctx
 
 The brand feature always fills `sidebar.brand.mark`, `sidebar.brand.name`, and `conversation.hero.brand.mark` with DeepSeek Harness artwork, so Desktop does not depend on the upstream `DSH_CLIENT_BUILD_PROFILE=official` client build for product branding.
 
-The upstream Web bundle provides plugin management in its Plugins UI and agent tool. Electron Main supplies bundled pnpm on the supervised Host `PATH`; package operations remain with the upstream profile manager.
+The upstream Web bundle provides the Plugins UI and agent tool. Electron’s `DesktopPluginManager` reports the effective mixed runtime inventory: Electron-owned packages use bundled implementation, patches, and versions; ordinary user plugins use the shared web profile implementation. `DesktopRuntime` serializes external CLI changes and UI operations on the HMR queue, then waits for Loader settlement. Package persistence stays with upstream operations on the shared web profile; the private projection is disposable. See [plugin lifecycle](plugin-lifecycle.md).
 
 The [Network Settings page](network-settings.md) is an internal Desktop Client feature. It contributes a top-level `settings.section` entry and uses `ctx.desktop.network` for configuration, sanitized diagnostics, and connection tests; Main owns the policy, secrets, and restart. The native failure dialog can open this section without changing the selected route.
 
-Git (`@dsh-electron/dsh-plugin-git@0.2.3`) is a bundled ecosystem plugin installed only from npm. Its client occupies `ctx.sidebarRight` / `sidebarRightTabs` and is listed in `dshElectron.ecosystemPlugins`. Desktop seeds it into the shared web profile so the Plugins page shows it in Installed, where Enable and Disable persist.
+Git (`@dsh-electron/dsh-plugin-git@0.2.3`) is a bundled ecosystem plugin installed only from npm. Its client occupies `ctx.sidebarRight` / `sidebarRightTabs` and is listed in `dshElectron.ecosystemPlugins`. Desktop seeds a CLI copy into the shared web profile once. Electron Installed reports its resolved bundled version and source; Enable and Disable persist in the shared profile.
 
-Theme Studio (`@dsh-electron/dsh-theme-studio@0.1.2`) is a preinstalled ecosystem bundle listed in `dshElectron.ecosystemPlugins`. Its canonical source is `cherrchen/dsh-theme-studio`; this repository keeps no copy of it. The package registers **Settings → General → Themes** and calls `ctx.theme.overrideTokens()`; the upstream Plugins page lists its bundle under Installed. Its published peer declarations include `0.1.7-rc.2`.
+Theme Studio (`@dsh-electron/dsh-theme-studio@0.1.2`) is a preinstalled ecosystem bundle listed in `dshElectron.ecosystemPlugins`. Its canonical source is `cherrchen/dsh-theme-studio`; this repository keeps no copy of it. The package registers **Settings → General → Themes** and calls `ctx.theme.overrideTokens()`; Electron Installed lists its actual bundled runtime package. Its published peer declarations include `0.1.7-rc.2`.
 
 ```text
 Feature Plugin

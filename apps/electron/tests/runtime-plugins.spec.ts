@@ -1,5 +1,15 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readlinkSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -14,6 +24,7 @@ import {
 } from '../src/runtime-plugins.ts'
 
 const appPath = fileURLToPath(new URL('..', import.meta.url))
+const GIT = '@dsh-electron/dsh-plugin-git'
 
 describe('bundled Desktop plugin startup', () => {
   it('shares executable-miss errors with the Host subprocess package', () => {
@@ -38,7 +49,7 @@ describe('bundled Desktop plugin startup', () => {
     expect(output.trim()).toBe('missing shell recognized')
   })
 
-  it('links required adapters and the declared npm plugins into profile resolution', () => {
+  it('links required runtime adapters without taking over ecosystem packages', () => {
     const harnessHome = mkdtempSync(join(tmpdir(), 'dsh-electron-plugins-'))
     try {
       const runtime = discoverRuntimePluginDirectories(appPath)
@@ -49,18 +60,20 @@ describe('bundled Desktop plugin startup', () => {
         '@dsh-electron/dsh-electron-network-subprocess',
       ])
       expect(npmRuntime).toEqual([])
-      expect(ecosystem.map(plugin => plugin.name)).toEqual(['@dsh-electron/dsh-plugin-git', '@dsh-electron/dsh-theme-studio'])
+      expect(ecosystem.map(plugin => plugin.name)).toEqual([GIT, '@dsh-electron/dsh-theme-studio'])
       ensureRuntimePluginsLinked(appPath, harnessHome)
-      for (const plugin of [...runtime, ...npmRuntime, ...ecosystem]) {
+      for (const plugin of [...runtime, ...npmRuntime]) {
         expect(readlinkSync(profileModuleLinkPath(harnessHome, plugin.name))).toBe(plugin.rootPath)
         expect(readlinkSync(webProfileModuleLinkPath(harnessHome, plugin.name))).toBe(plugin.rootPath)
+      }
+      for (const plugin of ecosystem) {
+        expect(existsSync(profileModuleLinkPath(harnessHome, plugin.name))).toBe(false)
+        expect(existsSync(webProfileModuleLinkPath(harnessHome, plugin.name))).toBe(false)
       }
       const patch = readFileSync(join(appPath, 'runtime', 'host.patch.yml'), 'utf8')
       expect(patch).not.toContain('desktop-git')
       expect(patch).not.toContain("name: '@dsh-electron/dsh-plugin-git'")
       expect(patch).toContain("name: '@dsh-electron/dsh-electron-desktop-capabilities'")
-      expect(patch).not.toContain('desktop-ui-plugins')
-      expect(patch).not.toContain('cordis:include')
     } finally {
       rmSync(harnessHome, { recursive: true, force: true })
     }
@@ -73,19 +86,18 @@ describe('bundled Desktop plugin startup', () => {
     expect(plugin?.hasClient).toBe(true)
   })
 
-  it('preserves a real installed package directory and replaces its resolution path with a link', () => {
+  it('leaves a real profile-installed ecosystem package untouched', () => {
     const harnessHome = mkdtempSync(join(tmpdir(), 'dsh-electron-physical-'))
     try {
-      const link = webProfileModuleLinkPath(harnessHome, '@dsh-electron/dsh-plugin-git')
+      const link = webProfileModuleLinkPath(harnessHome, GIT)
       mkdirSync(link, { recursive: true })
       writeFileSync(join(link, 'marker.txt'), 'prior install')
+      writeFileSync(join(link, 'package.json'), JSON.stringify({ name: GIT, version: '9.9.9' }))
       ensureRuntimePluginsLinked(appPath, harnessHome)
-      const plugin = discoverEcosystemPluginPackages(appPath).find(item => item.name === '@dsh-electron/dsh-plugin-git')
-      expect(readlinkSync(link)).toBe(plugin?.rootPath)
-      const backup = readdirSync(join(harnessHome, 'profiles', 'web', 'node_modules', '@dsh-electron'))
-        .find(name => name.startsWith('dsh-plugin-git.desktop-replaced-'))
-      expect(backup).toBeDefined()
-      expect(existsSync(join(harnessHome, 'profiles', 'web', 'node_modules', '@dsh-electron', backup!, 'marker.txt'))).toBe(true)
+      expect(lstatSync(link).isSymbolicLink()).toBe(false)
+      expect(readFileSync(join(link, 'marker.txt'), 'utf8')).toBe('prior install')
+      expect(readdirSync(join(harnessHome, 'profiles', 'web', 'node_modules', '@dsh-electron'))
+        .some(name => name.startsWith('dsh-plugin-git.desktop-replaced-'))).toBe(false)
     } finally {
       rmSync(harnessHome, { recursive: true, force: true })
     }

@@ -9,6 +9,7 @@ import {
   parseHarnessReadyUrl,
   resolveDshBin,
   resolveHarnessHome,
+  resolveHostModule,
   resolveHostRuntime,
   scanHarnessStartupChunk,
   spawnHarnessChild,
@@ -26,32 +27,21 @@ describe('Electron Harness runtime', () => {
     )
   })
 
-  it('enables Node internals for the upstream config watcher', () => {
-    expect(harnessArguments('/app/dsh.js')).toEqual([
-      '--expose-internals', '/app/dsh.js', 'web', '--port', '0', '--no-open',
+  it('resolves the Desktop Host module below the application root', () => {
+    expect(resolveHostModule('/app/root').replaceAll('\\', '/')).toBe('/app/root/lib/host.js')
+  })
+
+  it('launches the Desktop Host entry with the ownership overlay', () => {
+    expect(harnessArguments('/app', '/app/lib/host.js', '/data/overlay.yml')).toEqual([
+      '--expose-internals',
+      '/app/lib/host.js',
+      '/app',
+      '/data/overlay.yml',
+      '--',
+      '--port',
+      '0',
+      '--no-open',
     ])
-    expect(harnessArguments('/path/to/dsh')).toEqual(
-      [
-        '--expose-internals',
-        '/path/to/dsh',
-        'web',
-        '--port',
-        '0',
-        '--no-open',
-      ],
-    )
-    expect(harnessArguments('C:\\app\\dsh\\bin.js', 'C:\\data\\picker.yml')).toEqual(
-      [
-        '--expose-internals',
-        'C:\\app\\dsh\\bin.js',
-        'web',
-        '--patch',
-        'C:\\data\\picker.yml',
-        '--port',
-        '0',
-        '--no-open',
-      ],
-    )
   })
 
   it('parses the upstream readiness line after preceding output', () => {

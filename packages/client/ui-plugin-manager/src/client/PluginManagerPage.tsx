@@ -539,7 +539,7 @@ function PackageDetail({
         actions={(
           <div className={css.detailActions}>
             {renderSlot('plugins.detail.actions', { subject })}
-            {pkg.installed
+            {pkg.removable
               ? (
                 <Button
                   variant="outline"

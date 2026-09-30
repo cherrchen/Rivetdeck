@@ -1,125 +1,138 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readlinkSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
-import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
-import {
-  initProfile,
-  PROFILE_TEMPLATES,
-  readProfileManifest,
-  resolveProfileDir,
-  writeProfileManifest,
-} from '@deepseek-ai/dsh-app-boot'
-import { prepareEcosystemProfile, WEB_PROFILE_NAME } from '../src/ecosystem-profile.ts'
-import { webProfileModuleLinkPath } from '../src/runtime-plugins.ts'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { initProfile, PROFILE_TEMPLATES, readProfileManifest, resolveProfileDir, writeProfileManifest } from '@deepseek-ai/dsh-app-boot'
+import { runPluginCommand } from '@deepseek-ai/dsh-plugin-manager/operations'
+import { hasLegacyDesktopLink, prepareEcosystemProfile, WEB_PROFILE_NAME } from '../src/ecosystem-profile.ts'
+import { prepareHostProfileProjection, resolveHostProfileDir } from '../src/host-profile.ts'
+import { discoverEcosystemPluginPackages } from '../src/runtime-plugins.ts'
+
+vi.mock('@deepseek-ai/dsh-plugin-manager/operations', () => ({ runPluginCommand: vi.fn() }))
 
 const appPath = fileURLToPath(new URL('..', import.meta.url))
 const GIT = '@dsh-electron/dsh-plugin-git'
 const THEME = '@dsh-electron/dsh-theme-studio'
+const manager = { command: '/bundled/node', args: ['/bundled/pnpm.cjs'], env: { PATH: '/bundled' } }
+const packageResult = { exitCode: 0, output: '', truncated: false, logPath: '/tmp/pnpm.log' }
+const operation = vi.mocked(runPluginCommand)
 
-describe('ecosystem web profile seed', () => {
-  it('enables a new ecosystem dependency on first seed', async () => {
-    const home = mkdtempSync(join(tmpdir(), 'dsh-electron-seed-new-'))
+beforeEach(() => { operation.mockReset(); operation.mockResolvedValue(packageResult) })
+
+function fixture(): { home: string; dir: string } {
+  const home = mkdtempSync(join(tmpdir(), 'dsh-electron-ecosystem-'))
+  return { home, dir: resolveProfileDir(WEB_PROFILE_NAME, home) }
+}
+
+function profileWithGit(dir: string, version: string, enabled: boolean): void {
+  const template = PROFILE_TEMPLATES[WEB_PROFILE_NAME]
+  if (template === undefined) throw new Error('web template missing')
+  initProfile(dir, template.bundles)
+  const manifest = readProfileManifest('dsh', dir)
+  writeProfileManifest(dir, {
+    ...manifest,
+    dependencies: { ...manifest.dependencies, [GIT]: version, [THEME]: '0.1.2' },
+    dsh: { ...manifest.dsh, profile: { ...manifest.dsh?.profile, bundles: [
+      ...(manifest.dsh?.profile?.bundles ?? []), ...enabled ? [GIT] : [],
+    ] } },
+  })
+  const theme = join(dir, 'node_modules', ...THEME.split('/'))
+  mkdirSync(theme, { recursive: true })
+  writeFileSync(join(theme, 'package.json'), JSON.stringify({ name: THEME, version: '0.1.2' }))
+}
+
+describe('ecosystem profile ownership', () => {
+  it('asks the shared dsh plugin operation to preinstall missing packages once', async () => {
+    const { home, dir } = fixture()
     try {
-      await prepareEcosystemProfile(appPath, home)
-      const manifest = readProfileManifest('dsh', resolveProfileDir(WEB_PROFILE_NAME, home))
-      expect(manifest.dependencies?.[GIT]).toBe('0.2.3')
-      expect(manifest.dsh?.profile?.bundles).toContain(GIT)
-      expect(manifest.dependencies?.[THEME]).toBe('0.1.2')
-      expect(manifest.dsh?.profile?.bundles).toContain(THEME)
-    } finally {
-      rmSync(home, { recursive: true, force: true })
-    }
+      operation.mockImplementation(async () => {
+        profileWithGit(dir, '0.2.3', true)
+        const git = join(dir, 'node_modules', ...GIT.split('/'))
+        mkdirSync(git, { recursive: true })
+        writeFileSync(join(git, 'package.json'), JSON.stringify({ name: GIT, version: '0.2.3' }))
+        return packageResult
+      })
+      await prepareEcosystemProfile(appPath, home, manager)
+      expect(operation).toHaveBeenCalledWith(expect.objectContaining({ profile: WEB_PROFILE_NAME, home }), [
+        'add', `${GIT}@0.2.3`, `${THEME}@0.1.2`,
+      ], expect.objectContaining({ ...manager, execution: 'service' }))
+      expect(readProfileManifest('dsh', dir).dependencies?.[GIT]).toBe('0.2.3')
+      expect(existsSync(join(home, 'electron', 'ecosystem-preinstalled'))).toBe(true)
+      operation.mockClear()
+      await prepareEcosystemProfile(appPath, home, manager)
+      expect(operation).not.toHaveBeenCalled()
+    } finally { rmSync(home, { recursive: true, force: true }) }
   })
 
-  it('does not change bundles when the dependency already exists', async () => {
-    const home = mkdtempSync(join(tmpdir(), 'dsh-electron-seed-keep-'))
+  it('does not record a completed preinstall when the package operation fails', async () => {
+    const { home } = fixture()
     try {
-      const dir = resolveProfileDir(WEB_PROFILE_NAME, home)
+      operation.mockResolvedValue({ ...packageResult, exitCode: 1, output: 'registry unavailable' })
+      await expect(prepareEcosystemProfile(appPath, home, manager)).rejects.toThrow('registry unavailable')
+      expect(existsSync(join(home, 'electron', 'ecosystem-preinstalled'))).toBe(false)
+    } finally { rmSync(home, { recursive: true, force: true }) }
+  })
+
+  it('keeps the profile version and disabled activation while Desktop resolves its bundled copy', async () => {
+    const { home, dir } = fixture()
+    try {
+      profileWithGit(dir, '0.3.1', false)
+      const profileGit = join(dir, 'node_modules', ...GIT.split('/'))
+      mkdirSync(profileGit, { recursive: true })
+      writeFileSync(join(profileGit, 'package.json'), JSON.stringify({ name: GIT, version: '0.3.1' }))
+      await prepareEcosystemProfile(appPath, home, manager)
+      expect(operation).not.toHaveBeenCalled()
+      expect(readProfileManifest('dsh', dir).dsh?.profile?.bundles).not.toContain(GIT)
+      const hostDir = prepareHostProfileProjection(appPath, home)
+      const plugin = discoverEcosystemPluginPackages(appPath).find(item => item.name === GIT)
+      expect(plugin).toBeDefined()
+      expect(hostDir).toBe(resolveHostProfileDir(home))
+      expect(readlinkSync(join(hostDir!, 'node_modules', ...GIT.split('/')))).toBe(plugin!.rootPath)
+      expect(readProfileManifest('dsh', profileGit).version).toBe('0.3.1')
+    } finally { rmSync(home, { recursive: true, force: true }) }
+  })
+
+  it('repairs an old Desktop link through the package manager', async () => {
+    const { home, dir } = fixture()
+    try {
+      profileWithGit(dir, '0.3.1', true)
+      const plugin = discoverEcosystemPluginPackages(appPath).find(item => item.name === GIT)
+      if (plugin === undefined) throw new Error('Git plugin missing')
+      const oldApp = join(home, 'electron', 'previous-app')
+      const oldCopy = join(oldApp, 'node_modules', ...GIT.split('/'))
+      mkdirSync(dirname(oldCopy), { recursive: true })
+      writeFileSync(join(oldApp, 'package.json'), JSON.stringify({ dshElectron: { ecosystemPlugins: [GIT] } }))
+      cpSync(realpathSync(plugin.rootPath), oldCopy, { recursive: true })
+      const profileGit = join(dir, 'node_modules', ...GIT.split('/'))
+      mkdirSync(dirname(profileGit), { recursive: true })
+      symlinkSync(oldCopy, profileGit, 'junction')
+      expect(hasLegacyDesktopLink(dir, plugin)).toBe(true)
+      rmSync(oldApp, { recursive: true, force: true })
+      expect(hasLegacyDesktopLink(dir, plugin)).toBe(true)
+      operation.mockImplementation(async (_context, args) => {
+        expect(args).toEqual(['add', `${GIT}@0.3.1`, '--force'])
+        unlinkSync(profileGit)
+        cpSync(realpathSync(plugin.rootPath), profileGit, { recursive: true })
+        return packageResult
+      })
+      await prepareEcosystemProfile(appPath, home, manager)
+      expect(operation).toHaveBeenCalledOnce()
+      expect(lstatSync(profileGit).isSymbolicLink()).toBe(false)
+      expect(readProfileManifest('dsh', dir).dependencies?.[GIT]).toBe('0.3.1')
+    } finally { rmSync(home, { recursive: true, force: true }) }
+  })
+
+  it('does not reinstall a package after the user uninstalls it', async () => {
+    const { home, dir } = fixture()
+    try {
       const template = PROFILE_TEMPLATES[WEB_PROFILE_NAME]
       if (template === undefined) throw new Error('web template missing')
       initProfile(dir, template.bundles)
-      const before = readProfileManifest('dsh', dir)
-      writeProfileManifest(dir, {
-        ...before,
-        dependencies: { ...before.dependencies, [GIT]: '0.2.3', [THEME]: '0.1.2' },
-        dsh: { ...before.dsh, profile: { ...before.dsh?.profile, bundles: [...(before.dsh?.profile?.bundles ?? [])] } },
-      })
-      const bundlesBefore = readProfileManifest('dsh', dir).dsh?.profile?.bundles ?? []
-      expect(bundlesBefore).not.toContain(GIT)
-      await prepareEcosystemProfile(appPath, home)
-      const after = readProfileManifest('dsh', dir)
-      expect(after.dependencies?.[GIT]).toBe('0.2.3')
-      expect(after.dsh?.profile?.bundles).toEqual(bundlesBefore)
-    } finally {
-      rmSync(home, { recursive: true, force: true })
-    }
-  })
-
-  it('re-seeds and enables after uninstall removes the dependency', async () => {
-    const home = mkdtempSync(join(tmpdir(), 'dsh-electron-seed-re-'))
-    try {
-      await prepareEcosystemProfile(appPath, home)
-      const dir = resolveProfileDir(WEB_PROFILE_NAME, home)
-      const installed = readProfileManifest('dsh', dir)
-      const { [GIT]: _removed, ...dependencies } = installed.dependencies ?? {}
-      writeProfileManifest(dir, {
-        ...installed,
-        dependencies,
-        dsh: {
-          ...installed.dsh,
-          profile: {
-            ...installed.dsh?.profile,
-            bundles: (installed.dsh?.profile?.bundles ?? []).filter(name => name !== GIT),
-          },
-        },
-      })
-      mkdirSync(join(dir, 'node_modules'), { recursive: true })
-      await prepareEcosystemProfile(appPath, home)
-      const restored = readProfileManifest('dsh', dir)
-      expect(restored.dependencies?.[GIT]).toBe('0.2.3')
-      expect(restored.dsh?.profile?.bundles).toContain(GIT)
-    } finally {
-      rmSync(home, { recursive: true, force: true })
-    }
-  })
-
-  it('waits for a profile package operation before repairing links and seeding', async () => {
-    const home = mkdtempSync(join(tmpdir(), 'dsh-electron-seed-locked-'))
-    const dir = resolveProfileDir(WEB_PROFILE_NAME, home)
-    const template = PROFILE_TEMPLATES[WEB_PROFILE_NAME]
-    if (template === undefined) throw new Error('web template missing')
-    initProfile(dir, template.bundles)
-    let release!: () => void
-    let acquired!: () => void
-    const held = new Promise<void>((resolve) => { release = resolve })
-    const ready = new Promise<void>((resolve) => { acquired = resolve })
-    const holder = withFileLock(join(dir, 'package.json'), async () => {
-      acquired()
-      await held
-    })
-    let preparation: Promise<void> | undefined
-    try {
-      await ready
-      preparation = prepareEcosystemProfile(appPath, home)
-      expect(existsSync(webProfileModuleLinkPath(home, GIT))).toBe(false)
-      const manifest = readProfileManifest('dsh', dir)
-      await writeFileAtomic(join(dir, 'package.json'), JSON.stringify({
-        ...manifest,
-        dependencies: { ...manifest.dependencies, 'fixture-package': '1.0.0' },
-      }, undefined, 2) + '\n', { mode: 0o600 })
-      release()
-      await holder
-      await preparation
-      const seeded = readProfileManifest('dsh', dir)
-      expect(seeded.dependencies?.['fixture-package']).toBe('1.0.0')
-      expect(seeded.dependencies?.[GIT]).toBe('0.2.3')
-      expect(existsSync(webProfileModuleLinkPath(home, GIT))).toBe(true)
-    } finally {
-      release()
-      await Promise.allSettled([holder, ...(preparation === undefined ? [] : [preparation])])
-      rmSync(home, { recursive: true, force: true })
-    }
+      mkdirSync(join(home, 'electron'), { recursive: true })
+      writeFileSync(join(home, 'electron', 'ecosystem-preinstalled'), 'done\n')
+      await prepareEcosystemProfile(appPath, home, manager)
+      expect(operation).not.toHaveBeenCalled()
+    } finally { rmSync(home, { recursive: true, force: true }) }
   })
 })

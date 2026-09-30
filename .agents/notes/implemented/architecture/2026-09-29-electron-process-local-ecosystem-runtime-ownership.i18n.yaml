@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-09-29-electron-process-local-ecosystem-runtime-ownership.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-29-electron-process-local-ecosystem-runtime-ownership.md
+/agent-note-electron-ecosystem-runtime-ownership-is-process-local:
+  en: 5f7d8bbb359c9411
+  zh: d7c19d95c97bd653
+/agent-note-electron-ecosystem-runtime-ownership-is-process-local/problem:
+  en: 61ac2a1dbd444e62
+  zh: 219bbbb2896a8519
+/agent-note-electron-ecosystem-runtime-ownership-is-process-local/decision:
+  en: 40c545b1c60e8c2d
+  zh: f4224f38ed80e63d
+/agent-note-electron-ecosystem-runtime-ownership-is-process-local/alternatives-considered:
+  en: 08c3de6954ec8a13
+  zh: 780011e7c8352da7
+/agent-note-electron-ecosystem-runtime-ownership-is-process-local/consequences:
+  en: 12d5cabf2d700335
+  zh: 1295c838e6f0a864

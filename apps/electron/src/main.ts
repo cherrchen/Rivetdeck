@@ -7,7 +7,7 @@
 import { readFileSync } from 'node:fs'
 import type { ChildProcessByStdio } from 'node:child_process'
 import type { Readable } from 'node:stream'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import {
   app,
   BrowserWindow,
@@ -51,7 +51,7 @@ import { prepareHostRuntimeOverlay } from './runtime-overlay.ts'
 import {
   HARNESS_START_TIMEOUT_MS,
   harnessArguments,
-  resolveDshBin,
+  resolveHostModule,
   resolveHarnessHome,
   resolveHostRuntime,
   scanHarnessStartupChunk,
@@ -98,10 +98,10 @@ const desktop = new DesktopServices({
 
 registerRendererScheme()
 
-/** Start dsh and resolve only after its complete Web composition is ready. */
+/** Start the Desktop Host and resolve only after its complete Web composition is ready. */
 async function startHarness(
   runtime: HostRuntime,
-  dshBin: string,
+  appPath: string,
   harnessHome: string,
   hostPatch: string,
   envPath: string,
@@ -110,17 +110,21 @@ async function startHarness(
   const activeNetwork = network
   if (activeNetwork === undefined) throw new Error('desktop network: controller is unavailable')
   const agentPolicy = activeNetwork.agentProxyPolicyForHost(process.env)
-  const child = spawnHarnessChild(runtime.executable, harnessArguments(dshBin, hostPatch), {
-    cwd: app.getPath('home'),
-    env: activeNetwork.environmentForHarness({
-      ...process.env,
-      DSH_HOME: harnessHome,
-      ...runtime.env,
-      PATH: envPath,
-      DSH_ELECTRON_AGENT_PROXY_POLICY: agentPolicy,
-      DSH_ELECTRON_TOOLCHAIN_POLICY: JSON.stringify(toolchainPolicy),
-    }),
-  })
+  const child = spawnHarnessChild(
+    runtime.executable,
+    harnessArguments(appPath, resolveHostModule(appPath), hostPatch),
+    {
+      cwd: app.getPath('home'),
+      env: activeNetwork.environmentForHarness({
+        ...process.env,
+        DSH_HOME: harnessHome,
+        ...runtime.env,
+        PATH: envPath,
+        DSH_ELECTRON_AGENT_PROXY_POLICY: agentPolicy,
+        DSH_ELECTRON_TOOLCHAIN_POLICY: JSON.stringify(toolchainPolicy),
+      }),
+    },
+  )
 
   return await new Promise((resolve, reject) => {
     const scan: HarnessStartupScan = { output: '', settled: false }
@@ -396,6 +400,9 @@ app.on('before-quit', (event) => {
   }).finally(() => { app.quit() })
 })
 
+const userDataOverride = app.commandLine.getSwitchValue('user-data-dir')
+if (userDataOverride !== '') app.setPath('userData', resolve(userDataOverride))
+
 const primaryInstance = app.requestSingleInstanceLock()
 if (!primaryInstance) {
   app.quit()
@@ -470,7 +477,7 @@ if (!primaryInstance) {
       packaged: app.isPackaged,
       override: process.env.DSH_ELECTRON_NODE_BINARY,
     })
-    const harnessHome = resolveHarnessHome(app.getPath('home'))
+    const harnessHome = process.env.DSH_HOME ?? resolveHarnessHome(app.getPath('home'))
     const shim = prepareToolchainShims(harnessHome, toolchains, process.platform)
     const toolchainPolicy: DesktopToolchainPolicy = {
       version: 1,
@@ -484,13 +491,18 @@ if (!primaryInstance) {
       pythonUserBinDirectory: shim.pythonUserBinDirectory,
     }
     await migrateLegacyPluginState(harnessHome)
-    await prepareEcosystemProfile(appPath, harnessHome)
-    const overlay = await prepareHostRuntimeOverlay(appPath, userDataPath, harnessHome)
+    const pnpmBin = resolveBundledPnpmBin(appPath)
     const packageManager = preparePluginPackageManager(
       harnessHome,
       toolchains.node.executable,
-      resolveBundledPnpmBin(appPath),
+      pnpmBin,
     )
+    await prepareEcosystemProfile(appPath, harnessHome, {
+      command: toolchains.node.executable,
+      args: [pnpmBin],
+      env: { PATH: packageManager.envPath },
+    })
+    const overlay = await prepareHostRuntimeOverlay(appPath, userDataPath, harnessHome)
     installDesktopIpc(
       transport,
       desktop,
@@ -498,7 +510,7 @@ if (!primaryInstance) {
     )
     const started = await startHarness(
       hostRuntime,
-      resolveDshBin(appPath),
+      appPath,
       harnessHome,
       overlay.patchPath,
       packageManager.envPath,

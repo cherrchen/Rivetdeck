@@ -127,6 +127,35 @@ export function resolveHarnessHome(userHome: string): string {
 }
 
 /**
+ * Build the Node-compatible child arguments for the Desktop Host entry.
+ * @param appPath - Electron application root.
+ * @param hostModule - Absolute path to the built Desktop Host module.
+ * @param patchPath - Ownership overlay patch path.
+ * @returns Electron child-mode arguments for a random-port Web launch.
+ */
+export function harnessArguments(appPath: string, hostModule: string, patchPath: string): string[] {
+  return [
+    '--expose-internals',
+    hostModule,
+    appPath,
+    patchPath,
+    '--',
+    '--port',
+    '0',
+    '--no-open',
+  ]
+}
+
+/**
+ * Resolve the packaged Desktop Host module below Electron's application root.
+ * @param appPath - Electron application root.
+ * @returns Absolute path of the compiled Host entry.
+ */
+export function resolveHostModule(appPath: string): string {
+  return join(appPath, 'lib', 'host.js')
+}
+
+/**
  * Resolve the packaged dsh executable module below Electron's application root.
  * @param appPath - Electron application root, including an app.asar path in production.
  * @returns Absolute path accepted by Electron's Node-compatible child mode.
@@ -143,28 +172,6 @@ export function resolveDshBin(appPath: string): string {
  */
 export function resolveDshInstallAnchor(appPath: string): string {
   return join(appPath, 'node_modules', '@deepseek-ai', 'dsh', 'package.json')
-}
-
-/**
- * Build the Node-compatible child arguments required by upstream config HMR.
- * @param dshBin - Absolute path to the packaged dsh executable module.
- * @param patchPath - overlay patch path before Web launch.
- * @returns Electron child-mode arguments for a random-port Web launch.
- */
-export function harnessArguments(dshBin: string, patchPath?: string): string[] {
-  const args = [
-    '--expose-internals',
-    dshBin,
-    'web',
-  ]
-
-  if (patchPath !== undefined) {
-    args.push('--patch', patchPath)
-  }
-
-  args.push('--port', '0', '--no-open')
-
-  return args
 }
 
 /** Bytes of Host stdout retained while waiting for the readiness line. */

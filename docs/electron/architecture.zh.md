@@ -335,15 +335,17 @@ Desktop 从两处汇集其所需的 runtime 插件：`apps/electron/runtime/plug
 
 ```text
 runtime/plugins/*          Desktop adapters, Electron carriers, and Desktop-only integration (build + link)
-node_modules/@dsh-electron/*  runtime plugins (dshElectron.runtimePlugins) and ecosystem plugins (dshElectron.ecosystemPlugins), prebuilt + link
+node_modules/@dsh-electron/*  runtime plugins (dshElectron.runtimePlugins) and ecosystem plugins (dshElectron.ecosystemPlugins)
 runtime/host.patch.yml     Host overlay: required Desktop plugins only
 scripts/build-runtime-plugins.mjs
-src/runtime-plugins.ts     discovery, validation, and profile linking
-src/ecosystem-profile.ts   seed ecosystem plugins into the web profile
+src/runtime-plugins.ts     discovery, validation, and required-plugin profile linking
+src/ecosystem-profile.ts   seed ecosystem plugins into the web profile as profile-owned installs
+src/host-profile.ts        process-private Host resolution projection for ecosystem packages
+src/host.ts                supervised Host entry with split persistence vs resolution dirs
 src/ownership-overlay.ts   generate ownership patches for current profile layers
 ```
 
-启动时先校验这三个来源发现的每个插件，再将其链接到 `$DSH_HOME/profiles/node_modules/<package-name>` 与 `$DSH_HOME/profiles/web/node_modules/<package-name>`，然后启动受监督 Host。`host.patch.yml` 挂载必需的 Desktop 插件。Git 等 ecosystem 插件被 seed 进 web profile。这些 bundle 以及之后安装的插件由上游 Web profile 管理启用状态（[插件生命周期](plugin-lifecycle.zh.md)）。
+启动时先校验并仅将 **required runtime 插件** 链接到 `$DSH_HOME/profiles/node_modules/<package-name>` 与 `$DSH_HOME/profiles/web/node_modules/<package-name>`，然后启动受监督 Host。共享的 dsh plugin 包操作首次预装缺失的 ecosystem 插件并修复旧版 Desktop 链接；Desktop 不直接写入它们的共享安装状态。受监督 Host 通过 `$DSH_HOME/electron/host-profile` 解析 ecosystem 包，共享 profile 包保持不变，以便并发 CLI `dsh web` 使用。`host.patch.yml` 挂载必需的 Desktop 插件。web profile 管理已安装 ecosystem bundle 和后续安装插件的启用状态；从 profile 卸载 ecosystem 包后，Desktop Host 仅在私有投影中选择其随包副本（[插件生命周期](plugin-lifecycle.zh.md)）。
 
 Desktop Capabilities 包（`@dsh-electron/dsh-electron-desktop-capabilities`）是 Desktop Client 的 composition root。它把 `window.deepseekDesktop` 适配为 `ctx.desktop`，并挂载内部 feature 插件。只有 Renderer 基础设施与该包可直接读取全局 bridge。
 
@@ -351,13 +353,13 @@ Desktop Capabilities 包（`@dsh-electron/dsh-electron-desktop-capabilities`）�
 
 品牌 feature 始终用 DeepSeek Harness 视觉填充 `sidebar.brand.mark`、`sidebar.brand.name` 与 `conversation.hero.brand.mark`，因此 Desktop 产品品牌不依赖上游 `DSH_CLIENT_BUILD_PROFILE=official` client 构建。
 
-上游 Web bundle 在 Plugins UI 和 agent tool 中提供插件管理。Electron Main 将随包 pnpm 加入受监督 Host 的 `PATH`；package 操作由上游 profile manager 执行。
+上游 Web bundle 提供 Plugins UI 与 agent tool。Electron 的 `DesktopPluginManager` 报告有效混合运行时清单：Electron-owned 包使用随包 implementation、patch 与版本；普通用户插件使用共享 web profile implementation。`DesktopRuntime` 在 HMR 队列上串行协调外部 CLI 变更与 UI 操作，并等待 Loader 稳定。包持久化仍由共享 web profile 上的上游操作负责；私有投影可丢弃。参见[插件生命周期](plugin-lifecycle.zh.md)。
 
 [网络设置页面](network-settings.zh.md) 是内部 Desktop Client feature。它贡献顶层 `settings.section` 条目，并通过 `ctx.desktop.network` 配置网络、读取脱敏诊断及运行连接测试；Main 持有策略、密码和重启操作。原生故障对话框可以打开此分区，而不改变已选择的路由。
 
-Git（`@dsh-electron/dsh-plugin-git@0.2.3`）是仅从 npm 安装的 bundled ecosystem 插件。其 Client 占用 `ctx.sidebarRight` / `sidebarRightTabs`，并列入 `dshElectron.ecosystemPlugins`。Desktop 把它 seed 进共享 web profile，因此 Plugins 页在 Installed 中展示它，Enable 与 Disable 在此持久保存。
+Git（`@dsh-electron/dsh-plugin-git@0.2.3`）是仅从 npm 安装的 bundled ecosystem 插件。其 Client 占用 `ctx.sidebarRight` / `sidebarRightTabs`，并列入 `dshElectron.ecosystemPlugins`。Desktop 首次将 CLI 副本 seed 进共享 web profile。Electron Installed 报告其实际解析的随包版本与来源；Enable 与 Disable 持久保存在共享 profile。
 
-Theme Studio（`@dsh-electron/dsh-theme-studio@0.1.2`）是列入 `dshElectron.ecosystemPlugins` 的预装 ecosystem bundle。其源码真源是 `cherrchen/dsh-theme-studio`；本仓库不保留其任何副本。该包注册**设置 → 通用 → 主题**，并调用 `ctx.theme.overrideTokens()`；上游 Plugins 页在 Installed 下展示它的 bundle。已发布的 peer 声明包含 `0.1.7-rc.2`。
+Theme Studio（`@dsh-electron/dsh-theme-studio@0.1.2`）是列入 `dshElectron.ecosystemPlugins` 的预装 ecosystem bundle。其源码真源是 `cherrchen/dsh-theme-studio`；本仓库不保留其任何副本。该包注册**设置 → 通用 → 主题**，并调用 `ctx.theme.overrideTokens()`；Electron Installed 列出其实际随包运行时 package。已发布的 peer 声明包含 `0.1.7-rc.2`。
 
 ```text
 Feature Plugin

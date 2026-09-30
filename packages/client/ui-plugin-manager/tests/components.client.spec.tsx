@@ -32,6 +32,7 @@ function pkg(overrides: Partial<PackageView> = {}): PackageView {
     name: 'dsh-better-sidebar',
     version: '0.16.0',
     installed: true,
+    removable: overrides.installed !== false,
     optional: false,
     enabled: true,
     rows: [],
@@ -718,7 +719,7 @@ describe('PluginManagerPage', () => {
     })
 
     it('leaves the version out of a bundle the Host reports none for', () => {
-      const unversioned: PackageView = { name: 'dsh-better-sidebar', installed: true, optional: false, enabled: true, rows: [] }
+      const unversioned: PackageView = { name: 'dsh-better-sidebar', installed: true, removable: true, optional: false, enabled: true, rows: [] }
       renderTab({ packages: [unversioned] }, {}, bodies)
       fireEvent.click(screen.getByRole('button', { name: en.openDetail.replace('{name}', 'dsh-better-sidebar') }))
       expect(subjects.at(-1)).toEqual({ kind: 'bundle', pkg: { name: 'dsh-better-sidebar', installed: true, enabled: true, rows: [] } })
@@ -748,6 +749,13 @@ describe('PluginManagerPage', () => {
     expect(actions.editInstallSpec).toHaveBeenCalledExactlyOnceWith(en.installGuideIdExample)
     fireEvent.click(screen.getByRole('button', { name: en.installGuideHide }))
     expect(screen.queryByText(en.installGuideIdHint)).toBeNull()
+  })
+
+  it('keeps an effective package toggleable when the Host forbids removal', () => {
+    renderTab({ packages: [pkg({ installed: true, removable: false })] })
+    fireEvent.click(screen.getByRole('button', { name: en.openDetail.replace('{name}', 'dsh-better-sidebar') }))
+    expect(screen.queryByRole('button', { name: en.uninstallLabel.replace('{name}', 'dsh-better-sidebar') })).toBeNull()
+    expect(screen.getByRole('switch', { name: en.enableToggle.replace('{name}', 'dsh-better-sidebar') })).toHaveProperty('disabled', false)
   })
 
   it('opens a bundle\'s page with its facts and rows, and uninstalls from it', () => {

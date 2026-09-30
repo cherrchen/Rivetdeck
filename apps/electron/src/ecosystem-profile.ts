@@ -1,116 +1,117 @@
-/**
- * Seed Desktop-preinstalled ecosystem plugins into the shared web profile.
- * A new dependency is enabled; an existing dependency keeps its bundle selection.
- */
+/** Prepare the shared web profile through the same package operation as `dsh plugin`. */
 
-import { existsSync, mkdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
-import {
-  initProfile,
-  PROFILE_TEMPLATES,
-  readProfileManifest,
-  resolveProfileDir,
-  type ProfileManifest,
-} from '@deepseek-ai/dsh-app-boot'
-import { discoverEcosystemPluginPackages, ensureRuntimePluginsLinked } from './runtime-plugins.ts'
+import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync } from 'node:fs'
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
+import { runPluginCommand, type PackageOperationOptions } from '@deepseek-ai/dsh-plugin-manager/operations'
+import { readProfileManifest, resolveProfileDir } from '@deepseek-ai/dsh-app-boot'
+import { discoverEcosystemPluginPackages, ensureRuntimePluginsLinked, type RuntimePluginManifest } from './runtime-plugins.ts'
+import { resolveDshInstallAnchor } from './runtime.ts'
 
-/** Profile name the supervised `dsh web` process loads. */
+/** Profile name the supervised Host and CLI share for persistence. */
 export const WEB_PROFILE_NAME = 'web'
 
-/** Diagnostic prefix shared with the supervised CLI. */
-const BIN_NAME = 'dsh'
+const SEED_MARKER = join('electron', 'ecosystem-preinstalled')
 
-interface ElectronAppManifest {
-  dependencies?: Record<string, string>
-}
+/** Package runner supplied by Electron's bundled Node and pnpm. */
+export type EcosystemPackageManager = Pick<PackageOperationOptions, 'command' | 'args' | 'env'>
 
 /**
- * Restore Desktop-owned package links and seed the web profile under the same
- * package lock used by CLI and Plugin Manager operations.
- * @param appPath - Electron application root holding `dshElectron.ecosystemPlugins`.
+ * Preinstall ecosystem packages once and repair links left by older Desktop releases.
+ * Ecosystem installation files are changed only by the shared `dsh plugin` operation.
+ * Existing dependency versions and disabled bundle selections are retained.
+ * @param appPath - Electron application root holding ecosystem packages.
  * @param harnessHome - Active `$DSH_HOME`.
+ * @param packageManager - Bundled package-manager invocation.
  */
-export async function prepareEcosystemProfile(appPath: string, harnessHome: string): Promise<void> {
+export async function prepareEcosystemProfile(
+  appPath: string,
+  harnessHome: string,
+  packageManager: EcosystemPackageManager,
+): Promise<void> {
   const dir = resolveProfileDir(WEB_PROFILE_NAME, harnessHome)
-  // The profile can be absent on first launch; the lock's parent must exist.
   mkdirSync(dir, { recursive: true })
-  await withFileLock(join(dir, 'package.json'), async () => {
-    ensureRuntimePluginsLinked(appPath, harnessHome)
-    await seedEcosystemProfile(appPath, dir)
-  })
-}
-
-/**
- * Ensure the web profile lists each Desktop ecosystem plugin as a pinned dependency.
- * A missing profile is initialized from the shipped web template. A name that is
- * not yet a dependency is pinned to the Desktop application version and appended
- * to `dsh.profile.bundles` (enabled). A name already in `dependencies` is left
- * unchanged, including a user Disable that removed it from `bundles`.
- * Uninstall drops the dependency; the next Desktop boot seeds it again and enables it.
- * @param appPath - Electron application root holding `dshElectron.ecosystemPlugins`.
- * @param dir - Locked web profile directory.
- */
-async function seedEcosystemProfile(appPath: string, dir: string): Promise<void> {
-  const template = PROFILE_TEMPLATES[WEB_PROFILE_NAME]
-  if (template === undefined) {
-    throw new Error(`ecosystem profile: shipped ${WEB_PROFILE_NAME} template is missing`)
-  }
+  ensureRuntimePluginsLinked(appPath, harnessHome)
+  const ecosystem = discoverEcosystemPluginPackages(appPath)
+  const marker = join(harnessHome, SEED_MARKER)
   const manifestPath = join(dir, 'package.json')
-  if (!existsSync(manifestPath)) {
-    const initial: ProfileManifest & { private: boolean } = {
-      name: `dsh-profile-${WEB_PROFILE_NAME}`,
-      private: true,
-      dependencies: {},
-      dsh: { profile: { bundles: [...template.bundles] } },
+  if (!existsSync(marker)) {
+    const dependencies = existsSync(manifestPath)
+      ? readProfileManifest('dsh', dir).dependencies ?? {}
+      : {}
+    const appManifest = JSON.parse(readFileSync(join(appPath, 'package.json'), 'utf8')) as {
+      dependencies?: Record<string, string>
     }
-    await writeFileAtomic(manifestPath, JSON.stringify(initial, undefined, 2) + '\n', { mode: 0o600 })
+    const missing = ecosystem.filter(plugin => !Object.hasOwn(dependencies, plugin.name)).map((plugin) => {
+      const pin = appManifest.dependencies?.[plugin.name]
+      if (pin !== plugin.version) throw new Error(`ecosystem profile: ${plugin.name} has no matching exact pin`)
+      return `${plugin.name}@${pin}`
+    })
+    if (missing.length > 0) await manage(['add', ...missing], appPath, harnessHome, packageManager)
+    else if (!existsSync(manifestPath)) await manage(['install'], appPath, harnessHome, packageManager)
+    mkdirSync(dirname(marker), { recursive: true })
+    await writeFileAtomic(marker, 'Ecosystem preinstall completed.\n', { mode: 0o600 })
   }
-  initProfile(dir, template.bundles)
-  const manifest = readProfileManifest(BIN_NAME, dir)
-  const appManifest = JSON.parse(readFileSync(join(appPath, 'package.json'), 'utf8')) as ElectronAppManifest
-  const dependencies = { ...manifest.dependencies }
-  const bundles = [...(manifest.dsh?.profile?.bundles ?? [])]
-  let changed = false
-  for (const plugin of discoverEcosystemPluginPackages(appPath)) {
-    if (Object.hasOwn(dependencies, plugin.name)) continue
-    const pin = appManifest.dependencies?.[plugin.name]
-    if (typeof pin !== 'string' || pin.length === 0) {
-      throw new Error(`ecosystem profile: ${plugin.name} has no exact pin in ${join(appPath, 'package.json')}`)
-    }
-    dependencies[plugin.name] = pin
-    if (!bundles.includes(plugin.name)) bundles.push(plugin.name)
-    changed = true
+  if (!existsSync(manifestPath)) await manage(['install'], appPath, harnessHome, packageManager)
+  const dependencies = readProfileManifest('dsh', dir).dependencies ?? {}
+  const legacy = ecosystem.filter(plugin => Object.hasOwn(dependencies, plugin.name)
+    && hasLegacyDesktopLink(dir, plugin))
+  if (legacy.length > 0) {
+    await manage(['add', ...legacy.map(plugin => `${plugin.name}@${dependencies[plugin.name]}`), '--force'],
+      appPath, harnessHome, packageManager)
   }
-  if (!changed) return
-  await writeFileAtomic(
-    manifestPath,
-    JSON.stringify(withProfileDependencies(manifest, dependencies, bundles), undefined, 2) + '\n',
-    { mode: 0o600 },
-  )
+  const missingInstalled = ecosystem.filter(plugin => Object.hasOwn(dependencies, plugin.name)
+    && !existsSync(join(dir, 'node_modules', ...plugin.name.split('/'), 'package.json')))
+  if (missingInstalled.length > 0) await manage(['install', '--force'], appPath, harnessHome, packageManager)
+  const remaining = ecosystem.filter(plugin => Object.hasOwn(dependencies, plugin.name)
+    && (!existsSync(join(dir, 'node_modules', ...plugin.name.split('/'), 'package.json'))
+      || hasLegacyDesktopLink(dir, plugin)))
+  if (remaining.length > 0) {
+    throw new Error(`ecosystem profile: package manager did not repair ${remaining.map(plugin => plugin.name).join(', ')}`)
+  }
 }
 
 /**
- * Write dependency pins and the active bundle list without dropping other manifest fields.
- * @param manifest - Current profile manifest.
- * @param dependencies - Next `dependencies` map.
- * @param bundles - Next `dsh.profile.bundles` list.
- * @returns Manifest ready to persist.
+ * Detect an ecosystem link left by a Desktop application, including a dangling link.
+ * @param profileDir - Shared web profile directory.
+ * @param plugin - Bundled ecosystem package to inspect.
+ * @returns Whether this package link points to a Desktop application copy.
  */
-function withProfileDependencies(
-  manifest: ProfileManifest,
-  dependencies: Record<string, string>,
-  bundles: readonly string[],
-): ProfileManifest {
-  return {
-    ...manifest,
-    dependencies,
-    dsh: {
-      ...manifest.dsh,
-      profile: {
-        ...manifest.dsh?.profile,
-        bundles: [...bundles],
-      },
-    },
+export function hasLegacyDesktopLink(profileDir: string, plugin: RuntimePluginManifest): boolean {
+  const packagePath = join(profileDir, 'node_modules', ...plugin.name.split('/'))
+  let target: string
+  try {
+    if (!lstatSync(packagePath).isSymbolicLink()) return false
+    target = readlinkSync(packagePath)
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') return false
+    throw error
+  }
+  const resolvedTarget = resolve(dirname(packagePath), target)
+  const profileRelative = relative(profileDir, resolvedTarget)
+  if (!profileRelative.startsWith('..') && !isAbsolute(profileRelative)) return false
+  if (resolvedTarget === resolve(plugin.rootPath)) return true
+  const suffix = join('node_modules', ...plugin.name.split('/'))
+  if (!resolvedTarget.endsWith(suffix)) return false
+  const appRoot = resolvedTarget.slice(0, -suffix.length)
+  const appManifestPath = join(appRoot, 'package.json')
+  if (!existsSync(appManifestPath)) return true
+  const appManifest = JSON.parse(readFileSync(appManifestPath, 'utf8')) as {
+    dshElectron?: { ecosystemPlugins?: string[] }
+  }
+  return appManifest.dshElectron?.ecosystemPlugins?.includes(plugin.name) === true
+}
+
+async function manage(
+  args: readonly string[], appPath: string, harnessHome: string, packageManager: EcosystemPackageManager,
+): Promise<void> {
+  const result = await runPluginCommand({
+    profile: WEB_PROFILE_NAME,
+    installAnchor: resolveDshInstallAnchor(appPath),
+    cwd: appPath,
+    home: harnessHome,
+  }, args, { ...packageManager, execution: 'service', outputBytes: 16 * 1024 })
+  if (result.exitCode !== 0 || result.timedOut === true) {
+    throw new Error(`ecosystem profile: dsh plugin ${args[0]} failed: ${result.output}`)
   }
 }

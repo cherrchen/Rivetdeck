@@ -948,6 +948,9 @@ importers:
       '@deepseek-ai/dsh-permission-presets':
         specifier: workspace:^
         version: link:../../packages/interaction/permission-presets
+      '@deepseek-ai/dsh-plugin-manager':
+        specifier: workspace:^
+        version: link:../../packages/boot/plugin-manager
       '@deepseek-ai/dsh-ptc-runtime':
         specifier: workspace:^
         version: link:../../packages/ptc-runtime/ptc-runtime

@@ -1,15 +1,16 @@
 import { copyFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { prepareHostProfileProjection } from './host-profile.ts'
 import { generateOwnershipOverlay, HOST_PATCH_RELATIVE } from './ownership-overlay.ts'
 import { writeTextFileAtomic } from './text-file.ts'
 
-/** Writable Host patch passed to the supervised `dsh web` process. */
+/** Writable Host patch passed to the supervised Desktop Host process. */
 export interface HostRuntimeOverlay {
   patchPath: string
 }
 
 /**
- * Write the ownership-aware Desktop composition into writable user data.
+ * Materialize the Host profile projection and write the ownership-aware overlay.
  * @param appPath - Electron application root.
  * @param userDataPath - Writable Electron userData directory.
  * @param harnessHome - Active `$DSH_HOME` used to scan pre-Electron layers.
@@ -20,6 +21,7 @@ export async function prepareHostRuntimeOverlay(
   userDataPath: string,
   harnessHome: string,
 ): Promise<HostRuntimeOverlay> {
+  prepareHostProfileProjection(appPath, harnessHome)
   mkdirSync(userDataPath, { recursive: true })
   const patchPath = join(userDataPath, 'electron-host.patch.yml')
   await writeTextFileAtomic(patchPath, generateOwnershipOverlay(appPath, harnessHome))
