@@ -2,7 +2,7 @@
 
 [English](runtime-environments.md) | 中文
 
-Desktop 无需托管 Node.js 或 Python 即可启动。Core 执行由 Electron 拥有：macOS/Linux 使用 Electron 的 Node 兼容子模式，Windows 仅在 `resources/core-runtime` 中携带控制台子系统 `node.exe` 与许可证。隐藏控制台的 stdin 继承机制保留在 `spawnHarnessChild` 中。Host 与随包 pnpm 使用 Core 执行器；移除可选运行环境不会删除它。
+Desktop 无需托管 Node.js 或 Python 即可启动。Core 执行由 Electron 拥有：macOS/Linux 使用 Electron 的 Node 兼容子模式，Windows 仅在 `resources/core-runtime` 中携带控制台子系统 `node.exe` 与许可证。隐藏控制台的 stdin 继承机制保留在 `spawnHarnessChild` 中。全新 Core profile 通过不含依赖的离线包操作初始化。客户端窗口加载后才执行 ecosystem 源协调；失败时随包插件仍可使用，退出前会取消并等待协调操作结束。Host 与随包 pnpm 使用 Core 执行器；移除可选运行环境不会删除它。
 
 ## 初始化与迁移
 
@@ -14,7 +14,7 @@ Main 拥有独立运行环境操作，并向初始化与设置共享状态。下
 
 验证通过的 generation 位于 `userData/managed-toolchains/<runtime>/<version>/<platform-arch>/<generation>`。下载和解压在独立 staging 中完成。Main 仅在验证与不可变重命名成功后原子写入 active selector。更新安装新的 generation，在重启前保留前代，并在 pinned 版本不同时显示可用更新。应用更新保留用户数据安装，不自动下载。
 
-安装与更新需要重启后才能改变 Agent fallback 路径。当前 Host 可使用的运行环境会延迟到重启时移除，保护运行中的子进程。Main 仅删除选定托管 generation 与退役 generation；保留用户包目录、项目文件、系统解释器和 Core。退出先等待安装操作停止，再关闭 Network Runtime。
+安装与更新需要重启后才能改变 Agent fallback 路径。运行环境移除会延迟到重启时完成，保护使用 Agent fallback 路径或显式解释器路径的子进程。Main 仅删除选定托管 generation 与退役 generation；保留用户包目录、项目文件、系统解释器和 Core。退出先等待安装操作停止，再关闭 Network Runtime。
 
 ## 网络与可执行文件选择
 

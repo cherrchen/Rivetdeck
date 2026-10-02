@@ -13,6 +13,11 @@ const scratch = await mkdtemp(join(tmpdir(), 'dsh-runtime-smoke-'))
 const userData = join(scratch, 'userData')
 const env = { ...process.env, DSH_HOME: join(scratch, 'harness'), DSH_TELEMETRY_DISABLED: '1' }
 delete env.ELECTRON_RUN_AS_NODE
+if (process.argv.includes('--offline')) {
+  env.pnpm_config_registry = 'https://127.0.0.1:9'
+  env.pnpm_config_fetch_retries = '0'
+  env.pnpm_config_store_dir = join(scratch, 'empty-store')
+}
 let application
 const events = []
 async function launch() {
@@ -26,7 +31,6 @@ async function launch() {
 }
 async function close() {
   if (application === undefined) return
-  await application.evaluate(({ app }) => { app.quit() })
   await application.close()
   application = undefined
 }

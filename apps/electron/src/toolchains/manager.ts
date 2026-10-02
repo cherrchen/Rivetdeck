@@ -30,7 +30,6 @@ export class RuntimeManager {
   private readonly listeners = new Set<(snapshot: RuntimeSnapshot) => void>()
   private readonly operations = new Map<RuntimeName, { abort: AbortController; done: Promise<void> }>()
   private readonly receipts = new Map<RuntimeName, RuntimeReceipt>()
-  private readonly startupLocations = new Set<string>()
   private readonly states: Record<RuntimeName, RuntimeState>
   private onboardingCompleted: boolean
   private closing = false
@@ -81,7 +80,6 @@ export class RuntimeManager {
         this.set(name, { installedVersion: receipt.version, location })
         await (this.options.verify ?? verifyRuntime)(name, location, receipt.version, this.platform)
         this.toolchains = { ...this.toolchains, ...runtimePaths(name, location, receipt.version, this.platform) }
-        this.startupLocations.add(location)
         this.set(name, { phase: receipt.version === this.lock[name].version ? 'installed' : 'update-available', installedVersion: receipt.version, location })
       } catch (error) {
         console.error(`desktop ${name} runtime validation failed`, error)
@@ -135,7 +133,7 @@ export class RuntimeManager {
     operation?.abort.abort()
     await operation?.done
   }
-  /** Persist deferred deletion of any runtime that this Host could use.
+  /** Defer all deletion until Host shutdown, including newly installed executables used by explicit paths.
    * @param name Managed runtime only; project and Core files are outside these paths.
    */
   remove(name: RuntimeName): Promise<void> {
@@ -149,18 +147,10 @@ export class RuntimeManager {
     if (receipt === undefined) return
     this.set(name, { phase: 'removing', error: undefined })
     try {
-      const location = receiptLocation(this.root, name, this.target, receipt)
-      if (this.startupLocations.has(location) || receipt.retired.length > 0) {
-        const pending = { ...receipt, pendingRemoval: true }
-        await this.writeReceipt(name, pending)
-        this.receipts.set(name, pending)
-        this.set(name, { restartRequired: true })
-      } else {
-        await rm(location, { recursive: true, force: true })
-        await rm(join(this.root, name, 'active.json'), { force: true })
-        this.receipts.delete(name)
-        this.set(name, { phase: 'not-installed', location: undefined, installedVersion: undefined, restartRequired: false })
-      }
+      const pending = { ...receipt, pendingRemoval: true }
+      await this.writeReceipt(name, pending)
+      this.receipts.set(name, pending)
+      this.set(name, { restartRequired: true })
     } catch (error) {
       console.error(`desktop ${name} removal failed`, error)
       this.set(name, { phase: 'failed', error: 'operation' })

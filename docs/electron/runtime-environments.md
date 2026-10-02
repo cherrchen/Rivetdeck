@@ -2,7 +2,7 @@
 
 English | [中文](runtime-environments.zh.md)
 
-Desktop starts with no managed Node.js or Python. Core execution belongs to Electron: macOS/Linux use Electron's Node-compatible child mode, while Windows ships only a console-subsystem `node.exe` and its license in `resources/core-runtime`. The hidden-console stdin inheritance remains in `spawnHarnessChild`. The Host and bundled pnpm use this Core executor; optional runtime removal cannot remove it.
+Desktop starts with no managed Node.js or Python. Core execution belongs to Electron: macOS/Linux use Electron's Node-compatible child mode, while Windows ships only a console-subsystem `node.exe` and its license in `resources/core-runtime`. The hidden-console stdin inheritance remains in `spawnHarnessChild`. Fresh Core profile initialization uses an offline package operation with no dependencies. Ecosystem registry reconciliation runs after the client window loads, retains bundled plugin availability on failure, and is cancelled/drained before shutdown. The Host and bundled pnpm use this Core executor; optional runtime removal cannot remove it.
 
 ## Setup and migration
 
@@ -14,7 +14,7 @@ Main owns independent runtime operations and shares their snapshots with onboard
 
 Each verified generation lives under `userData/managed-toolchains/<runtime>/<version>/<platform-arch>/<generation>`. Downloads and extraction remain in separate staging. Main atomically writes the active selector only after verification and immutable rename. Updates install a new generation, retain the previous one until restart, and report update availability when the pinned version differs. App updates preserve user-data installations without automatic downloads.
 
-Installation and update require restart before Agent fallback paths change. Removal of a runtime available to the current Host is deferred until restart, preserving running subprocesses. Main removes only the selected managed generation and retired generations; it retains user package directories, project files, system interpreters, and Core. Quit drains installation operations before stopping Network Runtime.
+Installation and update require restart before Agent fallback paths change. Runtime removal is deferred until restart, preserving subprocesses that use either Agent fallback paths or explicit interpreter paths. Main removes only the selected managed generation and retired generations; it retains user package directories, project files, system interpreters, and Core. Quit drains installation operations before stopping Network Runtime.
 
 ## Network and executable selection
 

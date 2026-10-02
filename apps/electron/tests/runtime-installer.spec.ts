@@ -132,9 +132,14 @@ describe('Main runtime manager independence', () => {
     expect(manager.state().node.phase).toBe('installed')
     const location = manager.state().node.location!
     await manager.remove('node')
-    expect(manager.state().node.phase).toBe('not-installed')
-    await expect(readFile(join(location, 'bin/interpreter'))).rejects.toThrow()
+    expect(manager.state().node).toMatchObject({ phase: 'removing', restartRequired: true })
+    expect(await readFile(join(location, 'bin/interpreter'), 'utf8')).toBe('runtime')
     await manager.shutdown()
+    const restarted = new RuntimeManager({ userData: root, manifest, verify: async () => {}, fetch: async () => { throw new Error('unexpected download') } })
+    expect(await restarted.prepare()).toEqual({})
+    expect(restarted.state().node.phase).toBe('not-installed')
+    await expect(readFile(join(location, 'bin/interpreter'))).rejects.toThrow()
+    await restarted.shutdown()
   })
   it('supports zero, Node only, both, deferred removal, and persistent onboarding', async () => {
     const { root, bytes, entry } = await fixture()

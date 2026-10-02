@@ -46,7 +46,7 @@ import {
   registerRendererScheme,
   resolveRendererRoot,
 } from './protocol.ts'
-import { prepareEcosystemProfile } from './ecosystem-profile.ts'
+import { prepareCoreProfile, prepareEcosystemProfile } from './ecosystem-profile.ts'
 import { prepareHostRuntimeOverlay } from './runtime-overlay.ts'
 import {
   HARNESS_START_TIMEOUT_MS,
@@ -83,6 +83,7 @@ let mainWindow: BrowserWindow | undefined
 let tray: Tray | undefined
 let updater: UpdaterController | undefined
 let runtimes: RuntimeManager | undefined
+let ecosystemSetup: { abort: AbortController; done: Promise<void> } | undefined
 let network: DesktopNetworkController | undefined
 let electronProxy: ElectronProxyApplier | undefined
 let networkDialogQueue: Promise<void> = Promise.resolve()
@@ -241,6 +242,8 @@ function requestQuit(): void {
 async function prepareToInstall(): Promise<void> {
   quitting = true
   stopping = true
+  ecosystemSetup?.abort.abort()
+  await ecosystemSetup?.done
   await transport.stop()
   const child = harness
   harness = undefined
@@ -428,6 +431,7 @@ if (!primaryInstance) {
         return { status: response.status, ...(networkErrorCode === null ? {} : { networkErrorCode }) }
       },
       onEpochChanged: () => {
+        ecosystemSetup?.abort.abort()
         for (const name of ['node', 'python'] as const) {
           void runtimes?.cancel(name).catch((error: unknown) => {
             console.error('runtime network transition cleanup failed', error)
@@ -513,11 +517,12 @@ if (!primaryInstance) {
       hostRuntime.executable,
       pnpmBin,
     )
-    await prepareEcosystemProfile(appPath, harnessHome, {
+    const corePackageManager = {
       command: hostRuntime.executable,
       args: [pnpmBin],
       env: { ...hostRuntime.env, PATH: packageManager.envPath },
-    })
+    }
+    await prepareCoreProfile(appPath, harnessHome, corePackageManager)
     const overlay = await prepareHostRuntimeOverlay(appPath, userDataPath, harnessHome)
     installDesktopIpc(
       transport,
@@ -543,6 +548,16 @@ if (!primaryInstance) {
       requestQuit()
     })
     await createWindow()
+    const ecosystemAbort = new AbortController()
+    const ecosystemPackageManager = { ...corePackageManager, signal: ecosystemAbort.signal }
+    ecosystemSetup = {
+      abort: ecosystemAbort,
+      done: prepareEcosystemProfile(appPath, harnessHome, ecosystemPackageManager).catch((error: unknown) => {
+        if (!ecosystemAbort.signal.aborted) {
+          console.error('desktop ecosystem profile setup failed; bundled plugins remain available', error)
+        }
+      }),
+    }
     const repository = resolveUpdateRepository(readDesktopManifest(app.getAppPath()))
     if (repository === undefined) throw new Error('The packaged GitHub update repository is missing.')
     updater = createUpdater({

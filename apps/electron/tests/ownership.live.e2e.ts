@@ -1,12 +1,14 @@
 /** Real built Host watches external CLI package mutations without restarting. */
 import { spawn, type ChildProcess } from 'node:child_process'
 import { once } from 'node:events'
-import { cpSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, it } from 'vitest'
 import { ensureRuntimePluginsLinked } from '../src/runtime-plugins.ts'
+import { preparePluginPackageManager, resolveBundledPnpmBin } from '../src/plugin-package-manager.ts'
+import { spawnHarnessChild } from '../src/runtime.ts'
 
 const app = fileURLToPath(new URL('..', import.meta.url))
 const git = '@dsh-electron/dsh-plugin-git'
@@ -23,7 +25,9 @@ interface InventoryPackage {
 
 it('retains bundled Git, disposes profile packages, and preserves removal through HMR and restart', async () => {
   const home = mkdtempSync(join(tmpdir(), 'electron-live-ownership-'))
+  const packageManager = preparePluginPackageManager(home, process.execPath, resolveBundledPnpmBin(app))
   const env = { ...process.env, DSH_HOME: home, DSH_AGENTS_HOME: join(home, 'agents'), DSH_TELEMETRY_DISABLED: '1' }
+  const packageEnv = { ...env, PATH: packageManager.envPath }
   const bundledGit = realpathSync(join(app, 'node_modules', git))
   let host: ChildProcess | undefined
   let exited: Promise<unknown> | undefined
@@ -34,17 +38,17 @@ it('retains bundled Git, disposes profile packages, and preserves removal throug
   }
   const cli = async (...args: string[]): Promise<void> => {
     const child = spawn(process.execPath, [join(app, 'node_modules', '@deepseek-ai/dsh', 'lib/bin.js'),
-      'plugin', '--profile', 'web', ...args, '--config.offline=true', '--config.auto-install-peers=false'], { cwd: home, env, timeout: 30_000 })
+      'plugin', '--profile', 'web', ...args, '--config.offline=true', '--config.auto-install-peers=false'], { cwd: home, env: packageEnv, timeout: 30_000, stdio: ['ignore', 'pipe', 'pipe'] })
     let diagnostic = ''
     child.stdout?.on('data', (chunk) => { diagnostic += String(chunk) })
     child.stderr?.on('data', (chunk) => { diagnostic += String(chunk) })
-    const [code, signal] = await once(child, 'exit') as [number | null, string | null]
+    const [code, signal] = await once(child, 'close') as [number | null, string | null]
     expect(signal, diagnostic).toBeNull()
     expect(code, diagnostic).toBe(0)
   }
   const start = (): void => {
     output = ''
-    host = spawn(process.execPath, ['--expose-internals', join(app, 'lib/host.js'), app,
+    host = spawnHarnessChild(process.execPath, ['--expose-internals', join(app, 'lib/host.js'), app,
       join(app, 'runtime/host.patch.yml')], { cwd: home, env })
     exited = once(host, 'exit')
     host.stdout?.on('data', (chunk) => { output += String(chunk) })
@@ -63,7 +67,8 @@ it('retains bundled Git, disposes profile packages, and preserves removal throug
         try { check(); return true } catch (error) { lastError = error; return false }
       }, { timeout: 20_000 }).toBe(true)
     } catch (error) {
-      throw new Error(`${String(lastError)}\n${JSON.stringify(inventory().find(pkg => pkg.packageName === ordinary))}\n${output.replace(/token=[^\s]+/g, 'token=<redacted>')}`, { cause: error })
+      const current = existsSync(join(home, 'electron', 'runtime-inventory.json')) ? inventory() : []
+      throw new Error(`${String(lastError)}\n${JSON.stringify(current.find(pkg => pkg.packageName === ordinary))}\n${output.replace(/token=[^\s]+/g, 'token=<redacted>')}`, { cause: error })
     }
   }
   try {
@@ -84,11 +89,15 @@ it('retains bundled Git, disposes profile packages, and preserves removal throug
       expect(pkg?.resolvedPath).toBe(realpathSync(join(home, 'profiles/web/node_modules', ordinary)))
       expect(readFileSync(join(home, 'ownership-events.txt'), 'utf8')).toBe('active 1.5.0\n')
     })
+    const updatedFixture = join(home, 'plugin-source-1.6.0')
+    cpSync(fixture, updatedFixture, { recursive: true })
     for (const filename of ['package.json', 'index.mjs']) {
-      const path = join(fixture, filename)
+      const path = join(updatedFixture, filename)
       writeFileSync(path, readFileSync(path, 'utf8').replaceAll('1.5.0', '1.6.0'))
     }
-    await cli('add', `file:${fixture}`)
+    await cli('add', `file:${updatedFixture}`)
+    const installed: unknown = JSON.parse(readFileSync(join(home, 'profiles/web/node_modules', ordinary, 'package.json'), 'utf8'))
+    expect(installed).toMatchObject({ version: '1.6.0' })
     await settled(() => {
       expect(inventory().find(pkg => pkg.packageName === ordinary)).toMatchObject({ version: '1.6.0', source: 'profile' })
       expect(readFileSync(join(home, 'ownership-events.txt'), 'utf8')).toBe('active 1.5.0\ndisposed 1.5.0\nactive 1.6.0\n')

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { initProfile, PROFILE_TEMPLATES, readProfileManifest, resolveProfileDir, writeProfileManifest } from '@deepseek-ai/dsh-app-boot'
 import { runPluginCommand } from '@deepseek-ai/dsh-plugin-manager/operations'
-import { hasLegacyDesktopLink, prepareEcosystemProfile, WEB_PROFILE_NAME } from '../src/ecosystem-profile.ts'
+import { hasLegacyDesktopLink, prepareCoreProfile, prepareEcosystemProfile, WEB_PROFILE_NAME } from '../src/ecosystem-profile.ts'
 import { prepareHostProfileProjection, resolveHostProfileDir } from '../src/host-profile.ts'
 import { discoverEcosystemPluginPackages } from '../src/runtime-plugins.ts'
 
@@ -43,6 +43,22 @@ function profileWithGit(dir: string, version: string, enabled: boolean): void {
 }
 
 describe('ecosystem profile ownership', () => {
+  it('initializes an offline Core profile independently of ecosystem preinstallation', async () => {
+    const { home, dir } = fixture()
+    try {
+      operation.mockImplementation(async () => {
+        initProfile(dir, PROFILE_TEMPLATES[WEB_PROFILE_NAME]!.bundles)
+        return packageResult
+      })
+      await prepareCoreProfile(appPath, home, manager)
+      expect(operation).toHaveBeenCalledWith(expect.objectContaining({ home }), ['install', '--offline', '--config.auto-install-peers=false'], expect.objectContaining(manager))
+      expect(readProfileManifest('dsh', dir).dependencies).toEqual({})
+      expect(existsSync(join(home, 'electron', 'ecosystem-preinstalled'))).toBe(false)
+      operation.mockClear()
+      await prepareCoreProfile(appPath, home, manager)
+      expect(operation).not.toHaveBeenCalled()
+    } finally { rmSync(home, { recursive: true, force: true }) }
+  })
   it('asks the shared dsh plugin operation to preinstall missing packages once', async () => {
     const { home, dir } = fixture()
     try {
