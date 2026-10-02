@@ -118,6 +118,9 @@ const GENERIC_SKIPS: readonly GenericSkip[] = [
   { file: 'packages/extensions/cordis-host-runner/src/inspect-registry.ts', upstream: ['cordis'] },
   { file: 'packages/extensions/cordis-host-runner/src/types.ts', upstream: ['cordis'] },
   { file: 'packages/extensions/cordis-host-runner/tests/helpers.ts', upstream: ['cordis'] },
+  { file: 'packages/extensions/cordis-host-runner/tests/inspect-registry.spec.ts', upstream: ['cordis'] },
+  { file: 'snapshots/session/cordis-inspect-liveness/client-fixture.mjs', upstream: ['cordis'] },
+  { file: 'snapshots/session/cordis-inspect-timeout/client-fixture.mjs', upstream: ['cordis'] },
   { file: 'packages/extensions/cordis-host-runner/tests/runner.spec.ts', upstream: ['cordis'] },
   { file: 'packages/extensions/cordis-host-runner/tests/versioning.spec.ts', upstream: ['cordis'] },
   { file: 'packages/extensions/tool-cordis/src/api-catalog.ts', upstream: ['cordis'] },
@@ -171,6 +174,27 @@ const POSTCONDITIONS: readonly PostCondition[] = [
  * quote a neighbouring line the generic pass would rewrite.
  */
 const EXACT_EDITS: readonly ExactEdit[] = [
+  {
+    id: 'inspect-registry-test-imports',
+    file: 'packages/extensions/cordis-host-runner/tests/inspect-registry.spec.ts',
+    find: "from 'cordis'",
+    replace: "from '@deepseek-ai/cordis'",
+    expect: 2,
+  },
+  {
+    id: 'inspect-liveness-fixture-import',
+    file: 'snapshots/session/cordis-inspect-liveness/client-fixture.mjs',
+    find: "import('cordis')",
+    replace: "import('@deepseek-ai/cordis')",
+    expect: 1,
+  },
+  {
+    id: 'inspect-timeout-fixture-import',
+    file: 'snapshots/session/cordis-inspect-timeout/client-fixture.mjs',
+    find: "import('cordis')",
+    replace: "import('@deepseek-ai/cordis')",
+    expect: 2,
+  },
   {
     id: 'loader-diff-schemastery-import',
     file: 'vendor/loader/src/config/diff.ts',

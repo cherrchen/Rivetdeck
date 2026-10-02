@@ -2,7 +2,7 @@
   "name": "@dsh-electron/dsh-electron",
   "productName": "DeepSeek Harness",
   "description": "Electron desktop shell for DeepSeek Harness",
-  "version": "0.1.7-beta.2",
+  "version": "0.2.0-rc.2",
   "private": true,
   "homepage": "https://github.com/cherrchen/deepseek-harness-electron",
   "repository": {
@@ -107,6 +107,7 @@
     "@deepseek-ai/dsh-mcp-resources": "workspace:^",
     "@deepseek-ai/dsh-message-feedback": "workspace:^",
     "@deepseek-ai/dsh-native-command": "workspace:^",
+    "@deepseek-ai/dsh-otel": "workspace:^",
     "@deepseek-ai/dsh-output-retention": "workspace:^",
     "@deepseek-ai/dsh-permission-presets": "workspace:^",
     "@deepseek-ai/dsh-plugin-manager": "workspace:^",

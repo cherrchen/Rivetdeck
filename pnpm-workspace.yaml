@@ -40,6 +40,9 @@ allowBuilds:
   protobufjs: false
   node-addon-require-builtin: false
   # JSONL durability calls MoveFileExW with write-through publication on Windows.
+  # Consumers pin 3.1.1: Koffi 3.3.2's source build fails under GCC 13 when
+  # optional prebuilts are omitted. Upgrade all consumers together after the
+  # replacement passes that build and the release packed-install check.
   koffi: true
   # The Python runtime deploy includes the reviewed workspace postinstall that
   # restores the executable bit on node-pty's macOS spawn helper.
@@ -50,8 +53,8 @@ allowBuilds:
   electron-winstaller: false
   # Store-index rewriting only needs msgpackr's portable JavaScript codec.
   msgpackr-extract: false
-  # Git plugin fixtures may still resolve a published 0.1.2-rc.1 tarball; its
-  # postinstall is not needed by the assembled applications.
+
+  # Published plugin dependencies do not need the workspace postinstall.
   '@deepseek-ai/dsh-subprocess-local': false
 
 minimumReleaseAgeExclude:
@@ -64,8 +67,8 @@ minimumReleaseAgeExclude:
   - '@deepseek-ai/libreoffice-kit-wasm@0.1.1'
   # Fresh pi-ai releases carry the model catalog updates that are the whole
   # point of bumping it; waiting out the release age would defeat that.
-  - '@earendil-works/pi-ai@0.85.1'
-  - '@earendil-works/pi-telemetry@0.85.1'
+  - '@earendil-works/pi-ai@0.87.1'
+  - '@earendil-works/pi-telemetry@0.87.1'
   - node-addon-native-custom-loader@0.1.6
   - node-addon-require-builtin-darwin-arm64@0.1.6
   - node-addon-require-builtin-darwin-x64@0.1.6
@@ -97,16 +100,11 @@ minimumReleaseAgeExclude:
   - '@trycua/cua-driver-win32-arm64-msvc@0.28.0'
   - '@trycua/cua-driver-win32-x64-msvc@0.28.0'
   - '@trycua/cua-driver@0.28.0'
-  # Desktop pins this reviewed ecosystem plugin before the release-age window expires.
+  # Desktop bundles these exact ecosystem plugin releases.
   - '@dsh-electron/dsh-plugin-git@0.2.4'
-  # Desktop pins this reviewed ecosystem plugin before the release-age window expires.
   - '@dsh-electron/dsh-theme-studio@0.1.3'
-  # These workspace packages are published inside the release-age window.
-  - '@deepseek-ai/dsh-client-resources@0.1.7-rc.2'
-  - '@deepseek-ai/dsh-client-ui-settings-plugins@0.1.7-rc.2'
-  - '@deepseek-ai/dsh-client-ui-sidebar-right@0.1.7-rc.2'
 patchedDependencies:
-  '@earendil-works/pi-ai@0.85.1': patches/@earendil-works__pi-ai@0.85.1.patch
+  '@earendil-works/pi-ai@0.87.1': patches/@earendil-works__pi-ai@0.87.1.patch
   '@electron/osx-sign@1.3.3': patches/@electron__osx-sign@1.3.3.patch
   '@fortune-sheet/core@1.0.4': patches/@fortune-sheet__core@1.0.4.patch
   '@fortune-sheet/react@1.0.4': patches/@fortune-sheet__react@1.0.4.patch
