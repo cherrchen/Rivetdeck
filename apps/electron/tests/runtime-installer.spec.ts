@@ -42,7 +42,7 @@ describe('Main runtime installer', () => {
       await expect(readFile(join(root, 'staging/download.pending'))).rejects.toThrow()
     })
   }
-  for (const kind of ['checksum', 'archive', 'verification', 'interrupted', 'download'] as const) {
+  for (const kind of ['checksum', 'archive', 'verification', 'interrupted', 'download', 'disk'] as const) {
     it(`rejects ${kind} without activating or retaining pending files`, async () => {
       const { root, bytes, entry } = await fixture()
       const abort = new AbortController()
@@ -52,7 +52,10 @@ describe('Main runtime installer', () => {
         : kind === 'checksum' ? { ...entry, sha256: '0'.repeat(64) } : entry
       await expect(installRuntime({ name: 'node', version: '1.2.3', entry: authority, staging: join(root, 'stage'), destination: join(root, 'active'), platform: process.platform,
         fetch: async () => { if (kind === 'interrupted') abort.abort(); return new Response(selectedBytes, { status: kind === 'download' ? 503 : 200 }) }, signal: abort.signal, phase: () => {},
-        verify: async () => { if (kind === 'verification') throw new Error('bad executable') },
+        verify: async () => {
+          if (kind === 'verification') throw new Error('bad executable')
+          if (kind === 'disk') throw Object.assign(new Error('no disk space'), { code: 'ENOSPC' })
+        },
       })).rejects.toMatchObject({ code: kind })
       await expect(readFile(join(root, 'active/bin/interpreter'))).rejects.toThrow()
       await expect(readFile(join(root, 'stage/download.pending'))).rejects.toThrow()

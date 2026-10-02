@@ -201,7 +201,8 @@ export class RuntimeManager {
       this.set(name, { phase: 'installed', installedVersion: version, location: destination, received: undefined, total: undefined, restartRequired: true })
     } catch (error) {
       console.error(`desktop ${name} installation failed`, error)
-      this.set(name, { phase: 'failed', error: error instanceof RuntimeInstallError ? error.code : signal.aborted ? 'interrupted' : 'operation' })
+      const code = error !== null && typeof error === 'object' && 'code' in error ? error.code : undefined
+      this.set(name, { phase: 'failed', error: error instanceof RuntimeInstallError ? error.code : signal.aborted ? 'interrupted' : code === 'ENOSPC' ? 'disk' : 'operation' })
     } finally {
       if (!committed) await rm(destination, { recursive: true, force: true })
       await rm(pending, { force: true })

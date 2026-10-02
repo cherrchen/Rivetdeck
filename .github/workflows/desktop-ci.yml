@@ -162,9 +162,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Prepare Core Host executor
+        run: pnpm --filter @dsh-electron/dsh-electron prepare:core
+
       # The supervised Host's stdio wiring is Windows-only behavior: the Linux job
       # never opens the null device or observes console ownership.
       - name: Test supervised Host startup
+        env:
+          DSH_ELECTRON_CORE_SMOKE: '1'
         run: pnpm exec vitest run apps/electron/tests/runtime.spec.ts
 
       - name: Test Windows Network Runtime
@@ -212,3 +217,54 @@ jobs:
         run: pnpm --filter @dsh-electron/dsh-electron prepare:toolchains
       - name: Smoke-test Desktop toolchains
         run: pnpm --filter @dsh-electron/dsh-electron smoke:toolchains
+
+  managed-runtime-lifecycle:
+    name: ${{ matrix.os }} Optional runtime lifecycle
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Test optional runtime lifecycle and UI
+        run: pnpm exec vitest run apps/electron/tests/runtime-installer.spec.ts apps/electron/tests/runtime-download.spec.ts apps/electron/tests/runtime-ipc.spec.ts apps/electron/tests/runtime-ui.spec.tsx apps/electron/tests/toolchain-environment.spec.ts apps/electron/tests/toolchain-paths.spec.ts apps/electron/tests/toolchain-shims.spec.ts apps/electron/tests/preferences.spec.ts apps/electron/tests/packaging.spec.ts
+      - name: Install GNOME development libraries
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libglib2.0-dev libglib2.0-bin gsettings-desktop-schemas
+      - name: Build packaged runtime dependencies
+        run: pnpm run build
+      - name: Build Desktop
+        run: pnpm --filter @dsh-electron/dsh-electron build
+      - name: Prepare Core executor
+        run: pnpm --filter @dsh-electron/dsh-electron prepare:core
+      - name: Prepare Network Runtime
+        run: pnpm --filter @dsh-electron/dsh-electron prepare:network-runtime
+      - name: Package application directory
+        run: pnpm --filter @dsh-electron/dsh-electron exec electron-builder --dir --publish never
+      - name: Smoke-test runtime lifecycle and Core plugins (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          node apps/electron/scripts/smoke-runtime-setup.mjs "dist/electron/win-unpacked/DeepSeek Harness.exe" --install
+          node apps/electron/scripts/smoke-core-plugins.mjs "dist/electron/win-unpacked/resources/core-runtime/node.exe" "dist/electron/win-unpacked/resources/app"
+      - name: Smoke-test runtime lifecycle and Core plugins (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          binary="$(find dist/electron -path '*/Contents/MacOS/DeepSeek Harness' -type f -print -quit)"
+          node apps/electron/scripts/smoke-runtime-setup.mjs "$binary" --install
+          node apps/electron/scripts/smoke-core-plugins.mjs "$binary" "${binary%/MacOS/*}/Resources/app"
+      - name: Smoke-test runtime lifecycle and Core plugins (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          binary="$(find dist/electron -name deepseek-harness -type f -print -quit)"
+          sudo chown root:root "$(dirname "$binary")/chrome-sandbox"
+          sudo chmod 4755 "$(dirname "$binary")/chrome-sandbox"
+          xvfb-run -a node apps/electron/scripts/smoke-runtime-setup.mjs "$binary" --install
+          node apps/electron/scripts/smoke-core-plugins.mjs "$binary" "$(dirname "$binary")/resources/app"

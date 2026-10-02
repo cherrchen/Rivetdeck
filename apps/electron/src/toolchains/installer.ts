@@ -90,9 +90,9 @@ export async function installRuntime(options: {
 }): Promise<void> {
   const { signal, staging, entry } = options
   let stage: RuntimeError = 'download'
-  await mkdir(staging, { recursive: true, mode: 0o700 })
   const archive = join(staging, 'download.pending')
   try {
+    await mkdir(staging, { recursive: true, mode: 0o700 })
     options.phase('downloading', 0)
     let url = entry.url
     let response: Response | undefined
