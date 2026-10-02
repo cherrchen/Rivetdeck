@@ -6,6 +6,7 @@ import { DesktopCapabilitiesService } from './service.ts'
 import * as directoryPicker from './features/directory-picker/index.ts'
 import * as brand from './features/brand/index.ts'
 import * as networkSettings from './features/network-settings/index.ts'
+import * as runtimeSettings from './features/runtime-settings/index.ts'
 import * as pluginManager from './features/plugin-manager/index.ts'
 
 export type { DesktopCapabilitiesContract } from './contract.ts'
@@ -33,5 +34,6 @@ export function apply(ctx: ClientContext): void {
   ctx.plugin(directoryPicker)
   ctx.plugin(brand)
   ctx.plugin(networkSettings)
+  ctx.plugin(runtimeSettings)
   ctx.plugin(pluginManager)
 }
