@@ -147,7 +147,7 @@ Electron Main
     │
     │ spawn
     ▼
-Windows: resources/toolchains/node/node.exe with one hidden console
+Windows: resources/core-runtime/node.exe with one hidden console
 Other platforms: Electron executable with ELECTRON_RUN_AS_NODE=1
     │
     ▼
@@ -159,7 +159,7 @@ dsh web
 
 On Windows the Host runs on the packaged Node.js, because `electron.exe` is a GUI-subsystem image: a process without a console makes Windows allocate a visible console for every console-subsystem descendant, which Windows 11 renders as a Windows Terminal window. The packaged Node.js is a console-subsystem image started with `windowsHide` and an inherited stdin device handle, so the Host holds one hidden console that job, ACL, and sandboxed child processes inherit; `CREATE_NO_WINDOW` alone leaves a console-subsystem child without any console, which a restricted token cannot create for its children. Other platforms keep Electron's Node-compatible child mode.
 
-Main resolves the packaged Node.js and Python toolchains before Host startup and sends a versioned fallback policy to the existing Desktop subprocess provider. The provider composes that policy with Agent proxy settings for executable lookup, ordinary children, and terminals. It searches request, project, user, and Main's original PATH values in that order, removes the Host-only pnpm shim from Agent PATH, and appends writable npm and Python user command directories and bundled commands as fallbacks. The application resources remain immutable; user package state lives below `$DSH_HOME/electron`.
+Core Host execution and plugin package operations are independent of Agent runtimes. Main owns the optional Node/Python Runtime Manager, versioned user-data generations, and a closed typed subscription API. No managed runtime is required to start the Host or client. The Desktop subprocess provider receives a version-2 policy containing only verified installed runtimes, searches request/project/user/ambient PATH before managed fallbacks, and excludes Host-only package-manager commands. Installation changes apply after restart. [Runtime environments](runtime-environments.md) owns lifecycle, migration, and proxy behavior.
 
 The sidecar owns upstream Harness behavior:
 

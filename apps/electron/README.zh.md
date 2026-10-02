@@ -97,11 +97,11 @@ Release 资源在固定的应用自有路径中包含 Rust Network Runtime。Man
 
 受监督的 Harness 进程仅绑定 `127.0.0.1` 上的随机端口，且永远不是 BrowserWindow 的页面源。Renderer 无 Node.js 集成，启用上下文隔离与 Chromium 沙箱，仅接收类型化的 `window.deepseekDesktop` 桥接，且不能离开 `dsh-electron://localhost`。以新窗口请求的 HTTP/HTTPS 链接在系统浏览器中打开。
 
-Windows 上受监督进程是随包发布的 Node.js 运行时（`resources/toolchains/node/node.exe`），以 `windowsHide` 和一个继承的 stdin 设备句柄启动，因此它持有一个隐藏控制台，`pwsh`、`git`、`cmd` 等 agent shell 命令会继承该控制台，而不会打开 Windows Terminal 窗口；其它平台使用 Electron 的 Node 兼容子模式。
+Windows 上受监督进程是随包发布的 Node.js 运行时（`resources/core-runtime/node.exe`），以 `windowsHide` 和一个继承的 stdin 设备句柄启动，因此它持有一个隐藏控制台，`pwsh`、`git`、`cmd` 等 agent shell 命令会继承该控制台，而不会打开 Windows Terminal 窗口；其它平台使用 Electron 的 Node 兼容子模式。
 
-Desktop 为六个发布目标打包独立的 Node.js 24.17.0 和 CPython 3.14.7。Agent 子进程依次搜索请求显式提供的 PATH、项目与用户 `.env` 中的 PATH、Main 启动时的原始 PATH，最后搜索随包 runtime 目录。显式删除 PATH 会保持删除语义。随包 `python`、`python3`、`pip`、`pip3`、`npm` 和 `npx` shim 在所有平台调用对应的 runtime。这些 Python 与 pip 命令将用户包写入 `~/.dsh/electron/python-user`，且 `python -m pip` 与 `pip` 等价；随包 npm 全局包写入 `~/.dsh/electron/node-global`。这些包的命令目录也加入 fallback PATH：macOS 和 Linux 使用 `bin`，Windows 使用 npm prefix 目录及 Python 的 `Scripts` 目录。项目虚拟环境和用户管理的 runtime 只要位于 PATH 前部，就保持优先。随包资产缺失时，Desktop 会在 Host 启动前报错。
+Desktop Core 在 macOS/Linux 使用 Electron，在 Windows 使用仅包含 `node.exe` 和许可证的控制台执行器。Host 与插件包管理器使用 Core 执行器，不依赖可选 Agent 运行环境。Node.js 与 Python 通过可选初始化对话框或设置 → 运行环境，分别安装到 Electron `userData/managed-toolchains` 下的版本化 generation。跳过状态独立于安装状态持久保存。Agent PATH 依次搜索请求、项目、用户和 Main 原始环境，最后才使用托管 fallback；显式删除 PATH 保持删除语义。仅已安装环境生成对应 shim。安装、更新和移除在重启后生效，保护运行中的任务。存储、网络与迁移行为见[运行环境](../../docs/electron/runtime-environments.zh.md)。
 
-构建准备流程下载固定 HTTPS 归档，并在解压前使用 [`toolchains.lock.json`](toolchains.lock.json) 中的 SHA256 校验。Node distribution 保留 `LICENSE`；python-build-standalone distribution 保留 `LICENSE.txt` 及随包依赖的许可证元数据。上游资产见 [Node.js release](https://nodejs.org/download/release/v24.17.0/) 与 [python-build-standalone release](https://github.com/astral-sh/python-build-standalone/releases/tag/20260924)。打包前运行 `pnpm --filter @dsh-electron/dsh-electron prepare:toolchains` 和 `pnpm --filter @dsh-electron/dsh-electron smoke:toolchains`，以验证当前原生目标。
+运行环境下载使用固定 HTTPS 归档及 [`toolchains.lock.json`](toolchains.lock.json) 中的 SHA256。Main 与构建准备流程共享安全解压实现，在原子激活前验证解释器版本、npm/npx、Python import 和 pip。发布准备使用 `prepare:core`；完整托管运行环境不进入安装包资源。
 
 Main 保留显式 `$DSH_HOME`；否则受监督进程使用操作系统用户主目录下的 `.dsh`，因此 Harness profile、设置、会话等状态在 macOS/Linux 使用 `~/.dsh`，在 Windows 使用 `%USERPROFILE%\.dsh`。Electron 将 Chromium 数据、缓存与桌面更新偏好保留在其平台专属 `userData` 目录。Agent shell 命令以当前用户主目录为初始工作区；用户可通过 Harness UI 选择其他工作区。
 

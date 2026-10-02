@@ -147,7 +147,7 @@ Electron Main
     │
     │ spawn
     ▼
-Windows: resources/toolchains/node/node.exe with one hidden console
+Windows: resources/core-runtime/node.exe with one hidden console
 Other platforms: Electron executable with ELECTRON_RUN_AS_NODE=1
     │
     ▼
@@ -159,7 +159,7 @@ dsh web
 
 Windows 上 Host 运行于随包发布的 Node.js，因为 `electron.exe` 是 GUI 子系统映像：自身没有控制台的进程会让 Windows 为每个控制台子系统后代新建可见控制台，Windows 11 会将其渲染为 Windows Terminal 窗口。随包发布的 Node.js 是控制台子系统映像，并以 `windowsHide` 和一个继承的 stdin 设备句柄启动，因此 Host 持有一个隐藏控制台，job、ACL 与沙箱子进程都继承它；仅用 `CREATE_NO_WINDOW` 会让控制台子系统子进程完全没有控制台，而受限令牌无法为其子进程创建控制台。其它平台继续使用 Electron 的 Node 兼容子模式。
 
-Main 在 Host 启动前解析随包 Node.js 与 Python toolchain，并将版本化 fallback 策略发送给现有 Desktop subprocess provider。该 provider 在可执行文件查找、普通子进程和终端中组合 toolchain 与 Agent 代理策略。它依次搜索请求、项目、用户及 Main 原始 PATH，从 Agent PATH 中排除 Host 专用 pnpm shim，并将可写的 npm 与 Python 用户命令目录及随包命令追加为 fallback。应用资源保持不可修改；用户包状态位于 `$DSH_HOME/electron` 下。
+Core Host 执行与插件包操作独立于 Agent 运行环境。Main 拥有可选 Node/Python Runtime Manager、版本化用户数据 generation 和封闭的类型化订阅 API。Host 与客户端启动不要求任何托管运行环境。Desktop subprocess provider 接收 version-2 策略，仅包含验证通过的已安装环境；按请求、项目、用户、原始 PATH、托管 fallback 的顺序搜索，并排除 Host 专用包管理命令。安装更改在重启后生效。[运行环境](runtime-environments.zh.md)说明生命周期、迁移与代理行为。
 
 该 sidecar 拥有上游 Harness 行为：
 

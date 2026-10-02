@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for runtime-environments.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/electron/runtime-environments.md
+/desktop-runtime-environments:
+  en: 04e77333e65cb9cb
+  zh: 86f894d1b5f87f81
+/desktop-runtime-environments/setup-and-migration:
+  en: 11d22b547901a610
+  zh: d5d038d9033335ed
+/desktop-runtime-environments/lifecycle-and-storage:
+  en: f431f0be6997db31
+  zh: b893c9b24668650a
+/desktop-runtime-environments/network-and-executable-selection:
+  en: ebf45adda530eab6
+  zh: a2458ec5e8c44844
