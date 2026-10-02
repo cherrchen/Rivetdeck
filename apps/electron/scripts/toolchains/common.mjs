@@ -59,7 +59,7 @@ function safeMember(name) {
 
 function safeLink(member, link) {
   const stripped = safeMember(member)
-  if (isAbsolute(link) || /^[A-Za-z]:/u.test(link)) throw new Error(`unsafe toolchain archive link: ${member}`)
+  if (isAbsolute(link.replaceAll('\\', '/')) || /^[A-Za-z]:/u.test(link)) throw new Error(`unsafe toolchain archive link: ${member}`)
   const resolved = normalize(join(dirname(stripped), link.replaceAll('\\', '/')))
   if (resolved === '..' || resolved.startsWith(`..${sep}`)) throw new Error(`unsafe toolchain archive link: ${member}`)
 }
@@ -72,11 +72,49 @@ export function validateArchiveMember(name, link) {
 export async function extractArchive(archive, entry, destination) {
   mkdirSync(destination, { recursive: true })
   if (entry.archive !== 'tar.gz') throw new Error(`unsupported archive: ${entry.archive}`)
+  const members = []
+  const links = new Map()
+  let invalid
   await listTar({ file: archive, strict: true, onReadEntry: member => {
+    try {
+    const name = safeMember(member.path)
+    members.push(name)
+    if (member.type === 'SymbolicLink') links.set(name, member.linkpath.replaceAll('\\', '/'))
     validateArchiveMember(member.path)
+    if (!['File', 'Directory', 'SymbolicLink'].includes(member.type)) throw new Error(`unsupported toolchain member type: ${member.type}`)
     if (member.type === 'Link') throw new Error(`unsupported toolchain hard link: ${member.path}`)
     if (member.type === 'SymbolicLink') validateArchiveMember(member.path, member.linkpath)
+    } catch (error) { invalid ??= error }
   } })
+  if (invalid !== undefined) throw invalid
+
+  for (const member of members) {
+    const parts = member.split('/')
+    for (let count = 1; count < parts.length; count++) {
+      if (links.has(parts.slice(0, count).join('/'))) throw new Error(`archive member traverses a symlink: ${member}`)
+    }
+  }
+  for (const [name, link] of links) {
+    const pending = [...dirname(name).split('/').filter(part => part !== '.'), ...link.split('/')]
+    const resolved = []
+    let expansions = 0
+    while (pending.length > 0) {
+      const part = pending.shift()
+      if (part === '' || part === '.') continue
+      if (part === '..') {
+        if (resolved.length === 0) throw new Error(`unsafe toolchain symlink chain: ${name}`)
+        resolved.pop()
+        continue
+      }
+      resolved.push(part)
+      const linked = links.get(resolved.join('/'))
+      if (linked !== undefined) {
+        if (++expansions > 64) throw new Error(`cyclic toolchain symlink: ${name}`)
+        resolved.pop()
+        pending.unshift(...linked.split('/'))
+      }
+    }
+  }
   await extractTar({ file: archive, cwd: destination, strip: 1, strict: true, preservePaths: false, filter: member => safeMember(member).length > 0 })
 }
 
@@ -104,20 +142,7 @@ export async function prepare(runtime, targetName, entry, executable, verify) {
   rmSync(staged, { recursive: true, force: true })
   try {
     mkdirSync(staged, { recursive: true })
-    if (entry.archive === 'zip') {
-      const extracted = join(staged, 'archive')
-      await extractZip(archive, { dir: extracted, onEntry: member => {
-        validateArchiveMember(member.fileName)
-        const mode = (member.externalFileAttributes >> 16) & 0xFFFF
-        if ((mode & 0o170000) === 0o120000) throw new Error(`unsupported toolchain ZIP symlink: ${member.fileName}`)
-      } })
-      const folder = basename(new URL(entry.url).pathname, '.zip')
-      renameSync(join(extracted, folder), join(staged, 'runtime'))
-      rmSync(extracted, { recursive: true, force: true })
-    } else {
-      const runtimeRoot = join(staged, 'runtime')
-      await extractArchive(archive, entry, runtimeRoot)
-    }
+    await unpackRuntime(archive, entry, join(staged, 'runtime'))
     const runtimeRoot = join(staged, 'runtime')
     if (!existsSync(executable(runtimeRoot))) throw new Error(`missing ${runtime} executable in ${entry.url}`)
     if (`${process.platform}-${process.arch}` === targetName) verify(runtimeRoot)
@@ -169,4 +194,21 @@ function hasAbsoluteLink(root) {
     }
   }
   return false
+}
+
+/** Shared secure extraction used by Main and build preparation. */
+export async function unpackRuntime(archive, entry, destination) {
+  if (entry.archive !== 'zip') return await extractArchive(archive, entry, destination)
+  const extracted = `${destination}.zip`
+  try {
+    await extractZip(archive, { dir: resolve(extracted), onEntry: member => {
+      validateArchiveMember(member.fileName)
+      const mode = (member.externalFileAttributes >> 16) & 0xFFFF
+      if ((mode & 0o170000) === 0o120000) throw new Error(`unsupported toolchain ZIP symlink: ${member.fileName}`)
+    } })
+    const folder = basename(new URL(entry.url).pathname, '.zip')
+    renameSync(join(extracted, folder), destination)
+  } finally {
+    rmSync(extracted, { recursive: true, force: true })
+  }
 }

@@ -60,7 +60,8 @@ import {
   type HostRuntime,
 } from './runtime.ts'
 import { preparePluginPackageManager, resolveBundledPnpmBin } from './plugin-package-manager.ts'
-import { resolveDesktopToolchains } from './toolchains/resolver.ts'
+import { RuntimeManager } from './toolchains/manager.ts'
+import { createRuntimeFetch } from './toolchains/download.ts'
 import { prepareToolchainShims } from './toolchains/shims.ts'
 import type { DesktopToolchainPolicy } from './toolchains/domain.ts'
 import { migrateLegacyPluginState } from './legacy-plugin-migration.ts'
@@ -81,6 +82,7 @@ let harness: HarnessProcess | undefined
 let mainWindow: BrowserWindow | undefined
 let tray: Tray | undefined
 let updater: UpdaterController | undefined
+let runtimes: RuntimeManager | undefined
 let network: DesktopNetworkController | undefined
 let electronProxy: ElectronProxyApplier | undefined
 let networkDialogQueue: Promise<void> = Promise.resolve()
@@ -92,6 +94,7 @@ const desktop = new DesktopServices({
   getWindow: () => mainWindow,
   getUpdater: () => updater,
   getNetwork: () => network,
+  getRuntimes: () => runtimes,
   showMainWindow,
   relaunch: relaunchDesktop,
 })
@@ -242,6 +245,7 @@ async function prepareToInstall(): Promise<void> {
   const child = harness
   harness = undefined
   if (child !== undefined) await stopHarness(child)
+  await runtimes?.shutdown()
   await network?.shutdown().catch(() => undefined)
 }
 
@@ -423,7 +427,14 @@ if (!primaryInstance) {
         const networkErrorCode = url.startsWith('http:') ? response.headers.get('x-dsh-network-error') : null
         return { status: response.status, ...(networkErrorCode === null ? {} : { networkErrorCode }) }
       },
-      onEpochChanged: () => { void electronProxy?.closeConnections().catch(() => undefined) },
+      onEpochChanged: () => {
+        for (const name of ['node', 'python'] as const) {
+          void runtimes?.cancel(name).catch((error: unknown) => {
+            console.error('runtime network transition cleanup failed', error)
+          })
+        }
+        void electronProxy?.closeConnections().catch(() => undefined)
+      },
       onIncident: (incident) => {
         const activeNetwork = network
         if (activeNetwork === undefined) return
@@ -470,7 +481,10 @@ if (!primaryInstance) {
     if (networkState.effectiveMode !== 'default') await electronProxy.register(updaterNetworkSession(), 'updater')
     await electronProxy.apply(networkState.effectiveMode, networkState.runtime.gateway, network.gatewayForUpdater())
     const basePath = process.env.PATH ?? ''
-    const toolchains = resolveDesktopToolchains({ appPath, resourcesPath: process.resourcesPath, packaged: app.isPackaged })
+    const runtimeSession = session.fromPartition('runtime-downloads')
+    await electronProxy.register(runtimeSession)
+    runtimes = new RuntimeManager({ userData: userDataPath, fetch: createRuntimeFetch(runtimeSession) })
+    const toolchains = await runtimes.prepare()
     const hostRuntime = resolveHostRuntime({
       appPath,
       resourcesPath: process.resourcesPath,
@@ -478,13 +492,15 @@ if (!primaryInstance) {
       override: process.env.DSH_ELECTRON_NODE_BINARY,
     })
     const harnessHome = process.env.DSH_HOME ?? resolveHarnessHome(app.getPath('home'))
-    const shim = prepareToolchainShims(harnessHome, toolchains, process.platform)
+    const shim = prepareToolchainShims(userDataPath, toolchains, process.platform)
     const toolchainPolicy: DesktopToolchainPolicy = {
-      version: 1,
+      version: 2,
       mode: 'fallback',
       basePath,
-      node: { ...toolchains.node, binDirectory: toolchains.nodeBinDirectory },
-      python: { ...toolchains.python, binDirectory: toolchains.pythonBinDirectory },
+      ...(toolchains.node === undefined ? {} : {
+        node: { executable: toolchains.node.executable, version: toolchains.node.version, binDirectory: toolchains.node.binDirectory },
+      }),
+      ...(toolchains.python === undefined ? {} : { python: toolchains.python }),
       shimDirectory: shim.shimDirectory,
       pythonUserBase: shim.pythonUserBase,
       nodeGlobalBinDirectory: shim.nodeGlobalBinDirectory,
@@ -494,13 +510,13 @@ if (!primaryInstance) {
     const pnpmBin = resolveBundledPnpmBin(appPath)
     const packageManager = preparePluginPackageManager(
       harnessHome,
-      toolchains.node.executable,
+      hostRuntime.executable,
       pnpmBin,
     )
     await prepareEcosystemProfile(appPath, harnessHome, {
-      command: toolchains.node.executable,
+      command: hostRuntime.executable,
       args: [pnpmBin],
-      env: { PATH: packageManager.envPath },
+      env: { ...hostRuntime.env, PATH: packageManager.envPath },
     })
     const overlay = await prepareHostRuntimeOverlay(appPath, userDataPath, harnessHome)
     installDesktopIpc(

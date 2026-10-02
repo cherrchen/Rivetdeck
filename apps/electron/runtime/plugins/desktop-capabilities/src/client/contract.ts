@@ -1,3 +1,4 @@
+import type { RuntimeCapability } from '../../../../../src/toolchains/domain.ts'
 /**
  * Approved desktop capability groups exposed to Electron feature plugins.
  * Mirrors the typed preload bridge without exposing host transport or raw IPC.
@@ -87,6 +88,7 @@ import type {
 
 /** Renderer-facing desktop capabilities for feature plugins (`ctx.desktop`). */
 export interface DesktopCapabilitiesContract {
+  runtimes: RuntimeCapability
   app: {
     /** Packaged application version. */
     getVersion(): Promise<string>
@@ -160,6 +162,7 @@ export interface DesktopCapabilitiesContract {
 
 /** Typed preload bridge subset used by the desktop capability provider. */
 interface DesktopBridge {
+  runtimes: RuntimeCapability
   app: DesktopCapabilitiesContract['app']
   dialog: DesktopCapabilitiesContract['dialog']
   clipboard: DesktopCapabilitiesContract['clipboard']
@@ -197,6 +200,14 @@ export function requireDesktopBridge(): DesktopBridge {
  */
 export function createDesktopCapabilities(bridge: DesktopBridge): DesktopCapabilitiesContract {
   return {
+    runtimes: {
+      getState: () => bridge.runtimes.getState(),
+      install: name => bridge.runtimes.install(name),
+      cancel: name => bridge.runtimes.cancel(name),
+      remove: name => bridge.runtimes.remove(name),
+      completeOnboarding: () => bridge.runtimes.completeOnboarding(),
+      subscribe: callback => bridge.runtimes.subscribe(callback),
+    },
     app: {
       getVersion: () => bridge.app.getVersion(),
       getPlatform: () => bridge.app.getPlatform(),

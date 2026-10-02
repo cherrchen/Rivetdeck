@@ -24,19 +24,10 @@ describe('Electron packaging', () => {
     expect(manifest.build.extraMetadata.name).toBe('deepseek-harness-desktop')
   })
 
-  it('ships complete Node and Python distributions on every platform', async () => {
-    const manifestPath = join(import.meta.dirname, '..', 'package.json')
-    const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as ElectronManifest
-
-    expect(manifest.build.win.extraResources).toBeUndefined()
-    expect(manifest.build.extraResources).toContainEqual({
-      from: '.electron-build/toolchains/current/node',
-      to: 'toolchains/node',
-    })
-    expect(manifest.build.extraResources).toContainEqual({
-      from: '.electron-build/toolchains/current/python',
-      to: 'toolchains/python',
-    })
+  it('keeps managed distributions out of installers and ships only the Windows Core executor', async () => {
+    const manifest = JSON.parse(await readFile(join(import.meta.dirname, '..', 'package.json'), 'utf8')) as ElectronManifest
+    expect(manifest.build.extraResources.some(resource => resource.to.startsWith('toolchains'))).toBe(false)
+    expect(manifest.build.win.extraResources).toEqual([{ from: '.electron-build/core-runtime/current', to: 'core-runtime' }])
   })
 
   it('ships the prepared Network Runtime from an application-owned resource path', async () => {

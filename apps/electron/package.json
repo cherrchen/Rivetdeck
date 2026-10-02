@@ -33,10 +33,11 @@
     "smoke:toolchains": "node ./scripts/smoke-toolchains.mjs",
     "prepare:network-runtime": "node ./scripts/prepare-network-runtime.mjs",
     "test:network-runtime": "cargo test --locked --manifest-path native/network-runtime/Cargo.toml && pnpm run prepare:network-runtime && vitest run --config vitest.network-runtime.config.ts",
-    "package": "pnpm run prepare:toolchains && pnpm run prepare:network-runtime && electron-builder --publish never",
-    "start": "pnpm run build && pnpm run prepare:toolchains && pnpm run prepare:network-runtime && env -u ELECTRON_RUN_AS_NODE electron .",
+    "package": "pnpm run prepare:core && pnpm run prepare:network-runtime && electron-builder --publish never",
+    "start": "pnpm run build && pnpm run prepare:core && pnpm run prepare:network-runtime && env -u ELECTRON_RUN_AS_NODE electron .",
     "test": "pnpm run build:runtime-plugins && vitest run --root ../.. apps/electron/tests",
-    "test:ownership": "vitest run --config vitest.ownership.config.ts"
+    "test:ownership": "vitest run --config vitest.ownership.config.ts",
+    "prepare:core": "node ./scripts/toolchains/prepare-core.mjs"
   },
   "dependencies": {
     "@deepseek-ai/cordis": "workspace:^",
@@ -159,7 +160,9 @@
     "electron-updater": "^6.8.9",
     "js-yaml": "^4.2.0",
     "pnpm": "11.7.0",
-    "ws": "^8.21.0"
+    "ws": "^8.21.0",
+    "extract-zip": "^2.0.1",
+    "tar": "^7.5.22"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-api-session-controller": "workspace:^",
@@ -181,11 +184,9 @@
     "@vitejs/plugin-react": "^4.0.0",
     "electron": "43.0.0",
     "electron-builder": "26.15.3",
-    "extract-zip": "^2.0.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "sharp": "^0.35.3",
-    "tar": "^7.5.22",
     "typescript": "^6.0.3",
     "vite": "^6.0.0",
     "vitest": "^4.1.8"
@@ -207,7 +208,10 @@
       "build/icon.png",
       "build/icon-mac.png",
       "build/tray/*.png",
-      "package.json"
+      "package.json",
+      "toolchains.lock.json",
+      "scripts/toolchains/common.mjs",
+      "scripts/toolchains/manifest.mjs"
     ],
     "publish": {
       "provider": "github",
@@ -224,14 +228,6 @@
       {
         "from": ".electron-build/network-runtime/current",
         "to": "network-runtime"
-      },
-      {
-        "from": ".electron-build/toolchains/current/node",
-        "to": "toolchains/node"
-      },
-      {
-        "from": ".electron-build/toolchains/current/python",
-        "to": "toolchains/python"
       }
     ],
     "mac": {
@@ -246,6 +242,12 @@
       "icon": "build/icon.png",
       "target": [
         "nsis"
+      ],
+      "extraResources": [
+        {
+          "from": ".electron-build/core-runtime/current",
+          "to": "core-runtime"
+        }
       ]
     },
     "nsis": {

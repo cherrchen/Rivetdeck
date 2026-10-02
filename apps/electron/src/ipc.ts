@@ -1,3 +1,4 @@
+import { requireRuntimeName } from './toolchains/domain.ts'
 /**
  * Typed ipcMain handlers for the desktop preload bridge.
  */
@@ -37,6 +38,34 @@ export function installDesktopIpc(
   }
 
   const guardEvent = (event: Electron.IpcMainEvent): boolean => isTrustedContents(event.sender)
+
+
+  ipcMain.handle(DesktopIpcChannel.runtimesGetState, (event) => { guard(event); return desktop.runtimes().state() })
+  ipcMain.handle(DesktopIpcChannel.runtimesInstall, async (event, name: unknown) => {
+    guard(event)
+    await desktop.runtimes().install(requireRuntimeName(name))
+  })
+  ipcMain.handle(DesktopIpcChannel.runtimesCancel, async (event, name: unknown) => {
+    guard(event)
+    await desktop.runtimes().cancel(requireRuntimeName(name))
+  })
+  ipcMain.handle(DesktopIpcChannel.runtimesRemove, async (event, name: unknown) => {
+    guard(event)
+    await desktop.runtimes().remove(requireRuntimeName(name))
+  })
+  ipcMain.handle(DesktopIpcChannel.runtimesCompleteOnboarding, async (event) => {
+    guard(event)
+    await desktop.runtimes().completeOnboarding()
+  })
+  ipcMain.on(DesktopIpcChannel.runtimesSubscribe, (event) => {
+    if (!guardEvent(event)) return
+    const port = event.ports[0]
+    if (port === undefined) return
+    const unsubscribe = desktop.runtimes().subscribe((snapshot) => {
+      try { port.postMessage(snapshot) } catch (error) { console.debug('runtime subscription port closed', error) }
+    })
+    port.on('close', unsubscribe)
+  })
 
   ipcMain.handle(DesktopIpcChannel.getBootstrap, async (event) => {
     guard(event)

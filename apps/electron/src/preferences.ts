@@ -35,6 +35,7 @@ export interface DesktopPreferencesV1 {
   version: typeof DESKTOP_PREFERENCES_VERSION
   updateChannel: UpdateChannel
   network: DesktopNetworkPreferencesV1
+  runtimeOnboardingCompleted?: boolean
 }
 
 /** Load result retaining recoverable warnings for the Settings UI. */
@@ -74,7 +75,7 @@ export class DesktopPreferencesStore {
    * @param patch - Root fields to replace; nested Network updates use {@link updateNetwork}.
    * @returns the committed preference document.
    */
-  async update(patch: Partial<Pick<DesktopPreferencesV1, 'updateChannel' | 'network'>>): Promise<DesktopPreferencesV1> {
+  async update(patch: Partial<Pick<DesktopPreferencesV1, 'updateChannel' | 'network' | 'runtimeOnboardingCompleted'>>): Promise<DesktopPreferencesV1> {
     mkdirSync(dirname(this.path), { recursive: true, mode: 0o700 })
     return await withDesktopFileWriter(this.path, async () => {
       const current = this.load().preferences
@@ -179,13 +180,15 @@ function loadDesktopPreferencesFromPath(path: string): DesktopPreferencesLoadRes
   const network = parseNetworkPreferences(value.network)
   if (network === undefined) {
     return {
-      preferences: { ...cloneDefaults(), updateChannel },
+      preferences: { ...cloneDefaults(), updateChannel, runtimeOnboardingCompleted: value.runtimeOnboardingCompleted === true },
       warning: { code: 'invalid-network', message: 'Network preferences are invalid; Network mode is Default.' },
       dirty: true,
     }
   }
   return {
-    preferences: { version: DESKTOP_PREFERENCES_VERSION, updateChannel, network },
+    preferences: {
+      version: DESKTOP_PREFERENCES_VERSION, updateChannel, network, runtimeOnboardingCompleted: value.runtimeOnboardingCompleted === true,
+    },
     dirty: !isUpdateChannel(value.updateChannel),
   }
 }
@@ -234,7 +237,10 @@ function validateCompletePreferences(value: DesktopPreferencesV1): DesktopPrefer
   if (!isUpdateChannel(value.updateChannel)) throw new Error('desktop preferences: invalid update channel')
   const network = parseNetworkPreferences(value.network)
   if (network === undefined) throw new Error('desktop preferences: invalid Network preferences')
-  return { version: DESKTOP_PREFERENCES_VERSION, updateChannel: value.updateChannel, network }
+  return {
+    version: DESKTOP_PREFERENCES_VERSION, updateChannel: value.updateChannel, network,
+    runtimeOnboardingCompleted: value.runtimeOnboardingCompleted === true,
+  }
 }
 
 function cloneDefaults(): DesktopPreferencesV1 {

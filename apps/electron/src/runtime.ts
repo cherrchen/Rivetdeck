@@ -25,8 +25,8 @@ export interface HostRuntime {
 /**
  * Resolve the executable that carries the supervised Host and its plugin commands.
  *
- * Windows packaging ships `node.exe` under `resources/toolchains/node`; development builds use the copy
- * created by `pnpm --filter @dsh-electron/dsh-electron prepare:node`. Other platforms keep using
+ * Windows packaging ships `node.exe` under `resources/core-runtime`; development builds use the copy
+ * created by `pnpm --filter @dsh-electron/dsh-electron prepare:core`. Other platforms keep using
  * Electron's own Node-compatible child mode, which has no console-visibility defect there.
  *
  * @param options - Application paths, packaging state, and optional executable override.
@@ -60,14 +60,14 @@ export function resolveHostRuntime(options: {
   }
   const arch = options.arch ?? process.arch
   const candidates = [
-    options.packaged ? join(options.resourcesPath, 'toolchains', 'node', 'node.exe') : undefined,
-    join(options.appPath, '.electron-build', 'toolchains', 'node', `win32-${arch}`, 'node.exe'),
+    options.packaged ? join(options.resourcesPath, 'core-runtime', 'node.exe') : undefined,
+    join(options.appPath, '.electron-build', 'core-runtime', `win32-${arch}`, 'node.exe'),
   ].filter((candidate): candidate is string => candidate !== undefined)
   const executable = candidates.find(candidate => exists(candidate))
   if (executable === undefined) {
     throw new Error(
       `electron runtime: prepared Node.js is missing (looked for ${candidates.join(', ')}); `
-      + 'run pnpm --filter @dsh-electron/dsh-electron prepare:node',
+      + 'run pnpm --filter @dsh-electron/dsh-electron prepare:core',
     )
   }
   return { executable, env: {} }

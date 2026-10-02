@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { DesktopToolchains } from './domain.ts'
 
@@ -40,17 +40,25 @@ export function prepareToolchainShims(harnessHome: string, toolchains: DesktopTo
   for (const directory of [
     shimDirectory, pythonUserBase, nodeGlobal, nodeGlobalBinDirectory, pythonUserBinDirectory,
   ]) mkdirSync(directory, { recursive: true })
-  const pythonRuntime = windows
-    ? `if not defined PYTHONUSERBASE set "PYTHONUSERBASE=${cmdValue(pythonUserBase)}"\r\nif /I "%~1"=="-m" if /I "%~2"=="pip" set "PIP_USER=1"\r\n${cmd(toolchains.python.executable)} %*`
-    : `if [ "\${PYTHONUSERBASE+x}" != x ]; then PYTHONUSERBASE=${shell(pythonUserBase)}; export PYTHONUSERBASE; fi\nif [ "$1" = -m ] && [ "$2" = pip ]; then PIP_USER=1; export PIP_USER; fi\nexec ${shell(toolchains.python.executable)} "$@"`
-  const pythonPip = windows
-    ? `if not defined PYTHONUSERBASE set "PYTHONUSERBASE=${cmdValue(pythonUserBase)}"\r\nset "PIP_USER=1"\r\n${cmd(toolchains.python.executable)} -m pip %*`
-    : `if [ "\${PYTHONUSERBASE+x}" != x ]; then PYTHONUSERBASE=${shell(pythonUserBase)}; export PYTHONUSERBASE; fi\nPIP_USER=1 exec ${shell(toolchains.python.executable)} -m pip "$@"`
-  const nodePackage = (cli: string): string => windows
-    ? `if not defined NPM_CONFIG_PREFIX set "NPM_CONFIG_PREFIX=${cmdValue(nodeGlobal)}"\r\n${cmd(toolchains.node.executable)} ${cmd(cli)} %*`
-    : `if [ "\${NPM_CONFIG_PREFIX+x}" != x ]; then NPM_CONFIG_PREFIX=${shell(nodeGlobal)}; export NPM_CONFIG_PREFIX; fi\nexec ${shell(toolchains.node.executable)} ${shell(cli)} "$@"`
-  for (const name of PYTHON_RUNTIME_COMMANDS) writeShim(shimDirectory, name, pythonRuntime, windows)
-  for (const name of PYTHON_PIP_COMMANDS) writeShim(shimDirectory, name, pythonPip, windows)
-  for (const [name, key] of NODE_PACKAGE_COMMANDS) writeShim(shimDirectory, name, nodePackage(toolchains[key]), windows)
+  const python = toolchains.python
+  const node = toolchains.node
+  rmSync(shimDirectory, { recursive: true, force: true })
+  mkdirSync(shimDirectory, { recursive: true })
+  if (python !== undefined) {
+    const pythonRuntime = windows
+      ? `if not defined PYTHONUSERBASE set "PYTHONUSERBASE=${cmdValue(pythonUserBase)}"\r\nif /I "%~1"=="-m" if /I "%~2"=="pip" set "PIP_USER=1"\r\n${cmd(python.executable)} %*`
+      : `if [ "\${PYTHONUSERBASE+x}" != x ]; then PYTHONUSERBASE=${shell(pythonUserBase)}; export PYTHONUSERBASE; fi\nif [ "$1" = -m ] && [ "$2" = pip ]; then PIP_USER=1; export PIP_USER; fi\nexec ${shell(python.executable)} "$@"`
+    const pythonPip = windows
+      ? `if not defined PYTHONUSERBASE set "PYTHONUSERBASE=${cmdValue(pythonUserBase)}"\r\nset "PIP_USER=1"\r\n${cmd(python.executable)} -m pip %*`
+      : `if [ "\${PYTHONUSERBASE+x}" != x ]; then PYTHONUSERBASE=${shell(pythonUserBase)}; export PYTHONUSERBASE; fi\nPIP_USER=1 exec ${shell(python.executable)} -m pip "$@"`
+    for (const name of PYTHON_RUNTIME_COMMANDS) writeShim(shimDirectory, name, pythonRuntime, windows)
+    for (const name of PYTHON_PIP_COMMANDS) writeShim(shimDirectory, name, pythonPip, windows)
+  }
+  if (node !== undefined) {
+    const nodePackage = (cli: string): string => windows
+      ? `if not defined NPM_CONFIG_PREFIX set "NPM_CONFIG_PREFIX=${cmdValue(nodeGlobal)}"\r\n${cmd(node.executable)} ${cmd(cli)} %*`
+      : `if [ "\${NPM_CONFIG_PREFIX+x}" != x ]; then NPM_CONFIG_PREFIX=${shell(nodeGlobal)}; export NPM_CONFIG_PREFIX; fi\nexec ${shell(node.executable)} ${shell(cli)} "$@"`
+    for (const [name, key] of NODE_PACKAGE_COMMANDS) writeShim(shimDirectory, name, nodePackage(node[key]), windows)
+  }
   return { shimDirectory, pythonUserBase, nodeGlobalBinDirectory, pythonUserBinDirectory }
 }

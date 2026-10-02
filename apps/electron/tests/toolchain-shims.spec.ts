@@ -20,10 +20,8 @@ describe('Desktop fallback shims', () => {
       chmodSync(node, 0o700)
       chmodSync(python, 0o700)
       const paths = prepareToolchainShims(root, {
-        node: { executable: node, version: '24.17.0' },
-        python: { executable: python, version: '3.14.7' },
-        nodeBinDirectory: root, pythonBinDirectory: root,
-        npmCli: join(root, 'npm-cli.js'), npxCli: join(root, 'npx-cli.js'),
+        node: { executable: node, version: '24.17.0', binDirectory: root, npmCli: join(root, 'npm-cli.js'), npxCli: join(root, 'npx-cli.js') },
+        python: { executable: python, version: '3.14.7', binDirectory: root },
       }, 'darwin')
       expect(readdirSync(paths.shimDirectory).sort()).toEqual(posixShimNames)
       expect(paths.nodeGlobalBinDirectory).toBe(join(root, 'electron', 'node-global', 'bin'))
@@ -56,10 +54,8 @@ describe('Desktop fallback shims', () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-toolchain-win-shims-'))
     try {
       const paths = prepareToolchainShims(root, {
-        node: { executable: 'C:\\bundle\\node.exe', version: '24.17.0' },
-        python: { executable: 'C:\\bundle\\python.exe', version: '3.14.7' },
-        nodeBinDirectory: 'C:\\bundle', pythonBinDirectory: 'C:\\bundle',
-        npmCli: 'C:\\bundle\\npm-cli.js', npxCli: 'C:\\bundle\\npx-cli.js',
+        node: { executable: 'C:\\bundle\\node.exe', version: '24.17.0', binDirectory: root, npmCli: 'C:\\bundle\\npm-cli.js', npxCli: 'C:\\bundle\\npx-cli.js' },
+        python: { executable: 'C:\\bundle\\python.exe', version: '3.14.7', binDirectory: root },
       }, 'win32')
       expect(readdirSync(paths.shimDirectory).sort()).toEqual(windowsShimNames)
       expect(paths.nodeGlobalBinDirectory).toBe(join(root, 'electron', 'node-global'))
@@ -78,5 +74,17 @@ describe('Desktop fallback shims', () => {
     } finally {
       await rm(root, { recursive: true, force: true })
     }
+  })
+})
+
+describe('optional shim lifecycle', () => {
+  it('cleans obsolete managed commands without creating Core commands', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-optional-shims-'))
+    try {
+      const paths = prepareToolchainShims(root, { python: { executable: '/managed/python', version: '3.14.7', binDirectory: '/managed' } }, 'linux')
+      expect(readdirSync(paths.shimDirectory).sort()).toEqual(['pip', 'pip3', 'python', 'python3'])
+      prepareToolchainShims(root, {}, 'linux')
+      expect(readdirSync(paths.shimDirectory)).toEqual([])
+    } finally { await rm(root, { recursive: true, force: true }) }
   })
 })

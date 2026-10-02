@@ -118,7 +118,7 @@ describe('Desktop Agent toolchain and proxy composition', () => {
       mode: 'manual', proxyAgentTraffic: true, gateway,
     })
     process.env.DSH_ELECTRON_TOOLCHAIN_POLICY = JSON.stringify({
-      version: 1, mode: 'fallback', basePath: '/system/bin',
+      version: 2, mode: 'fallback', basePath: '/system/bin',
       node: { executable: process.execPath, binDirectory: join(root, 'node'), version: '24.17.0' },
       python: { executable: process.execPath, binDirectory: join(root, 'python'), version: '3.14.7' },
       shimDirectory, pythonUserBase: join(root, 'python-user'),
