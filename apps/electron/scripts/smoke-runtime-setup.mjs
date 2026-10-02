@@ -23,6 +23,7 @@ const events = []
 async function launch() {
   application = await _electron.launch({ executablePath, args: [`--user-data-dir=${userData}`], env, timeout: 120_000 })
   application.process().stderr.on('data', bytes => process.stderr.write(bytes))
+  application.process().stdout.on('data', bytes => process.stdout.write(bytes))
   const page = await application.firstWindow({ timeout: 120_000 })
   page.on('pageerror', error => console.error('renderer error:', error))
   await page.waitForFunction(() => window.deepseekDesktop !== undefined)
@@ -57,7 +58,15 @@ try {
   assert.equal((await page.evaluate(() => window.deepseekDesktop.runtimes.getState())).onboardingCompleted, true)
   events.push('Skip persisted without installation')
   const preview = page.getByRole('dialog', { name: /Preview Notice|预览版说明/ })
-  await preview.getByRole('button', { name: /Continue|继续/, exact: true }).click({ timeout: 30_000 })
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await preview.getByRole('button', { name: /Continue|继续/, exact: true }).click({ timeout: 30_000 })
+    const result = await Promise.race([
+      preview.waitFor({ state: 'hidden' }).then(() => 'saved'),
+      preview.getByRole('alert').waitFor({ state: 'visible' }).then(() => 'retry'),
+    ])
+    if (result === 'saved') break
+    console.warn('Preview acknowledgement reported a refused write; retrying after its recovery read.')
+  }
   await preview.waitFor({ state: 'hidden' })
   await close()
   page = await launch()
@@ -108,6 +117,14 @@ try {
     events.push('Deferred Node removal preserves Python and Core Host after restart')
   }
   console.log(JSON.stringify({ platform: process.platform, arch: process.arch, executablePath, scratch, events }, null, 2))
+} catch (error) {
+  const page = application?.windows()[0]
+  if (page !== undefined && !page.isClosed()) {
+    console.error('smoke failure UI:', await page.locator('body').innerText())
+    await page.screenshot({ path: join(scratch, 'failure.png') })
+  }
+  console.error('smoke artifacts:', scratch)
+  throw error
 } finally {
   await close()
   if (!process.argv.includes('--keep')) await rm(scratch, { recursive: true, force: true })
