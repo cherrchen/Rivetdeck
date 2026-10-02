@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, copyFile, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { create as tar } from 'tar'
 import { afterEach, describe, expect, it } from 'vitest'
 import { installRuntime, verifyRuntime } from '../src/toolchains/installer.ts'
@@ -74,13 +74,15 @@ describe('Main runtime installer', () => {
     const { root } = await fixture()
     await expect(verifyRuntime('node', root, '24.17.0', process.platform)).rejects.toThrow(/missing/u)
     const nodeRoot = join(root, 'real')
-    await mkdir(join(nodeRoot, 'lib/node_modules/npm/bin'), { recursive: true })
-    await mkdir(join(nodeRoot, 'bin'), { recursive: true })
-    const { symlink } = await import('node:fs/promises')
-    await symlink(process.execPath, join(nodeRoot, 'bin/node'))
-    await writeFile(join(nodeRoot, 'lib/node_modules/npm/bin/npm-cli.js'), '')
-    await writeFile(join(nodeRoot, 'lib/node_modules/npm/bin/npx-cli.js'), '')
-    await expect(verifyRuntime('node', nodeRoot, '1.0.0', 'linux')).rejects.toThrow(/verification/u)
+    const executable = join(nodeRoot, process.platform === 'win32' ? 'node.exe' : 'bin/node')
+    const npm = join(nodeRoot, process.platform === 'win32' ? 'node_modules/npm/bin' : 'lib/node_modules/npm/bin')
+    await mkdir(npm, { recursive: true })
+    await mkdir(dirname(executable), { recursive: true })
+    await copyFile(process.execPath, executable)
+    await chmod(executable, 0o755)
+    await writeFile(join(npm, 'npm-cli.js'), '')
+    await writeFile(join(npm, 'npx-cli.js'), '')
+    await expect(verifyRuntime('node', nodeRoot, '1.0.0', process.platform)).rejects.toThrow(/verification/u)
   })
 })
 
