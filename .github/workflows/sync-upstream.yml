@@ -1,7 +1,7 @@
 name: Sync upstream
 
 on:
-  # Pinned to dsh-v0.1.7-rc.2. Scheduled master merges would pull
+  # Pinned to dsh-v0.2.0-rc.2. Scheduled master merges would pull
   # commits after that tag. Re-enable the cron only after an explicit decision
   # to leave that pin.
   # schedule:
@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       allow_master_sync:
-        description: 'Merge upstream/master despite the dsh-v0.1.7-rc.2 pin'
+        description: 'Merge upstream/master despite the dsh-v0.2.0-rc.2 pin'
         type: boolean
         default: false
 

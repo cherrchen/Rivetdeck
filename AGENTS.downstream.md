@@ -51,7 +51,7 @@ Prefixes `codex/*`, `dev/*`, `cursor/*`, and `agent/*` are development branches 
 
 ## Upstream synchronization
 
-[`sync-upstream.yml`](.github/workflows/sync-upstream.yml) is pinned to **`dsh-v0.1.7-rc.2`**: the six-hour master schedule is disabled, and `workflow_dispatch` must set `allow_master_sync` before it may merge `upstream/master`. The target branch is **`develop`** — never `main`. Re-enable the schedule only after an explicit decision to leave that pin.
+[`sync-upstream.yml`](.github/workflows/sync-upstream.yml) is pinned to **`dsh-v0.2.0-rc.2`**: the six-hour master schedule is disabled, and `workflow_dispatch` must set `allow_master_sync` before it may merge `upstream/master`. The target branch is **`develop`** — never `main`. Re-enable the schedule only after an explicit decision to leave that pin.
 
 ```
 upstream/master  →  develop  →  v{a.b.c}-beta.{x}
