@@ -133,9 +133,7 @@
 }
 
 .passwordStatus,
-.statusRow,
-.footer,
-.actions {
+.statusRow {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -153,30 +151,45 @@
   min-width: 0;
 }
 
-.testList {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+/* Test card row (figma 'Frame 2117131228' cube row: 8 gap, hairline cards).
+ * The 120 basis is the content box, so one card's outer minimum is
+ * 120 + 32 padding + 1 border: four of them plus three 8 gaps fit the 559
+ * content box the settings dialog leaves at its default width. */
+.testCards {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.testCard {
+  box-sizing: border-box;
+  flex: 1 1 120px;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 20px 16px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-xl);
 }
 
-.testList li {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 0;
-  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
-  font-size: 12px;
-  line-height: 18px;
+.testCardTitle {
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 400;
+  color: var(--dsw-alias-label-primary);
 }
 
-.testList li span {
+.testCardStatus {
   display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 6px;
-  text-align: right;
+  text-align: center;
+  font-size: 12px;
+  line-height: 18px;
   color: var(--dsw-alias-label-secondary);
 }
 
@@ -209,14 +222,17 @@
   font-family: ui-monospace, SFMono-Regular, monospace;
 }
 
-.footer {
-  justify-content: space-between;
-  padding-top: 4px;
+/* The restore control's own row, directly above the frame's save button; both
+ * end at the same right edge so they read as one right-aligned action group. */
+.footerActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 @media (max-width: 600px) {
   .fields { grid-template-columns: 1fr; }
-  .footer { flex-wrap: wrap; }
   .rowText { padding-right: 12px; }
 }
 

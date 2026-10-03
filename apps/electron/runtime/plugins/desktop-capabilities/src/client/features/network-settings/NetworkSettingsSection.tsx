@@ -239,14 +239,17 @@ export function NetworkSettingsSection({ network, shell, providers: readProvider
           </div>}
 
           <div className={css.panel}>
-            <h3>{t('tests')}</h3><p className={css.muted}>{t('testHint')}</p>
-            <ul className={css.testList}>{KINDS.map((kind) => {
+            <h3>{t('tests')}</h3>
+            <div className={css.testCards} role="list">{KINDS.map((kind) => {
               const item = resultFor(kind)
               const status = testing ? 'testing' : item?.status ?? (kind === 'llm' && providers.length === 0 ? 'notConfigured' : 'notTested')
-              return <li key={kind}><strong>{t(kind)}</strong><span role="status"><StateDot state={testDot(status)} />{t(status === 'not-configured' ? 'notConfigured' : status)}
-                {item?.httpStatus === undefined ? '' : ` · HTTP ${item.httpStatus}`}
-                {item?.latencyMs === undefined ? '' : ` · ${item.latencyMs} ms`}</span></li>
-            })}</ul>
+              return <div key={kind} className={css.testCard} role="listitem" data-test-status={testDot(status)}>
+                <strong className={css.testCardTitle}>{t(kind)}</strong>
+                <span className={css.testCardStatus} role="status"><StateDot state={testDot(status)} />{t(status === 'not-configured' ? 'notConfigured' : status)}
+                  {item?.httpStatus === undefined ? '' : ` · HTTP ${item.httpStatus}`}
+                  {item?.latencyMs === undefined ? '' : ` · ${item.latencyMs} ms`}</span>
+              </div>
+            })}</div>
             {advanced && resultFor('proxy') !== undefined && <p className={css.muted}>
               {t('lastRoute')}: {routeText(resultFor('proxy')?.route)} · {t('handshakeStage')}: {resultFor('proxy')?.stage ?? '—'}
               {resultFor('proxy')?.error === undefined ? '' : ` · ${t('errorCode')}: ${resultFor('proxy')?.error?.code}`}
@@ -314,7 +317,9 @@ export function NetworkSettingsSection({ network, shell, providers: readProvider
               </>
             )} />
           {notice !== undefined && <Toast text={notice} onDone={() => { setNotice(undefined) }} />}
-          <div className={css.footer}><Button size="sm" variant="outline" onClick={() => { setRestorePrompt(true) }} disabled={saving}>{t('restore')}</Button></div>
+          <div className={css.footerActions}>
+            <Button variant="outline" onClick={() => { setRestorePrompt(true) }} disabled={saving}>{t('restore')}</Button>
+          </div>
         </div></SettingsForm>
       {runtimeSettings !== undefined && <RuntimeSettings {...runtimeSettings} />}
 

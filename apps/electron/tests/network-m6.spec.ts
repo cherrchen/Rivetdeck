@@ -135,6 +135,8 @@ describe('Network settings UI', () => {
   it('does not gate Save on failed connection tests', async () => {
     const network = view()
     await screen.findByText('Manual Proxy')
+    expect(screen.queryByText('Tests the currently active mode for diagnostics only; failure never blocks saving.')).toBeNull()
+    expect(screen.getAllByRole('listitem')).toHaveLength(4)
     fireEvent.change(screen.getByLabelText('Host'), { target: { value: 'other.example' } })
     fireEvent.click(screen.getByRole('button', { name: 'Test connection' }))
     await screen.findAllByText('Unreachable')
