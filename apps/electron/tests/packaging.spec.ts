@@ -9,7 +9,7 @@ interface ElectronManifest {
   build: {
     extraMetadata: { name: string }
     extraResources: Array<{ from: string; to: string }>
-    nsis: { useZip: boolean; differentialPackage: boolean }
+    nsis: { useZip: boolean; differentialPackage: boolean; include: string; script?: string }
     win: { extraResources?: Array<{ from: string; to: string }> }
   }
 }
@@ -21,6 +21,8 @@ describe('Electron packaging', () => {
 
     expect(manifest.build.nsis.useZip).toBe(true)
     expect(manifest.build.nsis.differentialPackage).toBe(false)
+    expect(manifest.build.nsis.include).toBe('.electron-build/nsis/include.nsh')
+    expect(manifest.build.nsis.script).toBeUndefined()
     expect(manifest.build.extraMetadata.name).toBe('deepseek-harness-desktop')
   })
 
@@ -57,7 +59,7 @@ describe('Electron packaging', () => {
   })
 })
 
-it('generates checked Windows ZIP extraction without copying maintained installer policy', async () => {
+it('generates checked Windows ZIP extraction while retaining default NSIS compilation', async () => {
   const { mkdtemp, rm } = await import('node:fs/promises')
   const { tmpdir } = await import('node:os')
   const { default: prepare, prepareWindowsInstallerScript } = await import('../scripts/prepare-windows-installer.mjs')
@@ -73,8 +75,13 @@ it('generates checked Windows ZIP extraction without copying maintained installe
     expect(extraction).toContain('$(decompressionFailed)')
     expect(extraction).toContain('SetErrorLevel 1')
     expect(extraction).not.toContain('nsisunz::Unzip')
-    const script = await readFile(join(projectDir, '.electron-build/nsis/installer.nsi'), 'utf8')
-    expect(script).toContain('installSection.nsh')
-    expect(script).toContain('!include "uninstaller.nsh"')
+    const include = await readFile(join(projectDir, '.electron-build/nsis/include.nsh'), 'utf8')
+    expect(include).toContain('!cd')
+    const section = await readFile(join(projectDir, '.electron-build/nsis/installSection.nsh'), 'utf8')
+    expect(section).toContain('/installer.nsh"')
+    expect(existsSync(join(projectDir, '.electron-build/nsis/installer.nsi'))).toBe(false)
+    const uninstaller = await readFile(join(projectDir, '.electron-build/nsis/uninstaller.nsh'), 'utf8')
+    expect(uninstaller).toContain('Function un.onInit')
+    expect(uninstaller).toContain('Section "un.${UNINSTALL_SECTION_NAME}"')
   } finally { await rm(projectDir, { recursive: true, force: true }) }
 })

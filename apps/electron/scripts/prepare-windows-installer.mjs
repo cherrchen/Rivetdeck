@@ -1,6 +1,6 @@
 /** Build the maintained NSIS templates with checked, long-path-capable ZIP extraction. */
 import { createRequire } from 'node:module'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 const require = createRequire(import.meta.url)
 const builderRequire = createRequire(require.resolve('electron-builder'))
@@ -31,6 +31,9 @@ export default async function prepareWindowsInstaller(context) {
 export async function prepareWindowsInstallerScript(projectDir, sevenZip) {
   const output = resolve(projectDir, '.electron-build/nsis')
   await mkdir(output, { recursive: true })
+  for (const file of await readdir(templates)) {
+    if (file.endsWith('.nsh')) await copyFile(join(templates, file), join(output, file))
+  }
   const extraction = await readFile(join(templates, 'include/extractAppPackage.nsh'), 'utf8')
   const unzip = '    nsisunz::Unzip "$PLUGINSDIR\\app-$packageArch.zip" "$INSTDIR"\n    Pop $R0\n    StrCmp $R0 "success" +3'
   const checkedExtraction = replaceOnce(extraction, unzip, `    File /oname=$PLUGINSDIR\\dsh-7za.exe "${quoted(sevenZip)}"\n    nsExec::ExecToLog '\"$PLUGINSDIR\\dsh-7za.exe\" x \"$PLUGINSDIR\\app-$packageArch.zip\" -o\"$INSTDIR\" -aoa -y'\n    Pop $R0\n    StrCmp $R0 "0" +4\n    SetErrorLevel 1`)
@@ -39,6 +42,6 @@ export async function prepareWindowsInstallerScript(projectDir, sevenZip) {
   await writeFile(join(output, 'installer.nsh'), replaceOnce(installer, '!include "extractAppPackage.nsh"', `!include "${quoted(join(output, 'extractAppPackage.nsh'))}"`))
   const section = await readFile(join(templates, 'installSection.nsh'), 'utf8')
   await writeFile(join(output, 'installSection.nsh'), replaceOnce(section, '!include installer.nsh', `!include "${quoted(join(output, 'installer.nsh'))}"`))
-  const script = await readFile(join(templates, 'installer.nsi'), 'utf8')
-  await writeFile(join(output, 'installer.nsi'), replaceOnce(script, '!include "installSection.nsh"', `!include "${quoted(join(output, 'installSection.nsh'))}"`))
+  // The current directory selects projected includes while electron-builder retains both signed compilation phases.
+  await writeFile(join(output, 'include.nsh'), `!cd "${quoted(output)}"\n`)
 }

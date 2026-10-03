@@ -255,7 +255,7 @@
       "allowToChangeInstallationDirectory": true,
       "useZip": true,
       "differentialPackage": false,
-      "script": ".electron-build/nsis/installer.nsi"
+      "include": ".electron-build/nsis/include.nsh"
     },
     "linux": {
       "category": "Development",

@@ -90,7 +90,7 @@ describe('Desktop synchronization and release workflows', () => {
       oneClick: false,
       allowToChangeInstallationDirectory: true,
       useZip: true,
-      script: '.electron-build/nsis/installer.nsi',
+      include: '.electron-build/nsis/include.nsh',
       differentialPackage: false,
     })
   })
