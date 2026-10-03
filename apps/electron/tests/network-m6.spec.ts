@@ -11,7 +11,9 @@ import type { DesktopNetworkState } from '../src/network/domain.ts'
 import type { DesktopCapabilitiesContract } from '../runtime/plugins/desktop-capabilities/src/client/index.ts'
 import { parseNetworkTestRequest, runNetworkTests } from '../src/network/test-service.ts'
 import { draftErrors, draftFromState } from '../runtime/plugins/desktop-capabilities/src/client/features/network-settings/form.ts'
-import { NetworkSettingsSection } from '../runtime/plugins/desktop-capabilities/src/client/features/network-settings/NetworkSettingsSection.tsx'
+import type { RuntimeSnapshot } from '../src/toolchains/domain.ts'
+import { en as runtimeEn } from '../runtime/plugins/desktop-capabilities/src/client/features/runtime-settings/locales.ts'
+import { NetworkSettingsSection, type NetworkSettingsInjected } from '../runtime/plugins/desktop-capabilities/src/client/features/network-settings/NetworkSettingsSection.tsx'
 import { en } from '../runtime/plugins/desktop-capabilities/src/client/features/network-settings/locales.ts'
 import { apply as networkApply, inject as networkInject } from '../runtime/plugins/desktop-capabilities/src/client/features/network-settings/index.ts'
 import { openNetworkSettings } from '../runtime/plugins/desktop-capabilities/src/client/features/network-settings/navigation.ts'
@@ -28,7 +30,7 @@ const base: DesktopNetworkState = {
 
 const translate: TranslateNS<'settings.networkElectron'> = key => en[key as keyof typeof en]
 
-function view(state: DesktopNetworkState = base) {
+function view(state: DesktopNetworkState = base, runtimeSettings?: NetworkSettingsInjected['runtimeSettings']) {
   const saveAndRestart = vi.fn<DesktopCapabilitiesContract['network']['saveAndRestart']>().mockResolvedValue(undefined)
   const network: DesktopCapabilitiesContract['network'] = {
     getState: vi.fn<DesktopCapabilitiesContract['network']['getState']>().mockResolvedValue(state),
@@ -45,13 +47,38 @@ function view(state: DesktopNetworkState = base) {
     removeManualPassword: vi.fn<DesktopCapabilitiesContract['network']['removeManualPassword']>().mockResolvedValue(undefined),
   }
   render(createElement(NetworkSettingsSection, { network, shell: { openExternal: vi.fn().mockResolvedValue(undefined) },
-    providers: async () => [], t: translate, close: () => undefined }))
+    runtimeSettings, providers: async () => [], t: translate, close: () => undefined }))
   return { network, saveAndRestart }
 }
 
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
 describe('Network settings UI', () => {
+  it('shows network and independent runtime actions under one settings heading', async () => {
+    const snapshot: RuntimeSnapshot = {
+      onboardingCompleted: true,
+      node: { name: 'node', version: '24.17.0', phase: 'not-installed', restartRequired: false },
+      python: { name: 'python', version: '3.14.7', phase: 'not-installed', restartRequired: false },
+    }
+    view(base, {
+      t: key => runtimeEn[key as keyof typeof runtimeEn], restart: async () => {},
+      runtimes: {
+        getState: async () => snapshot,
+        subscribe: (listener) => { listener(snapshot); return () => {} },
+        install: async () => {}, cancel: async () => {}, remove: async () => {}, completeOnboarding: async () => {},
+      },
+    })
+    await screen.findByRole('heading', { name: en.nav })
+    expect(screen.getAllByRole('heading', { level: 2 }).map(heading => heading.textContent)).toMatchInlineSnapshot(`
+      [
+        "Network & Runtimes",
+      ]
+    `)
+    expect(screen.getByRole('heading', { name: runtimeEn.title })).toBeTruthy()
+    expect(await screen.findAllByRole('button', { name: runtimeEn.install })).toHaveLength(2)
+    expect(screen.getByRole('button', { name: en.save })).toBeTruthy()
+  })
+
   it('navigates from the failure dialog request to the Network section', async () => {
     const root = document.createElement('div')
     const trigger = document.createElement('button')

@@ -17,9 +17,9 @@
 }
 
 .header h2 {
-  font-size: 20px;
+  font-size: 18px;
   line-height: 28px;
-  font-weight: 400;
+  font-weight: 600;
 }
 
 .header p,
@@ -123,7 +123,7 @@
   min-width: 0;
   font-size: 12px;
   line-height: 18px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .fieldError {
@@ -219,3 +219,12 @@
   .footer { flex-wrap: wrap; }
   .rowText { padding-right: 12px; }
 }
+
+.subheading { margin: 0; font-size: 14px; line-height: 22px; font-weight: 500; }
+.loading { display: flex; align-items: center; justify-content: center; min-height: 160px; }
+
+.spinner { animation: network-spin 1s linear infinite; }
+@keyframes network-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+
+.controls { display: flex; flex-direction: column; gap: 16px; }

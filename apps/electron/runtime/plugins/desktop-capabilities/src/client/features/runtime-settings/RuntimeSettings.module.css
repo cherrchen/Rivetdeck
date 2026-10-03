@@ -1,8 +1,16 @@
 .section { display: flex; flex-direction: column; gap: 16px; max-width: 760px; color: var(--dsw-alias-label-primary); }
-.section h2 { margin: 0; font-size: 20px; font-weight: 400; }
+.heading { margin: 0; font-size: 14px; line-height: 22px; font-weight: 500; }
 .section p { margin: 0; font-size: 13px; line-height: 20px; }
-.row { display: flex; flex-direction: column; gap: 8px; padding: 16px 0; border-bottom: 0.5px solid var(--dsw-alias-border-l2); }
+.row { display: flex; align-items: center; gap: 16px; padding: 16px 0; border-bottom: 0.5px solid var(--dsw-alias-border-l2); }
 .row h3 { margin: 0; font-size: 14px; font-weight: 500; }
 .path { overflow-wrap: anywhere; font-size: 12px; }
 .actions, .choice { display: flex; align-items: center; gap: 12px; }
 .row progress { width: 100%; }
+
+.choice { justify-content: space-between; }
+
+.rowText { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 8px; }
+.actions { flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 600px) { .row { align-items: flex-start; flex-direction: column; } }
+
+.intro { color: var(--dsw-alias-label-tertiary); }

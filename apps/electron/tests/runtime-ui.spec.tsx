@@ -52,9 +52,9 @@ describe('optional runtime views', () => {
       try {
         await act(async () => { root.render(<>
           <RuntimeSetup complete={() => {}} runtimes={fake.runtimes} restart={async () => {}} t={t} />
-          <RuntimeSettings runtimes={fake.runtimes} restart={async () => {}} t={t} close={() => {}} />
+          <RuntimeSettings runtimes={fake.runtimes} restart={async () => {}} t={t} />
         </>) })
-        const choices = [...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
+        const choices = [...document.querySelectorAll<HTMLButtonElement>('[role="switch"]')]
         for (const index of selection) await click(choices[index]!)
         expect(fake.calls).toEqual([])
         await click(button(en.selected))
@@ -68,6 +68,8 @@ describe('optional runtime views', () => {
         expect(document.body.textContent).toContain('/managed/node')
         await click(button(en.skip))
         await click(button(en.remove))
+        expect(fake.calls).not.toContain('remove:node')
+        await click(button(en.confirmRemove))
         expect(fake.calls).toContain('remove:node')
       } finally { await act(async () =>{  root.unmount() }) }
     })

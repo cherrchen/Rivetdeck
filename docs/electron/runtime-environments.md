@@ -6,7 +6,7 @@ Desktop starts with no managed Node.js or Python. Core execution belongs to Elec
 
 ## Setup and migration
 
-The client shell displays an optional setup dialog once per Desktop user-data profile. Node and Python start unselected. Skip persists onboarding completion without downloading anything. Settings → Runtime Environments remains available after Skip, failure, or removal. Existing users receive the dialog once when the feature is introduced. App updates and later runtime removal do not reset completion. Legacy bundled runtimes and system interpreters are neither copied nor reported as managed installations.
+The client shell displays an optional setup dialog once per Desktop user-data profile. Node and Python start unselected. Skip persists onboarding completion without downloading anything. Settings → Network & Runtimes remains available after Skip, failure, or removal. Existing users receive the dialog once when the feature is introduced. App updates and later runtime removal do not reset completion. Legacy bundled runtimes and system interpreters are neither copied nor reported as managed installations.
 
 ## Lifecycle and storage
 

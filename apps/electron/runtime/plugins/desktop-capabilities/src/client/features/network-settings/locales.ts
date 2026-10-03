@@ -1,6 +1,6 @@
 /** Simplified Chinese copy for the Desktop Network page. */
 export const zh = {
-  nav: '网络', title: '网络连接', intro: '选择 Desktop 与 Harness 的网络连接方式。模式和代理配置在重启后生效。',
+  nav: '网络与运行环境', title: '网络连接', intro: '选择 Desktop 与 Harness 的网络连接方式。模式和代理配置在重启后生效。',
   mode: '网络模式', default: 'Default', defaultHint: '使用应用现有网络行为。Desktop 不接管代理路由。',
   direct: 'Direct', directHint: '强制直连，并清理 Desktop 可控 Agent 子进程的代理环境变量。',
   system: 'System Proxy', systemHint: '跟随操作系统代理策略。只执行第一条路由，不会静默回退。',
@@ -38,7 +38,7 @@ export const zh = {
 
 /** English copy follows the same typed keys. */
 export const en = {
-  nav: 'Network', title: 'Network connection', intro: 'Choose how Desktop and Harness connect. Mode and proxy changes take effect after restart.',
+  nav: 'Network & Runtimes', title: 'Network connection', intro: 'Choose how Desktop and Harness connect. Mode and proxy changes take effect after restart.',
   mode: 'Network mode', default: 'Default', defaultHint: 'Use the existing application network behavior. Desktop does not manage proxy routing.',
   direct: 'Direct', directHint: 'Connect directly and clear proxy variables for Desktop-managed Agent processes.',
   system: 'System Proxy', systemHint: 'Follow operating system proxy policy. Only the first route is used; there is no silent fallback.',

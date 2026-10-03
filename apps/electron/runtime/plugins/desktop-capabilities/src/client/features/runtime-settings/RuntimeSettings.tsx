@@ -1,6 +1,6 @@
 /** Runtime views observe Main state; local state holds only selection and dialog visibility. */
 import { useEffect, useState } from 'react'
-import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Modal, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { RuntimeCapability, RuntimeName, RuntimeSnapshot, RuntimeState } from '../../../../../../../src/toolchains/domain.ts'
 import css from './RuntimeSettings.module.css'
@@ -38,30 +38,36 @@ function RuntimeRow({ state, runtimes, t, actionError, allowInstall = true }: {
   actionError: () => void
   allowInstall?: boolean
 }) {
+  const [confirmRemoval, setConfirmRemoval] = useState(false)
   const invoke = (action: 'install' | 'cancel' | 'remove') => { void runtimes[action](state.name).catch(actionError) }
   return <article className={css.row} aria-label={t(state.name)}>
-    <h3>{t(state.name)} · {state.installedVersion ?? state.version}</h3>
-    <p>{t(state.name === 'node' ? 'nodeHint' : 'pythonHint')}</p>
-    <p role="status">{t(state.phase)}</p>
-    {state.phase === 'downloading' && <progress aria-label={t('downloading')} value={state.total === undefined ? undefined : state.received} max={state.total} />}
-    {state.error !== undefined && <p role="alert">{t(`${state.error}Error`)}</p>}
-    {state.location !== undefined && <><p>{t('managed')}</p><code className={css.path}>{state.location}</code></>}
-    <div className={css.actions}>
-      {busy(state) ? <Button variant="outline" onClick={() => invoke('cancel')}>{t('cancel')}</Button>
+    <div className={css.rowText}><h3>{t(state.name)} · {state.installedVersion ?? state.version}</h3>
+      <p>{t(state.name === 'node' ? 'nodeHint' : 'pythonHint')}</p>
+      <p role="status">{t(state.phase)}</p>
+      {state.phase === 'downloading' && <progress aria-label={t('downloading')} value={state.total === undefined ? undefined : state.received} max={state.total} />}
+      {state.error !== undefined && <p role="alert">{t(`${state.error}Error`)}</p>}
+      {state.location !== undefined && <><p>{t('managed')}</p><code className={css.path}>{state.location}</code></>}
+    </div><div className={css.actions}>
+      {busy(state) ? <Button size="sm" variant="outline" onClick={() => invoke('cancel')}>{t('cancel')}</Button>
         : allowInstall && state.phase !== 'removing' && <>
-          <Button variant="outline" onClick={() => invoke('install')}>{t(state.phase === 'update-available' ? 'update' : state.phase === 'failed' ? 'retry' : state.phase === 'installed' ? 'reinstall' : 'install')}</Button>
-          {state.location !== undefined && <Button variant="outline" onClick={() => invoke('remove')}>{t('remove')}</Button>}
+          <Button size="sm" variant="outline" onClick={() => invoke('install')}>{t(state.phase === 'update-available' ? 'update' : state.phase === 'failed' ? 'retry' : state.phase === 'installed' ? 'reinstall' : 'install')}</Button>
+          {state.location !== undefined && <Button size="sm" variant="outline" onClick={() => setConfirmRemoval(true)}>{t('remove')}</Button>}
         </>}
     </div>
+    <Modal open={confirmRemoval} title={t('removeTitle')} description={t('removeHint')} closeLabel={t('close')}
+      onClose={() => setConfirmRemoval(false)} footer={<>
+        <Button size="sm" variant="outline" onClick={() => setConfirmRemoval(false)}>{t('keep')}</Button>
+        <Button size="sm" onClick={() => { setConfirmRemoval(false); invoke('remove') }}>{t('confirmRemove')}</Button>
+      </>} />
   </article>
 }
 
 /** Settings section with independent actions and shared Main progress. */
-export function RuntimeSettings({ runtimes, restart, t }: Common & PropsRuntime<'settings.section'>) {
+export function RuntimeSettings({ runtimes, restart, t }: Common) {
   const { snapshot, error } = useRuntimes(runtimes)
   const [actionError, setActionError] = useState(false)
   return <section className={css.section} aria-label={t('title')}>
-    <h2>{t('title')}</h2><p>{t('intro')}</p>
+    <h3 className={css.heading}>{t('title')}</h3><p className={css.intro}>{t('intro')}</p>
     {(error || actionError) && <p role="alert">{t(error ? 'loadError' : 'operationError')}</p>}
     {snapshot !== undefined && NAMES.map(name => (
       <RuntimeRow key={name} state={snapshot[name]} runtimes={runtimes} t={t} actionError={() => setActionError(true)} />
@@ -92,13 +98,15 @@ export function RuntimeSetup({ runtimes, t, complete }: Common & PropsRuntime<'s
   if (snapshot === undefined || !required || dismissed) return null
   return <Modal open title={t('setup')} closeLabel={t('close')}
     onClose={() => { void dismiss() }} description={t('intro')}
-    footer={<><Button variant="outline" onClick={() => { void dismiss() }}>{t('skip')}</Button>
+    footer={<><Button size="sm" variant="outline" onClick={() => { void dismiss() }}>{t('skip')}</Button>
       <Button disabled={!NAMES.some(name => selected[name]) || NAMES.some(name => busy(snapshot[name]))}
         onClick={() => { void install() }}>{t('selected')}</Button></>}>
     <div className={css.section}>
       {error && <p role="alert">{t('operationError')}</p>}
       {NAMES.map(name => <div key={name}>
-        <label className={css.choice}><input type="checkbox" checked={selected[name]} onChange={event => setSelected({ ...selected, [name]: event.target.checked })} />{t(name)} · {snapshot[name].version}</label>
+        <div className={css.choice}><span>{t(name)} · {snapshot[name].version}</span>
+          <Switch checked={selected[name]} label={t(name)} onChange={checked => setSelected({ ...selected, [name]: checked })} />
+        </div>
         <RuntimeRow allowInstall={snapshot.onboardingCompleted} state={snapshot[name]}
           runtimes={runtimes} t={t} actionError={() => setError(true)} />
       </div>)}
