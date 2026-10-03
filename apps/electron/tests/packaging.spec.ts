@@ -67,8 +67,10 @@ it('generates checked Windows ZIP extraction while retaining default NSIS compil
   try {
     await prepare({ electronPlatformName: 'darwin', packager: { projectDir } })
     expect(existsSync(join(projectDir, '.electron-build/nsis'))).toBe(false)
-    await prepareWindowsInstallerScript(projectDir, join(projectDir, '7za.exe'))
+    const sevenZip = String.raw`C:\Program Files\7-Zip\7za.exe`
+    await prepareWindowsInstallerScript(projectDir, sevenZip)
     const extraction = await readFile(join(projectDir, '.electron-build/nsis/extractAppPackage.nsh'), 'utf8')
+    expect(extraction).toContain(`File /oname=$PLUGINSDIR\\dsh-7za.exe "${sevenZip}"`)
     expect(extraction).toContain('nsExec::ExecToLog')
     expect(extraction).toContain('-aoa -y')
     expect(extraction).toContain('StrCmp $R0 "0" +4')
@@ -78,7 +80,9 @@ it('generates checked Windows ZIP extraction while retaining default NSIS compil
     const include = await readFile(join(projectDir, '.electron-build/nsis/include.nsh'), 'utf8')
     expect(include).toContain('!cd')
     const section = await readFile(join(projectDir, '.electron-build/nsis/installSection.nsh'), 'utf8')
-    expect(section).toContain('/installer.nsh"')
+    expect(section).toContain(`!include "${join(projectDir, '.electron-build/nsis/installer.nsh')}"`)
+    const installer = await readFile(join(projectDir, '.electron-build/nsis/installer.nsh'), 'utf8')
+    expect(installer).toContain(`!include "${join(projectDir, '.electron-build/nsis/extractAppPackage.nsh')}"`)
     expect(existsSync(join(projectDir, '.electron-build/nsis/installer.nsi'))).toBe(false)
     const uninstaller = await readFile(join(projectDir, '.electron-build/nsis/uninstaller.nsh'), 'utf8')
     expect(uninstaller).toContain('Function un.onInit')

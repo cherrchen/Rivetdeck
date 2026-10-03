@@ -253,7 +253,10 @@ describe('Desktop synchronization and release workflows', () => {
     const smoke = lifecycle.steps.filter(isRecord).find(step => step.name === 'Verify Windows deep-path installer lifecycle')
     expect(smoke?.if).toBe("runner.os == 'Windows'")
     expect(smoke?.run).toContain('--prepackaged ../../dist/electron/win-unpacked')
-    expect(smoke?.run).toContain('smoke-windows-installer.ps1')
+    expect(smoke?.run).toContain("if ($LASTEXITCODE -ne 0) { throw 'Windows NSIS build failed.' }")
+    if (typeof smoke?.run !== 'string') throw new TypeError('Windows installer smoke must define commands')
+    expect(smoke.run.indexOf('if ($LASTEXITCODE -ne 0)')).toBeLessThan(smoke.run.indexOf('$installer ='))
+    expect(smoke.run).toContain('smoke-windows-installer.ps1')
   })
 
 })

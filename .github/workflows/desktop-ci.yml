@@ -253,6 +253,7 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           pnpm --filter @dsh-electron/dsh-electron exec electron-builder --win nsis --x64 --prepackaged ../../dist/electron/win-unpacked --publish never
+          if ($LASTEXITCODE -ne 0) { throw 'Windows NSIS build failed.' }
           $installer = (Get-ChildItem dist/electron -Filter '*.exe' -File | Select-Object -First 1).FullName
           if (-not $installer) { throw 'Windows NSIS installer is missing.' }
           ./apps/electron/scripts/smoke-windows-installer.ps1 -InstallerPath $installer -Architecture x64

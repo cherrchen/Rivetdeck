@@ -7,7 +7,8 @@ const builderRequire = createRequire(require.resolve('electron-builder'))
 const libraryRequire = createRequire(builderRequire.resolve('app-builder-lib'))
 const templates = join(dirname(libraryRequire.resolve('app-builder-lib/package.json')), 'templates/nsis')
 const { getPath7za } = libraryRequire('app-builder-lib/out/toolsets/7zip.js')
-const quoted = path => path.replaceAll('\\', '/').replaceAll('$', '$$')
+// NSIS splits include paths on the native separator; Windows includes require backslashes.
+const quoted = path => path.replaceAll('$', '$$')
 
 /** Replace exactly one maintained template anchor; template drift refuses packaging. */
 function replaceOnce(source, anchor, replacement) {
