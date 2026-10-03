@@ -1,4 +1,4 @@
-/** Real packaged Desktop smoke: Core boot, optional setup, and persistent Skip. */
+/** Real packaged Desktop smoke; --startup-only checks Core boot without advancing onboarding. */
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
@@ -35,7 +35,7 @@ async function close() {
   await application.close()
   application = undefined
 }
-try {
+async function smoke() {
   let page = await launch()
   const resources = await application.evaluate(() => process.resourcesPath)
   const preferences = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences())
@@ -53,6 +53,7 @@ try {
   assert.equal((await page.evaluate(() => window.deepseekDesktop.runtimes.getState())).python.phase, 'not-installed')
   events.push('Core Host and shell ready with zero managed runtimes; optional dialog visible')
   await page.screenshot({ path: join(scratch, 'setup.png') })
+  if (process.argv.includes('--startup-only')) return
   await dialog.getByRole('button', { name: /Skip for now|暂时跳过/, exact: true }).click()
   await dialog.waitFor({ state: 'hidden' })
   assert.equal((await page.evaluate(() => window.deepseekDesktop.runtimes.getState())).onboardingCompleted, true)
@@ -116,6 +117,9 @@ try {
     assert.equal(removed.node.phase, 'not-installed'); assert.equal(removed.python.phase, 'installed')
     events.push('Deferred Node removal preserves Python and Core Host after restart')
   }
+}
+try {
+  await smoke()
   console.log(JSON.stringify({ platform: process.platform, arch: process.arch, executablePath, scratch, events }, null, 2))
 } catch (error) {
   const page = application?.windows()[0]

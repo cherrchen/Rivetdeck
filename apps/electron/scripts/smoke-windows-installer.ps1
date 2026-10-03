@@ -4,7 +4,9 @@ param(
 
   [Parameter(Mandatory = $true)]
   [ValidateSet('x64', 'arm64')]
-  [string]$Architecture
+  [string]$Architecture,
+
+  [string]$ShortcutName = 'DeepSeek Harness'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -19,7 +21,7 @@ $install = Start-Process -FilePath $installer -ArgumentList @(
   '/S',
   '/currentuser',
   "/D=$installDirectory"
-) -Wait -PassThru
+) -WindowStyle Hidden -Wait -PassThru
 if ($install.ExitCode -ne 0) {
   throw "Installer exited with code $($install.ExitCode)."
 }
@@ -55,8 +57,8 @@ if ($packagedManifest.name -ne 'deepseek-harness-desktop') {
   throw "Packaged application name is '$($packagedManifest.name)', expected 'deepseek-harness-desktop'."
 }
 
-$desktopShortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) 'DeepSeek Harness.lnk'
-$startMenuShortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'DeepSeek Harness.lnk'
+$desktopShortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) "$ShortcutName.lnk"
+$startMenuShortcut = Join-Path ([Environment]::GetFolderPath('Programs')) "$ShortcutName.lnk"
 $shell = New-Object -ComObject WScript.Shell
 foreach ($shortcutPath in @($desktopShortcut, $startMenuShortcut)) {
   if (-not (Test-Path -LiteralPath $shortcutPath -PathType Leaf)) {
@@ -68,15 +70,23 @@ foreach ($shortcutPath in @($desktopShortcut, $startMenuShortcut)) {
   }
 }
 
-$uninstall = Start-Process -FilePath $uninstaller -ArgumentList @('/S', '/currentuser') -Wait -PassThru
-if ($uninstall.ExitCode -ne 0) {
-  throw "Uninstaller exited with code $($uninstall.ExitCode)."
-}
+# Resource presence alone cannot detect startup dependencies removed by installer extraction.
+try {
+  & node (Join-Path $PSScriptRoot 'smoke-runtime-setup.mjs') $application --offline --startup-only
+  if ($LASTEXITCODE -ne 0) {
+    throw "Installed Desktop failed zero-runtime startup with code $LASTEXITCODE."
+  }
+} finally {
+  $uninstall = Start-Process -FilePath $uninstaller -ArgumentList @('/S', '/currentuser') -WindowStyle Hidden -Wait -PassThru
+  if ($uninstall.ExitCode -ne 0) {
+    throw "Uninstaller exited with code $($uninstall.ExitCode)."
+  }
 
-$deadline = (Get-Date).AddSeconds(30)
-while ((Test-Path -LiteralPath $application) -and (Get-Date) -lt $deadline) {
-  Start-Sleep -Milliseconds 250
-}
-if (Test-Path -LiteralPath $application) {
-  throw "Uninstaller left the application executable in place: $application"
+  $deadline = (Get-Date).AddSeconds(30)
+  while ((Test-Path -LiteralPath $application) -and (Get-Date) -lt $deadline) {
+    Start-Sleep -Milliseconds 250
+  }
+  if (Test-Path -LiteralPath $application) {
+    throw "Uninstaller left the application executable in place: $application"
+  }
 }

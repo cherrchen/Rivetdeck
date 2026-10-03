@@ -230,6 +230,21 @@ describe('Desktop synchronization and release workflows', () => {
     expect(notes?.run).not.toContain('deepseek-ai/deepseek-harness/commit')
     expect(create.run).toContain('gh release view "$RELEASE_TAG"')
   })
+
+  it('launches the installed Windows application before uninstalling on both architectures', () => {
+    const release = loadWorkflow('.github/workflows/desktop-release.yml')
+    const packageJob = workflowJob(release, 'package')
+    if (!Array.isArray(packageJob.steps)) throw new TypeError('Desktop release must define packaging steps')
+    const smoke = packageJob.steps.filter(isRecord).find(step => step.name === 'Smoke-test Windows installer')
+    expect(smoke?.run).toContain("-Architecture '${{ matrix.arch }}'")
+    const installerSmoke = readFileSync(resolve(root, 'apps/electron/scripts/smoke-windows-installer.ps1'), 'utf8')
+    const startup = installerSmoke.indexOf("& node (Join-Path $PSScriptRoot 'smoke-runtime-setup.mjs') $application --offline --startup-only")
+    expect(startup).toBeGreaterThan(-1)
+    expect(installerSmoke.slice(startup)).toContain('if ($LASTEXITCODE -ne 0)')
+    expect(installerSmoke.slice(startup)).toContain('} finally {')
+    expect(installerSmoke.indexOf('$uninstall = Start-Process')).toBeGreaterThan(startup)
+    expect(packageJob.steps.filter(isRecord).map(step => step.run).join('\n')).not.toContain('dist/electron/win-unpacked')
+  })
 })
 
 

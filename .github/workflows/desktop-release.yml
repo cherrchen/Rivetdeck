@@ -207,10 +207,6 @@ jobs:
           $installer = Get-ChildItem "dist/electron/*-${{ matrix.arch }}.exe" | Select-Object -First 1 -ExpandProperty FullName
           ./apps/electron/scripts/smoke-windows-installer.ps1 -InstallerPath $installer -Architecture '${{ matrix.arch }}'
 
-      - name: Smoke-test packaged zero-runtime Desktop (Windows)
-        if: runner.os == 'Windows'
-        run: node apps/electron/scripts/smoke-runtime-setup.mjs "dist/electron/win-unpacked/DeepSeek Harness.exe"
-
       - name: Smoke-test packaged zero-runtime Desktop (macOS)
         if: runner.os == 'macOS'
         run: node apps/electron/scripts/smoke-runtime-setup.mjs "$(find dist/electron -path '*/Contents/MacOS/DeepSeek Harness' -type f -print -quit)"
