@@ -56,3 +56,25 @@ describe('Electron packaging', () => {
     expect(manifest.dependencies?.['@dsh-electron/dsh-theme-studio']).toBe('0.1.3')
   })
 })
+
+it('generates checked Windows ZIP extraction without copying maintained installer policy', async () => {
+  const { mkdtemp, rm } = await import('node:fs/promises')
+  const { tmpdir } = await import('node:os')
+  const { default: prepare, prepareWindowsInstallerScript } = await import('../scripts/prepare-windows-installer.mjs')
+  const projectDir = await mkdtemp(join(tmpdir(), 'dsh-nsis-'))
+  try {
+    await prepare({ electronPlatformName: 'darwin', packager: { projectDir } })
+    expect(existsSync(join(projectDir, '.electron-build/nsis'))).toBe(false)
+    await prepareWindowsInstallerScript(projectDir, join(projectDir, '7za.exe'))
+    const extraction = await readFile(join(projectDir, '.electron-build/nsis/extractAppPackage.nsh'), 'utf8')
+    expect(extraction).toContain('nsExec::ExecToLog')
+    expect(extraction).toContain('-aoa -y')
+    expect(extraction).toContain('StrCmp $R0 "0" +4')
+    expect(extraction).toContain('$(decompressionFailed)')
+    expect(extraction).toContain('SetErrorLevel 1')
+    expect(extraction).not.toContain('nsisunz::Unzip')
+    const script = await readFile(join(projectDir, '.electron-build/nsis/installer.nsi'), 'utf8')
+    expect(script).toContain('installSection.nsh')
+    expect(script).toContain('!include "uninstaller.nsh"')
+  } finally { await rm(projectDir, { recursive: true, force: true }) }
+})

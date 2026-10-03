@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 import { Context, FiberState, Service, resolveConfig } from '@deepseek-ai/cordis'
 import { entryListSchema, type PatchOptions } from '@deepseek-ai/cordis-plugin-include'
+import z from '@deepseek-ai/schemastery'
 import yaml from 'js-yaml'
 import type { Entry, EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-hmr'
@@ -22,11 +23,18 @@ function flatten(rows: EntryOptions[]): EntryOptions[] {
   return rows.flatMap(row => [row, ...row.group && Array.isArray(row.config) ? flatten(row.config as EntryOptions[]) : []])
 }
 
+/** Configuration editing policy for profile writers. */
+export interface Config {
+  /** Maximum wait in milliseconds for package operations holding the profile writer lock. */
+  lockWaitMs: number
+}
+
 /** Persist complete raw configs and apply them through the normal Loader path. */
 export class ConfigEditor extends Service {
   static inject = ['loader', 'profileContext']
+  static Config: z<Partial<Config>, Config> = z.object({ lockWaitMs: z.number().step(1).min(0).default(120000) })
 
-  constructor(private readonly ownerContext: Context) {
+  constructor(private readonly ownerContext: Context, private readonly config: Config = ConfigEditor.Config({})) {
     super(ownerContext, 'configEditor')
   }
 
@@ -147,7 +155,7 @@ export class ConfigEditor extends Service {
           await reconcileProfilePatches(this.ownerContext.root, beforePatches, 'dsh')
           throw error
         }
-      })
+      }, { waitMs: this.config.lockWaitMs })
     }
     const hmr = this.ownerContext.get('hmr')
     await (hmr === undefined ? run() : hmr.runExclusive(run))

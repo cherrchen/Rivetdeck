@@ -36,7 +36,8 @@
   "dependencies": {
     "@deepseek-ai/dsh-atomic-write": "workspace:*",
     "yaml": "^2.8.1",
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^4.1.0",
+    "@deepseek-ai/schemastery": "workspace:~"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:~",

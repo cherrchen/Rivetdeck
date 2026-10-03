@@ -90,6 +90,7 @@ describe('Desktop synchronization and release workflows', () => {
       oneClick: false,
       allowToChangeInstallationDirectory: true,
       useZip: true,
+      script: '.electron-build/nsis/installer.nsi',
       differentialPackage: false,
     })
   })
@@ -245,6 +246,16 @@ describe('Desktop synchronization and release workflows', () => {
     expect(installerSmoke.indexOf('$uninstall = Start-Process')).toBeGreaterThan(startup)
     expect(packageJob.steps.filter(isRecord).map(step => step.run).join('\n')).not.toContain('dist/electron/win-unpacked')
   })
+  it('runs the deep-path NSIS installation smoke on Windows pull requests', () => {
+    const ci = loadWorkflow('.github/workflows/desktop-ci.yml')
+    const lifecycle = workflowJob(ci, 'managed-runtime-lifecycle')
+    if (!Array.isArray(lifecycle.steps)) throw new TypeError('Runtime lifecycle must define steps')
+    const smoke = lifecycle.steps.filter(isRecord).find(step => step.name === 'Verify Windows deep-path installer lifecycle')
+    expect(smoke?.if).toBe("runner.os == 'Windows'")
+    expect(smoke?.run).toContain('--prepackaged ../../dist/electron/win-unpacked')
+    expect(smoke?.run).toContain('smoke-windows-installer.ps1')
+  })
+
 })
 
 

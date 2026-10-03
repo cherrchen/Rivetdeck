@@ -16,7 +16,7 @@ import { Script } from 'node:vm'
 import ts from 'typescript'
 import type { DshBundleManifest } from '../packages/util/package-manifest/src/types.ts'
 import { bundlePatchFiles, bundlePatchPaths } from '../packages/boot/app-boot/src/profile.ts'
-import { cordisConfigFiles } from './cordis-config-files.ts'
+import { cordisConfigFiles, readCordisConfig } from './cordis-config-files.ts'
 import { isAgentPresetEntry, presetDefinitions, isCordisGroupEntry, isJsExpr, loadCordisYaml } from './cordis-yaml.ts'
 
 export interface PackageManifest {
@@ -63,7 +63,7 @@ if (import.meta.main) {
   const files = cordisConfigFiles(root)
 
   for (const file of files) {
-    const document = loadCordisYaml(readFileSync(resolve(root, file), 'utf8'))
+    const document = loadCordisYaml(readCordisConfig(root, file))
     if (!isUnknownArray(document)) {
       errors.push(`${file}: root must be a Loader entry array`)
       continue
@@ -167,7 +167,7 @@ function validatePresetPlaneSeparation(): string[] {
 
 /** Every entry of one config file, or an empty list when it is not an entry array. */
 function loadEntries(file: string): unknown[] {
-  const document = loadCordisYaml(readFileSync(resolve(root, file), 'utf8'))
+  const document = loadCordisYaml(readCordisConfig(root, file))
   return isUnknownArray(document) ? document : []
 }
 

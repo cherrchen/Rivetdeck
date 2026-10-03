@@ -23,7 +23,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用此包
 
-在具有 Loader 和 `profileContext` 的 profile 应用中挂载此服务。它没有配置字段。
+在具有 Loader 和 `profileContext` 的 profile 应用中挂载此服务。`lockWaitMs` 默认为 120000 毫秒，让设置保存等待 profile 包安装完成，而不是使用仅适合文件写入的短锁超时。编辑器取得锁后重新读取配置；超时不会改变补丁。
 
 ```yaml
 - id: config-editor

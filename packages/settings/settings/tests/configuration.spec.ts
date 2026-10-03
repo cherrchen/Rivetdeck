@@ -1,6 +1,9 @@
 /** Real profile patch behavior and reference lifetime. */
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { setTimeout } from 'node:timers/promises'
+import ConfigEditor from '@deepseek-ai/dsh-config-editor'
+import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
 import { expect, it, vi } from 'vitest'
 import { parse } from 'yaml'
 import z from '@deepseek-ai/schemastery'
@@ -121,7 +124,7 @@ it('rejects non-JSON inputs and invalid array paths without changing the patch',
 it('refuses missing entries and ordinary-only plugin forms', async () => {
   const { ctx } = await fixture({ hmr: false })
   await expect(ctx.settings.update('missing', {})).rejects.toThrow('No configurable')
-  await expect(ctx.settings.update('config-editor', {})).rejects.toThrow('No configurable')
+  await expect(ctx.settings.update('config-editor', {})).rejects.toThrow('has no volatile fields')
   const entry = ctx.configEditor.entries().find(entry => entry.options.id === 'first')!
   await entry.update({ disabled: true })
   await expect(ctx.configEditor.edit(entry, () => ({}))).rejects.toThrow()
@@ -353,4 +356,34 @@ it('describes an entry whose required field only the profile supplies, and repor
   restored.emit('app-boot/config-reload')
   const failures = (): unknown[] => restored.logger.buffer.filter(message => message.type === 'error').map((message): unknown => message.args[0])
   await vi.waitFor(() => { expect(failures()).toContainEqual(expect.objectContaining({ message: 'refresh failed' })) })
+})
+
+it('saves after a package writer holds the profile lock beyond the file-only timeout', async () => {
+  const { ctx, profile } = await fixture()
+  const acquired = Promise.withResolvers<undefined>()
+  const release = Promise.withResolvers<undefined>()
+  const holder = withFileLock(join(profile.dir, 'package.json'), async () => {
+    acquired.resolve(undefined)
+    await release.promise
+  })
+  await acquired.promise
+  let settled = false
+  const edit = ctx.settings.update('first', { count: 7 }).then(() => true, () => false).finally(() => { settled = true })
+  // Two seconds is atomic-write's file-only deadline; package installation owns a longer wait.
+  try {
+    await setTimeout(2200)
+    expect(settled).toBe(false)
+  } finally {
+    release.resolve(undefined)
+    await holder
+    await expect(edit).resolves.toBe(true)
+  }
+  expect(ctx.settings.describe().find(row => row.ns === 'first')!.value).toEqual(expect.objectContaining({ count: 7 }))
+  expect(readFileSync(profile.patchPath, 'utf8')).toContain('count: 7')
+})
+
+it('rejects negative and fractional profile lock waiting limits', () => {
+  expect(() => ConfigEditor.Config({ lockWaitMs: -1 })).toThrow()
+  expect(() => ConfigEditor.Config({ lockWaitMs: 1.5 })).toThrow()
+  expect(ConfigEditor.Config({ lockWaitMs: 0 })).toEqual({ lockWaitMs: 0 })
 })

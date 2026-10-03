@@ -23,7 +23,7 @@ Save plugin configuration in the active profile’s patch and apply it immediate
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount this service in a profile application with Loader and `profileContext`. It has no configuration fields.
+Mount this service in a profile application with Loader and `profileContext`. `lockWaitMs` defaults to 120000 milliseconds, allowing settings saves to wait for profile package installations rather than the short file-only lock timeout. The editor re-reads configuration after acquiring the lock; expiry leaves the patch unchanged.
 
 ```yaml
 - id: config-editor

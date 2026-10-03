@@ -249,6 +249,13 @@ jobs:
         run: pnpm --filter @dsh-electron/dsh-electron prepare:network-runtime
       - name: Package application directory
         run: pnpm --filter @dsh-electron/dsh-electron exec electron-builder --dir --publish never
+      - name: Verify Windows deep-path installer lifecycle
+        if: runner.os == 'Windows'
+        run: |
+          pnpm --filter @dsh-electron/dsh-electron exec electron-builder --win nsis --x64 --prepackaged ../../dist/electron/win-unpacked --publish never
+          $installer = (Get-ChildItem dist/electron -Filter '*.exe' -File | Select-Object -First 1).FullName
+          if (-not $installer) { throw 'Windows NSIS installer is missing.' }
+          ./apps/electron/scripts/smoke-windows-installer.ps1 -InstallerPath $installer -Architecture x64
       - name: Smoke-test runtime lifecycle and Core plugins (Windows)
         if: runner.os == 'Windows'
         run: |

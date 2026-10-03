@@ -59,16 +59,8 @@ async function smoke() {
   assert.equal((await page.evaluate(() => window.deepseekDesktop.runtimes.getState())).onboardingCompleted, true)
   events.push('Skip persisted without installation')
   const preview = page.getByRole('dialog', { name: /Preview Notice|预览版说明/ })
-  for (let attempt = 0; attempt < 3; attempt++) {
-    await preview.getByRole('button', { name: /Continue|继续/, exact: true }).click({ timeout: 30_000 })
-    const result = await Promise.race([
-      preview.waitFor({ state: 'hidden' }).then(() => 'saved'),
-      preview.getByRole('alert').waitFor({ state: 'visible' }).then(() => 'retry'),
-    ])
-    if (result === 'saved') break
-    console.warn('Preview acknowledgement reported a refused write; retrying after its recovery read.')
-  }
-  await preview.waitFor({ state: 'hidden' })
+  await preview.getByRole('button', { name: /Continue|继续/, exact: true }).click({ timeout: 30_000 })
+  await preview.waitFor({ state: 'hidden', timeout: 180_000 })
   await close()
   page = await launch()
   assert.equal((await page.evaluate(() => window.deepseekDesktop.runtimes.getState())).onboardingCompleted, true)

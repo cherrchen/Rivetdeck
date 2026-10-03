@@ -254,7 +254,8 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "useZip": true,
-      "differentialPackage": false
+      "differentialPackage": false,
+      "script": ".electron-build/nsis/installer.nsi"
     },
     "linux": {
       "category": "Development",
@@ -265,6 +266,7 @@
         "AppImage",
         "deb"
       ]
-    }
+    },
+    "beforePack": "./scripts/prepare-windows-installer.mjs"
   }
 }

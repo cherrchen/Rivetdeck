@@ -7,7 +7,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
@@ -84,7 +84,7 @@ function linkPackage(pkg: WorkspacePackage, nodeModules: string): void {
   const parts = pkg.name.split('/')
   const link = resolve(nodeModules, ...parts)
   mkdirSync(dirname(link), { recursive: true })
-  symlinkSync(pkg.dir, link, 'dir')
+  symlinkSync(realpathSync(pkg.dir), link, process.platform === 'win32' ? 'junction' : 'dir')
 }
 
 const packages = workspacePackages()
@@ -117,7 +117,7 @@ try {
   if (existsSync(rootTypes)) {
     const typesDir = resolve(nodeModules, '@types')
     mkdirSync(typesDir, { recursive: true })
-    symlinkSync(rootTypes, resolve(typesDir, 'node'), 'dir')
+    symlinkSync(realpathSync(rootTypes), resolve(typesDir, 'node'), process.platform === 'win32' ? 'junction' : 'dir')
   }
 
   writeFileSync(resolve(tmp, 'package.json'), `${JSON.stringify({ type: 'module', private: true }, null, 2)}\n`)
@@ -156,6 +156,7 @@ try {
   failed = true
   const output = error as { stdout?: Buffer; stderr?: Buffer }
   console.error('verify-node-next-types: NodeNext consumer typecheck failed.\n')
+  console.error(error instanceof Error ? error.stack : String(error))
   console.error(`${output.stdout?.toString() ?? ''}${output.stderr?.toString() ?? ''}`)
 } finally {
   rmSync(tmp, { recursive: true, force: true })
