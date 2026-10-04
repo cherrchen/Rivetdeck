@@ -30,7 +30,7 @@ Electron Main
 
 - Desktop 专属改动留在 `apps/electron/**`；不要通过改 `apps/web` 做 Desktop-only UI。
 - 保持 `src/renderer` 为薄 bootstrap/carrier；不要在此长出第二套产品前端。
-- Portable 与 Desktop-aware 产品功能归属独立发布的 DSH/Cordis package；`runtime/plugins/` 容纳 Desktop Capabilities composition 包与 Host-only provider。Desktop 必需的 Host 组合列在 `runtime/host.patch.yml` 中；随包 Git 与 Theme Studio 被 seed 进 web profile（[插件生命周期](../../docs/electron/plugin-lifecycle.zh.md)）。
+- Portable 与 Desktop-aware 产品功能归属独立发布的 DSH/Cordis package；`runtime/plugins/` 容纳 Desktop Capabilities composition 包与 Host-only provider。Desktop 必需的 Host 组合列在 `runtime/host.patch.yml` 中；随包 Git 与 Theme Studio 被 seed 进 web profile（[插件生命周期](../../docs/electron/plugin-lifecycle.zh.md)）。同一参考文档负责 Desktop 配置写入策略与保留的共享 UI 修改贡献。
 - Desktop-aware feature 保持 core fiber portable，并通过 optional `ctx.inject(['desktop'], ...)` child fiber 安装原生增强。它通过 `ctx.desktop` 能力服务消费原生能力，不得直接访问 `window.deepseekDesktop`。
 - 环回 Host 传输是内部兼容机制，无证据时不要为架构纯粹性替换它。
 

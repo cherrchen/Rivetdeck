@@ -6,7 +6,7 @@ This repository is the **DeepSeek Harness Desktop** downstream fork of [deepseek
 
 | Area | Owner | Notes |
 |------|-------|-------|
-| `packages/**` | Upstream | Merged from `upstream/master` on `develop` by default |
+| `packages/**` | Upstream | Merged from `upstream/master` on `develop`; retain the scoped [UI contribution](docs/electron/plugin-lifecycle.md#downstream-ui-contribution) |
 | `vendor/`, `apps/cli`, `apps/web` | Upstream | Merged from `upstream/master` on `develop` |
 | `docs/**` (except `docs/electron/**`) | Upstream | Core harness documentation spine |
 | `docs/electron/` | Downstream | Desktop architecture and other downstream-owned docs — [architecture](docs/electron/architecture.md) |
@@ -112,7 +112,7 @@ Before architecture-sensitive Desktop work, read that guide, then classify the c
 
 Standing rules (do not duplicate the full architecture doc here):
 
-- Desktop-only changes stay under `apps/electron/**` and `docs/electron/**`. Public ecosystem plugins are independently published npm packages; do not mirror their source into this repository. Do not modify `apps/web`, upstream `docs/**` (outside `docs/electron/**`), or `packages/**` for Desktop-only UI unless the change is intentionally upstream-compatible and meant for upstream contribution.
+- Desktop-only changes stay under `apps/electron/**` and `docs/electron/**`. Public ecosystem plugins are independently published npm packages; do not mirror their source into this repository. Do not modify `apps/web`, upstream `docs/**` (outside `docs/electron/**`), or `packages/**` for Desktop-only UI unless the change is intentionally upstream-compatible and meant for upstream contribution. The existing `packages/client/ui-plugin-manager/` removal-permission contribution remains a maintained downstream exception until equivalent upstream behavior is verified; follow its [maintenance policy](docs/electron/plugin-lifecycle.md#downstream-ui-contribution).
 - Electron remains the stable desktop platform; DSH/Cordis plugins are the extensible product feature layer. Do not make the Electron app itself a Cordis plugin, and do not rebuild a second product frontend in `apps/electron/src/renderer`.
 - Keep Renderer bootstrap thin (`bootstrap.ts` / `renderer/main.ts`). Portable and Desktop-aware product features belong in independently published DSH packages; `apps/electron/runtime/plugins/` holds Desktop adapters, Electron carrier plugins, and Desktop-only integration; Electron-required portable DSH UI infrastructure ships as a published npm package declared in `dshElectron.runtimePlugins`. Host composition stays explicit in `runtime/host.patch.yml`.
 - Feature plugins MUST NOT import Electron, `ipcRenderer`, or Node. Native OS operations cross the Desktop Capability Provider (`ctx.desktop`); only renderer infrastructure and the provider may read `window.deepseekDesktop` directly. Do not add a generic IPC escape hatch.

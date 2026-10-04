@@ -1,102 +1,67 @@
-/** Profile-owned configuration edits, serialized with Loader hot reload. */
+/** Desktop configuration transactions wait for profile package installations. */
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
-import { Context, FiberState, Service, resolveConfig } from '@deepseek-ai/cordis'
+import { Context, FiberState, resolveConfig } from '@deepseek-ai/cordis'
 import { entryListSchema, type PatchOptions } from '@deepseek-ai/cordis-plugin-include'
+import z from '@deepseek-ai/schemastery'
 import yaml from 'js-yaml'
 import type { Entry, EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-hmr'
 import { composeEntries, loadProfileDirectory, readProfilePatches, reconcileProfilePatches } from '@deepseek-ai/dsh-app-boot'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { isMap, isSeq, parseDocument, Scalar, visit } from 'yaml'
-
-declare module '@deepseek-ai/cordis' {
-  interface Context {
-    /** Persistent edits to the active profile's plugin configuration. */
-    configEditor: ConfigEditor
-  }
-}
+import ConfigEditor from '@deepseek-ai/dsh-config-editor'
 
 function flatten(rows: EntryOptions[]): EntryOptions[] {
   return rows.flatMap(row => [row, ...row.group && Array.isArray(row.config) ? flatten(row.config as EntryOptions[]) : []])
 }
 
-/** Persist complete raw configs and apply them through the normal Loader path. */
-export class ConfigEditor extends Service {
-  static inject = ['loader', 'profileContext']
+function inheritedValues(entry: Entry, loaded: ReturnType<typeof loadProfileDirectory>): Record<string, unknown> {
+  const patches = loaded.patches.map((patch) => {
+    if (patch.id !== entry.options.id || patch.insert !== undefined) return patch
+    const rest = { ...patch }; Reflect.deleteProperty(rest, 'config')
+    return rest
+  })
+  const row = flatten(composeEntries([...loaded.layers.map(layer => layer.patches), patches])).find(row => row.id === entry.options.id)
+  return structuredClone((row?.config ?? {}) as Record<string, unknown>)
+}
 
-  constructor(private readonly ownerContext: Context) {
-    super(ownerContext, 'configEditor')
+/** Desktop profile configuration writer policy. */
+export interface DesktopConfigEditorConfig {
+  /** Maximum acquisition wait in milliseconds for the shared profile writer lock. */
+  lockWaitMs: number
+}
+
+/** Preserve upstream configuration reads and specialize the write transaction's lock deadline. */
+export class DesktopConfigEditor extends ConfigEditor {
+  static Config: z<Partial<DesktopConfigEditorConfig>, DesktopConfigEditorConfig> = z.object({
+    lockWaitMs: z.number().step(1).min(0).default(120000),
+  })
+
+  constructor(private readonly desktopContext: Context,
+    private readonly desktopConfig: DesktopConfigEditorConfig = DesktopConfigEditor.Config({})) {
+    super(desktopContext)
   }
 
-  /** The profile patch edited by this service. */
-  get documentPath(): string { return this.ownerContext.profileContext.patchPath }
-
-  /** Addressable profile rows; nested Includes have independent configuration ownership.
-   * @returns Active entries with unique profile patch ids.
+  /** Validate, persist, and reconcile an edit after acquiring the shared profile writer lock.
+   * @param entry Active profile entry; replacement during acquisition or reconciliation rejects the edit.
+   * @param change Derive configuration from the values re-read after acquisition.
+   * @returns Completion after Loader reconciliation; timeout leaves the patch unchanged and failed application rolls back.
    */
-  entries(): Entry[] {
-    const candidates = [...this.ownerContext.loader.entries()].filter(entry => entry.parent.tree.ctx.fiber.entry?.id === 'include')
-    const counts = new Map<string, number>()
-    for (const entry of candidates) counts.set(entry.options.id, (counts.get(entry.options.id) ?? 0) + 1)
-    return candidates.filter(entry => counts.get(entry.options.id) === 1)
-  }
-
-  /** Read inherited and explicit profile values for the active entries.
-   * @returns Detached layer values alongside their Loader entries.
-   */
-  configuration(): Array<{ entry: Entry; inherited: Record<string, unknown>; override: Record<string, unknown> }> {
-    const profile = this.ownerContext.profileContext
-    const loaded = loadProfileDirectory('dsh', profile.dir, profile.installAnchor)
-    const entries = this.entries()
-    // An own config key can replace inherited config even when its value is undefined.
-    const overridden = new Set(loaded.patches.filter(patch => patch.insert === undefined && Object.hasOwn(patch, 'config')).map(patch => patch.id))
-    const composed = new Map<string, EntryOptions>()
-    if (entries.some(entry => !overridden.has(entry.options.id))) {
-      for (const row of flatten(composeEntries([...loaded.layers.map(layer => layer.patches), loaded.patches]))) {
-        if (!composed.has(row.id)) composed.set(row.id, row)
-      }
-    }
-    return entries.map(entry => ({
-      entry,
-      inherited: overridden.has(entry.options.id)
-        ? this.inherited(entry, loaded)
-        : structuredClone((composed.get(entry.options.id)?.config ?? {}) as Record<string, unknown>),
-      override: structuredClone((loaded.patches.findLast(
-        row => row.id === entry.options.id && row.config !== undefined,
-      )?.config ?? {}) as Record<string, unknown>),
-    }))
-  }
-
-  private inherited(entry: Entry, loaded: ReturnType<typeof loadProfileDirectory>): Record<string, unknown> {
-    const patches = loaded.patches.map((patch) => {
-      if (patch.id !== entry.options.id || patch.insert !== undefined) return patch
-      const rest = { ...patch }; Reflect.deleteProperty(rest, 'config')
-      return rest
-    })
-    const row = flatten(composeEntries([...loaded.layers.map(layer => layer.patches), patches])).find(row => row.id === entry.options.id)
-    return structuredClone((row?.config ?? {}) as Record<string, unknown>)
-  }
-
-  /** Validate, persist, and reconcile a plugin's next config; ordinary fields keep normal lifecycle rules.
-   * @param entry Current Loader entry, also used to detect replacement during the write.
-   * @param change Derive a raw config from the current entry and its inherited layer.
-   * @returns Fulfillment after Loader reconciliation completes.
-   */
-  async edit(
+  override async edit(
     entry: Entry,
     change: (current: Record<string, unknown>, inherited: Record<string, unknown>) => Record<string, unknown>,
   ): Promise<void> {
     const run = async (): Promise<void> => {
       const path = this.documentPath
-      await withFileLock(join(this.ownerContext.profileContext.dir, 'package.json'), async () => {
+      await withFileLock(join(this.desktopContext.profileContext.dir, 'package.json'), async () => {
         if (!this.entries().includes(entry) || entry.fiber === undefined) throw new Error('Configuration entry is no longer available')
-        const beforePatches = readProfilePatches('dsh', this.ownerContext.profileContext)
-        await reconcileProfilePatches(this.ownerContext.root, beforePatches, 'dsh')
+        const beforePatches = readProfilePatches('dsh', this.desktopContext.profileContext)
+        await reconcileProfilePatches(this.desktopContext.root, beforePatches, 'dsh')
         if (!this.entries().includes(entry)) throw new Error('Configuration entry changed during reload')
         const current = structuredClone((entry.options.config ?? {}) as Record<string, unknown>)
-        const inherited = this.inherited(entry, loadProfileDirectory('dsh', this.ownerContext.profileContext.dir, this.ownerContext.profileContext.installAnchor))
+        const inherited = inheritedValues(entry, loadProfileDirectory('dsh', this.desktopContext.profileContext.dir, this.desktopContext.profileContext.installAnchor))
         const next = change(current, inherited)
         const fiber = entry.fiber
         if (fiber.state !== FiberState.ACTIVE) throw new Error('Configuration plugin is no longer active')
@@ -132,7 +97,7 @@ export class ConfigEditor extends Service {
           expression.tag = 'tag:yaml.org,2002:js'
           return expression
         } })
-        const profile = this.ownerContext.profileContext
+        const profile = this.desktopContext.profileContext
         const loaded = loadProfileDirectory('dsh', profile.dir, profile.installAnchor)
         const patches = readProfilePatches('dsh', profile, { ...loaded, patches: yaml.load(String(document), { schema: entryListSchema }) as PatchOptions[] })
         const effective = flatten(composeEntries([patches])).find(row => row.id === entry.options.id)
@@ -141,17 +106,15 @@ export class ConfigEditor extends Service {
         }
         await writeFileAtomic(path, String(document), { mode: 0o600 })
         try {
-          await reconcileProfilePatches(this.ownerContext.root, patches, 'dsh', [entry.options.id])
+          await reconcileProfilePatches(this.desktopContext.root, patches, 'dsh', [entry.options.id])
         } catch (error) {
           await writeFileAtomic(path, before, { mode: 0o600 })
-          await reconcileProfilePatches(this.ownerContext.root, beforePatches, 'dsh')
+          await reconcileProfilePatches(this.desktopContext.root, beforePatches, 'dsh')
           throw error
         }
-      })
+      }, { waitMs: this.desktopConfig.lockWaitMs })
     }
-    const hmr = this.ownerContext.get('hmr')
+    const hmr = this.desktopContext.get('hmr')
     await (hmr === undefined ? run() : hmr.runExclusive(run))
   }
 }
-
-export default ConfigEditor

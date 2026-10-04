@@ -78,6 +78,7 @@ describe('Electron dependency synchronization', () => {
     expect(dependencies).toEqual({
       '@deepseek-ai/dsh': 'workspace:^',
       '@deepseek-ai/dsh-client-web': 'workspace:^',
+      '@deepseek-ai/dsh-config-editor': 'workspace:^',
       '@deepseek-ai/dsh-plugin-manager': 'workspace:^',
       '@deepseek-ai/dsh-subprocess-local': 'workspace:^',
       'electron-updater': '^6.8.9',
@@ -98,6 +99,7 @@ describe('Electron dependency synchronization', () => {
     expect(dependencies).toEqual({
       '@deepseek-ai/dsh': 'workspace:^',
       '@deepseek-ai/dsh-client-web': 'workspace:^',
+      '@deepseek-ai/dsh-config-editor': 'workspace:^',
       '@deepseek-ai/dsh-plugin-manager': 'workspace:^',
       '@deepseek-ai/dsh-subprocess-local': 'workspace:^',
       '@dsh-electron/dsh-plugin-git': '0.2.4',

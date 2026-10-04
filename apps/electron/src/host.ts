@@ -33,6 +33,7 @@ import {
 import { resolveDshInstallAnchor } from './runtime.ts'
 import { DesktopRuntime } from './desktop-runtime.ts'
 import { DesktopPluginManager } from './desktop-plugin-manager.ts'
+import { DesktopConfigEditor } from './desktop-config-editor.ts'
 
 const NAME = 'dsh'
 
@@ -211,7 +212,11 @@ export async function runDesktopHost(options: HostLaunchOptions): Promise<{ ctx:
         hostCtx.effect(() => {
           const builtins = hostCtx.loader.builtins
           builtins['desktop-plugin-manager'] = DesktopPluginManager
-          return () => { delete builtins['desktop-plugin-manager'] }
+          builtins['desktop-config-editor'] = DesktopConfigEditor
+          return () => {
+            delete builtins['desktop-plugin-manager']
+            delete builtins['desktop-config-editor']
+          }
         }, 'Electron Plugin Manager implementation')
         hostCtx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, environment)
         await hostCtx.plugin(PluginPackages, { resolution })

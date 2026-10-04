@@ -15,6 +15,9 @@
     - id: desktop-capabilities
       name: '@dsh-electron/dsh-electron-desktop-capabilities'
 
+- id: config-editor
+  name: 'cordis:desktop-config-editor'
+
 - id: plugin-manager
   disabled: true
 

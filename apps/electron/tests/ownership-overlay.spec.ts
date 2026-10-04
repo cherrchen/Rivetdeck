@@ -83,6 +83,7 @@ describe('Desktop overlay insert names', () => {
       load(yaml) as PatchOptions[]])
     expect(rows.find(row => row.id === 'plugin-manager')?.disabled).toBe(true)
     expect(rows.find(row => row.id === 'desktop-plugin-manager')?.name).toBe('cordis:desktop-plugin-manager')
+    expect(load(yaml)).toContainEqual({ id: 'config-editor', name: 'cordis:desktop-config-editor' })
   })
 })
 
@@ -129,6 +130,9 @@ describe('ownership-aware Electron overlay', () => {
     const home = await seededHome()
     const ctx = new Context()
     try {
+      const profileGit = join(resolveProfileDir(WEB_PROFILE_NAME, home), 'node_modules', ...GIT.split('/'))
+      const oldManifest = readProfileManifest('dsh', profileGit)
+      writeFileSync(join(profileGit, 'package.json'), JSON.stringify({ ...oldManifest, version: '9.9.9', description: 'stale profile copy' }))
       prepareHostProfileProjection(appPath, home)
       const dir = resolveProfileDir(WEB_PROFILE_NAME, home)
       const initial: unknown = load(generateOwnershipOverlay(appPath, home))
@@ -156,6 +160,13 @@ describe('ownership-aware Electron overlay', () => {
         const manager = new DesktopPluginManager(ctx, { fallbackRegistries: [] })
         const bundles = await manager.listBundles()
         expect(bundles.map(pkg => pkg.name)).toEqual([GIT, THEME])
+        const git = bundles.find(pkg => pkg.name === GIT)
+        expect(git?.version).toBe('0.2.4')
+        expect(git?.description).not.toBe('stale profile copy')
+        const description = git?.meta?.description
+        if (description === undefined || typeof description === 'string') throw new Error('Localized source label missing')
+        expect(description.en).toContain('Electron bundled')
+        expect(git?.removable).toBe(false)
         expect(bundles.every(pkg => pkg.installed && pkg.readOnlyReason === undefined)).toBe(true)
         expect(runtime.packages().filter(pkg => pkg.required).map(pkg => pkg.name)).toContain(
           '@dsh-electron/dsh-electron-desktop-capabilities',

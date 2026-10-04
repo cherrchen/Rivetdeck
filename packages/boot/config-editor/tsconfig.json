@@ -25,9 +25,6 @@
     },
     {
       "path": "../../../vendor/include"
-    },
-    {
-      "path": "../../../vendor/schemastery"
     }
   ]
 }
