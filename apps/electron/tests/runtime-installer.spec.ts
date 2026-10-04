@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { installRuntime, verifyRuntime } from '../src/toolchains/installer.ts'
 import { RuntimeManager } from '../src/toolchains/manager.ts'
 import { loadManifest } from '../scripts/toolchains/manifest.mjs'
-import { readRuntimeReceipt } from '../src/toolchains/resolver.ts'
+import { readPendingRuntimeInstallation, readRuntimeReceipt, receiptLocation } from '../src/toolchains/resolver.ts'
 
 const roots: string[] = []
 afterEach(async () => { await Promise.all(roots.splice(0).map(async (root) => { await rm(root, { recursive: true, force: true }) })) })
@@ -87,12 +87,62 @@ describe('Main runtime installer', () => {
 })
 
 describe('Main runtime manager independence', () => {
+  for (const name of ['node', 'python'] as const) {
+    for (const selection of ['absent', 'previous', 'committed'] as const) {
+      it(`recovers interrupted ${name} installation with ${selection} active selection`, async () => {
+        const { root } = await fixture()
+        const managed = join(root, 'managed-toolchains')
+        const target = `${process.platform}-${process.arch}`
+        const pending = { version: '1.2.3', generation: 'a'.repeat(36), target: selection === 'committed' ? target : 'win32-arm64' }
+        const destination = receiptLocation(managed, name, pending.target, pending)
+        await mkdir(destination, { recursive: true })
+        await writeFile(join(destination, 'interpreter'), 'pending runtime')
+        await writeFile(join(managed, name, 'installation.pending'), JSON.stringify(pending))
+        const receipt = { version: selection === 'committed' ? pending.version : '0.9.0',
+          generation: selection === 'committed' ? pending.generation : 'b'.repeat(36),
+          sha256: 'c'.repeat(64), pendingRemoval: false, retired: [] }
+        const active = receiptLocation(managed, name, target, receipt)
+        if (selection !== 'absent') {
+          await mkdir(active, { recursive: true })
+          await writeFile(join(active, 'interpreter'), 'active runtime')
+          await writeFile(join(managed, name, 'active.json'), JSON.stringify(receipt))
+        }
+        await mkdir(join(managed, 'staging'), { recursive: true })
+        await writeFile(join(managed, 'staging', 'download.pending'), 'partial download')
+        const manager = new RuntimeManager({ userData: root, verify: async () => {},
+          fetch: async () => { throw new Error('unexpected download') } })
+        try {
+          expect(Object.keys(await manager.prepare())).toEqual(selection === 'absent' ? [] : [name])
+          if (selection === 'committed') {
+            expect(await readFile(join(destination, 'interpreter'), 'utf8')).toBe('active runtime')
+            expect(manager.state()[name].error).toBeUndefined()
+          } else {
+            await expect(readFile(join(destination, 'interpreter'))).rejects.toMatchObject({ code: 'ENOENT' })
+            expect(manager.state()[name].error).toBe('interrupted')
+          }
+          if (selection !== 'absent') {
+            expect(await readFile(join(active, 'interpreter'), 'utf8')).toBe('active runtime')
+            expect(readRuntimeReceipt(managed, name)).toEqual(receipt)
+          }
+          await expect(readFile(join(managed, name, 'installation.pending'))).rejects.toMatchObject({ code: 'ENOENT' })
+          await expect(readFile(join(managed, 'staging', 'download.pending'))).rejects.toMatchObject({ code: 'ENOENT' })
+        } finally {
+          await manager.shutdown()
+        }
+      })
+    }
+  }
   it('supports Python alone and reports a pinned update without downloading it', async () => {
     const { root, bytes, entry } = await fixture()
     const manifest = structuredClone(loadManifest())
     const target = `${process.platform}-${process.arch}` as keyof typeof manifest.node.targets
     Object.assign(manifest.python.targets[target], entry)
-    const options = { userData: root, manifest, fetch: async () => new Response(bytes), verify: async () => {} }
+    const options = { userData: root, manifest, fetch: async () => {
+      const pending = readPendingRuntimeInstallation(join(root, 'managed-toolchains'), 'python')
+      expect(pending).toMatchObject({ version: manifest.python.version, target })
+      expect(pending?.generation).toMatch(/^[a-f0-9-]{36}$/u)
+      return new Response(bytes)
+    }, verify: async () => {} }
     const manager = new RuntimeManager(options)
     await manager.prepare()
     await manager.install('python')
@@ -218,11 +268,28 @@ describe('secure runtime archives', () => {
     expect(await manager.prepare()).toEqual({})
     expect(manager.state().node.error).toBe('corrupt')
     await rm(join(managed, 'active.json'))
-    await writeFile(join(managed, 'installation.pending'), 'interrupted')
+    await writeFile(join(managed, 'installation.pending'), JSON.stringify({ version: '1.2.3', generation: 'a'.repeat(36), target: `${process.platform}-${process.arch}` }))
     const restarted = new RuntimeManager({ userData: root, fetch: async () => { throw new Error('unexpected download') } })
     expect(await restarted.prepare()).toEqual({})
     expect(restarted.state().node.error).toBe('interrupted')
     await restarted.shutdown()
     await manager.shutdown()
+  })
+  it.each(['version', 'generation', 'target'] as const)('rejects traversal in pending installation %s before deletion', async (field) => {
+    const { root } = await fixture()
+    const managed = join(root, 'managed-toolchains')
+    await mkdir(join(managed, 'node'), { recursive: true })
+    await writeFile(join(root, 'outside'), 'retain')
+    await writeFile(join(managed, 'node/installation.pending'), JSON.stringify({
+      version: '1.2.3', generation: 'a'.repeat(36), target: `${process.platform}-${process.arch}`, [field]: '../../outside',
+    }))
+    const manager = new RuntimeManager({ userData: root, fetch: async () => { throw new Error('unexpected download') } })
+    try {
+      expect(await manager.prepare()).toEqual({})
+      expect(manager.state().node.error).toBe('corrupt')
+      expect(await readFile(join(root, 'outside'), 'utf8')).toBe('retain')
+    } finally {
+      await manager.shutdown()
+    }
   })
 })

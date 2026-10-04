@@ -1,5 +1,4 @@
 /** Main owns privileged runtime state. Host receives only the verified startup snapshot. */
-import { existsSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { mkdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -8,7 +7,7 @@ import { writeDesktopFileAtomic } from '../atomic-file.ts'
 import { DesktopPreferencesStore } from '../preferences.ts'
 import { installRuntime, RuntimeInstallError, verifyRuntime, type RuntimeFetch } from './installer.ts'
 import { runtimePaths } from './paths.ts'
-import { readRuntimeReceipt, receiptLocation, type RuntimeReceipt } from './resolver.ts'
+import { readPendingRuntimeInstallation, readRuntimeReceipt, receiptLocation, type RuntimeReceipt } from './resolver.ts'
 import type { DesktopToolchains, RuntimeName, RuntimeSnapshot, RuntimeState } from './domain.ts'
 
 /** Main manager dependencies use the already configured Electron network transport. */
@@ -58,9 +57,18 @@ export class RuntimeManager {
     await rm(join(this.root, 'staging'), { recursive: true, force: true })
     for (const name of ['node', 'python'] as const) {
       const pending = join(this.root, name, 'installation.pending')
-      const interrupted = existsSync(pending)
+      let interrupted = false
       try {
         const receipt = readRuntimeReceipt(this.root, name)
+        const installation = readPendingRuntimeInstallation(this.root, name)
+        if (installation !== undefined) {
+          const location = receiptLocation(this.root, name, installation.target, installation)
+          const active = receipt === undefined ? undefined : receiptLocation(this.root, name, this.target, receipt)
+          if (location !== active) {
+            interrupted = true
+            await rm(location, { recursive: true, force: true })
+          }
+        }
         if (receipt === undefined) {
           if (interrupted) this.set(name, { phase: 'failed', error: 'interrupted' })
           continue
@@ -178,7 +186,7 @@ export class RuntimeManager {
     const pending = join(this.root, name, 'installation.pending')
     try {
       await mkdir(join(this.root, name), { recursive: true, mode: 0o700 })
-      await writeDesktopFileAtomic(pending, `${generation}\n`)
+      await writeDesktopFileAtomic(pending, `${JSON.stringify({ version, generation, target: this.target })}\n`)
       this.set(name, { error: undefined, received: 0, total: undefined })
       await installRuntime({ name, version, entry, destination, staging: join(this.root, 'staging', generation), platform: this.platform, fetch: this.options.fetch, signal,
         ...(this.options.verify === undefined ? {} : { verify: this.options.verify }),

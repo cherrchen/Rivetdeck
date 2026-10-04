@@ -10,7 +10,7 @@ Desktop 无需托管 Node.js 或 Python 即可启动。Core 执行由 Electron �
 
 ## 生命周期与存储
 
-Main 拥有独立运行环境操作，并向初始化与设置共享状态。下载使用仓库 lockfile 的固定 HTTPS URL 与 SHA256、安全归档验证和解压、解释器版本检查、npm/npx 检查，以及 Python ssl/sqlite3/ctypes 与 pip 检查。一个运行环境失败会保留另一个。安装失败显示本地化错误类别，技术细节保留在 Main 日志中。取消会等待清理；中断的 staging 在 Host 启动前清理并报告以便重试。
+Main 拥有独立运行环境操作，并向初始化与设置共享状态。下载使用仓库 lockfile 的固定 HTTPS URL 与 SHA256、安全归档验证和解压、解释器版本检查、npm/npx 检查，以及 Python ssl/sqlite3/ctypes 与 pip 检查。一个运行环境失败会保留另一个。安装失败显示本地化错误类别，技术细节保留在 Main 日志中。取消会等待清理；中断的 staging 和未由 active selector 提交的 generation 在 Host 启动前清理并报告以便重试。待完成安装记录其版本、平台和 generation，因此即使进程在 selector 提交后崩溃，清理也会保留已激活的运行时。
 
 验证通过的 generation 位于 `userData/managed-toolchains/<runtime>/<version>/<platform-arch>/<generation>`。下载和解压在独立 staging 中完成。Main 仅在验证与不可变重命名成功后原子写入 active selector。更新安装新的 generation，在重启前保留前代，并在 pinned 版本不同时显示可用更新。应用更新保留用户数据安装，不自动下载。
 

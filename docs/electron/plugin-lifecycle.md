@@ -34,7 +34,7 @@ The Plugins page registers an Official `plugins.item` card only for Desktop Capa
 
 ## Startup composition
 
-Startup runs, in order: migrate legacy plugin state; discover and validate bundled artifacts; link required runtime plugins into shared profile resolution; run any initial ecosystem preinstall and legacy-link repair through `dsh plugin`; materialize the Host profile projection; write the ownership-aware Host overlay; start the Desktop Host entry with that overlay. A failed package operation stops Desktop startup with its diagnostic.
+Startup runs, in order: migrate legacy plugin state; discover and validate bundled artifacts; link required runtime plugins into shared profile resolution; materialize the Host profile projection; write the ownership-aware Host overlay; start the Desktop Host entry with that overlay; load the client window. Initial ecosystem preinstall and legacy-link repair then run in the background through `dsh plugin`. A failed ecosystem package operation is logged while the Host and bundled plugins remain available. Shutdown cancels and drains this operation.
 
 The shared package operation holds the web profile `package.json` writer lock and updates its manifest and lockfile. Desktop's preinstall marker lives under `$DSH_HOME/electron`.
 

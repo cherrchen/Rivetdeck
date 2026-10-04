@@ -34,7 +34,7 @@ Plugins 页仅由 composition package 为 Desktop Capabilities 注册 Official `
 
 ## 启动组合
 
-启动顺序为：迁移旧版插件状态；发现并校验随包产物；将 required runtime 插件链接进共享 profile resolution；通过 `dsh plugin` 执行首次 ecosystem 预装和旧链接修复；物化 Host profile 投影；写出按 ownership 去重的 Host overlay；以该 overlay 启动 Desktop Host 入口。包操作失败时，Desktop 启动会显示诊断并停止。
+启动顺序为：迁移旧版插件状态；发现并校验随包产物；将 required runtime 插件链接进共享 profile resolution；物化 Host profile 投影；写出按 ownership 去重的 Host overlay；以该 overlay 启动 Desktop Host 入口；加载客户端窗口。随后通过 `dsh plugin` 在后台执行首次 ecosystem 预装和旧链接修复。ecosystem 包操作失败会记录日志，Host 和随包插件保持可用。退出时取消并等待该操作完全结束。
 
 共享包操作持有 web profile 的 `package.json` 写入锁，并更新其 manifest 与 lockfile。Desktop 的预装标记位于 `$DSH_HOME/electron` 下。
 

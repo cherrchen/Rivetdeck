@@ -11,10 +11,32 @@ export interface RuntimeReceipt {
   pendingRemoval: boolean
   retired: Array<{ version: string; generation: string }>
 }
+/** An installation destination retained until its active selector is committed. */
+export interface PendingRuntimeInstallation {
+  version: string
+  generation: string
+  target: string
+}
 function generation(value: unknown): value is { version: string; generation: string } {
   return value !== null && typeof value === 'object' && 'version' in value && 'generation' in value
     && typeof value.version === 'string' && /^\d+\.\d+\.\d+$/u.test(value.version)
     && typeof value.generation === 'string' && /^[a-f0-9-]{36}$/u.test(value.generation)
+}
+/** Read a validated interrupted destination before deleting managed files.
+ * @param root Managed runtime user-data directory.
+ * @param name Runtime selector.
+ * @returns Pending installation, or undefined when no operation was interrupted.
+ * @throws If the pending file is unreadable or its destination fields are invalid.
+ */
+export function readPendingRuntimeInstallation(root: string, name: RuntimeName): PendingRuntimeInstallation | undefined {
+  const file = join(root, name, 'installation.pending')
+  if (!existsSync(file)) return undefined
+  const value: unknown = JSON.parse(readFileSync(file, 'utf8'))
+  if (!generation(value) || !('target' in value) || typeof value.target !== 'string'
+    || !/^(darwin|linux|win32)-(x64|arm64)$/u.test(value.target)) {
+    throw new Error('desktop runtime: invalid pending installation')
+  }
+  return { version: value.version, generation: value.generation, target: value.target }
 }
 /** Read and validate a durable selector before using any of its filesystem paths.
  * @param root Managed runtime user-data directory.
