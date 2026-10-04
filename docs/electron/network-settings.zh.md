@@ -24,7 +24,7 @@
 
 System 和 Manual 显示 **代理 Agent 网络请求**。启用后，支持标准代理环境变量的 Agent 工具会收到 Desktop Gateway。关闭后，Agent 子进程保留继承的代理变量和 `$DSH_HOME/.env` 中的代理变量。它不能强制 raw socket 或忽略这些变量的工具使用代理。Direct 始终清理可控 Agent 的代理变量；Default 保留 Agent 原有行为。
 
-选择 **保存并重启** 来应用有效的模式或 Manual 配置。连接测试失败不会禁用保存。**恢复 Default** 会请求确认、保留上次 Manual 端点并重启。System 生效时，高级区域提供 **重新加载系统代理配置**；此操作更新 OS 策略和网络 epoch，不改变模式，也不重启。
+选择 **保存并重启** 来应用有效的模式或 Manual 配置。连接测试失败不会禁用保存。**恢复 Default** 会请求确认、保留上次 Manual 端点并重启。System 生效时，诊断页签提供 **重新加载系统代理配置**；此操作更新 OS 策略和网络 epoch，不改变模式，也不重启。
 
 <a id="configure-a-manual-proxy"></a>
 
@@ -40,9 +40,9 @@ System 和 Manual 显示 **代理 Agent 网络请求**。启用后，支持标�
 
 **测试连接** 会针对当前生效模式运行代理、Internet、GitHub 和 LLM API 的 GET 探测。它使用不产生 incident 的 updater 网络路径，因此测试失败不会打开全局代理故障对话框，也不会改变网络 epoch。来自目标站点的任何 HTTP 响应（包括 401）都表示传输可达；Gateway 故障仍显示为不可达及符号化错误代码。界面仍会显示状态码。Internet 测试只使用一个已配置的 204 URL，不尝试其他地址。GitHub 测试只检查可达性，不检查 updater release。
 
-打开高级区域可编辑 Internet 和 GitHub 测试 URL，并为当前已注册的 provider 填写 LLM health URL。LLM 测试只向该 URL 发送 GET，不调用 completion endpoint，也不消耗模型 token。没有 provider 和 health URL 时，LLM 行显示 **未配置**。表单不会为自定义 provider 推断安全的 health URL。
+打开 **高级诊断** 可进入双页签对话框。**连接测试与诊断** 包含连接测试和当前路由信息；**测试端点** 可编辑 Internet 和 GitHub 测试 URL，并为当前已注册的 provider 填写 LLM health URL。**放弃** 撤销尚未保留的端点编辑；**保留** 将编辑暂存，供连接测试和页面的 **保存并重启** 使用。关闭对话框会丢弃尚未保留的编辑。LLM 测试只向该 URL 发送 GET，不调用 completion endpoint，也不消耗模型 token。没有 provider 和 health URL 时，LLM 行显示 **未配置**。表单不会为自定义 provider 推断安全的 health URL。
 
-高级区域还会显示当前模式、Gateway 状态、epoch、所选路由、上次故障，以及可用的 System 策略详情。System 的其他路由只用于诊断，绝不会自动尝试。页面仅显示脱敏元数据，不返回已存密码、认证 header 或 PAC 脚本。
+**连接测试与诊断** 页签还会显示当前模式、Gateway 状态、epoch、所选路由、上次故障，以及可用的 System 策略详情。System 的其他路由只用于诊断，绝不会自动尝试。页面仅显示脱敏元数据，不返回已存密码、认证 header 或 PAC 脚本。
 
 <a id="recover-from-a-failed-route"></a>
 

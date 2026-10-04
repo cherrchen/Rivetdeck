@@ -222,8 +222,6 @@
   font-family: ui-monospace, SFMono-Regular, monospace;
 }
 
-/* The restore control's own row, directly above the frame's save button; both
- * end at the same right edge so they read as one right-aligned action group. */
 .footerActions {
   display: flex;
   align-items: center;
@@ -244,3 +242,39 @@
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
 
 .controls { display: flex; flex-direction: column; gap: 16px; }
+
+.diagnosticTrigger {
+  align-self: flex-start;
+  margin-inline-start: -10px;
+  padding: 0 10px;
+  gap: 6px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.diagnosticDialog {
+  box-sizing: border-box;
+  width: min(640px, 100%);
+  height: min(600px, 100%);
+  max-height: 100%;
+  padding: 0;
+  gap: 0;
+}
+
+.diagnosticLayout { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.diagnosticHeader { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 24px 24px 20px 28px; }
+.diagnosticHeader h2 { margin: 0; font-size: 20px; line-height: 28px; font-weight: 500; }
+.diagnosticClose { width: 32px; height: 32px; min-height: 32px; padding: 0; border-radius: var(--dsw-radius-md); color: var(--dsw-alias-label-tertiary); }
+.diagnosticTabs { flex: none; margin: 0 28px 22px; }
+.diagnosticPanel {
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 0 24px 24px 28px;
+}
+.diagnosticPanel:focus-visible { outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)); outline-offset: -2px; }
+
+.dialogError { margin: 0 28px 16px; color: var(--dsw-alias-state-error-primary); font-size: 12px; line-height: 18px; }
