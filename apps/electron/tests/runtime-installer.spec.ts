@@ -6,6 +6,7 @@ import { create as tar } from 'tar'
 import { afterEach, describe, expect, it } from 'vitest'
 import { installRuntime, verifyRuntime } from '../src/toolchains/installer.ts'
 import { RuntimeManager } from '../src/toolchains/manager.ts'
+import { runtimePaths } from '../src/toolchains/paths.ts'
 import { loadManifest } from '../scripts/toolchains/manifest.mjs'
 import { readPendingRuntimeInstallation, readRuntimeReceipt, receiptLocation } from '../src/toolchains/resolver.ts'
 
@@ -88,19 +89,22 @@ describe('Main runtime installer', () => {
 
 describe('Main runtime manager independence', () => {
   for (const name of ['node', 'python'] as const) {
-    for (const selection of ['absent', 'previous', 'committed'] as const) {
+    for (const selection of ['absent', 'installed', 'update-available', 'committed'] as const) {
       it(`recovers interrupted ${name} installation with ${selection} active selection`, async () => {
         const { root } = await fixture()
         const managed = join(root, 'managed-toolchains')
         const target = `${process.platform}-${process.arch}`
+        const lockVersion = loadManifest()[name].version
         const pending = { version: '1.2.3', generation: 'a'.repeat(36), target: selection === 'committed' ? target : 'win32-arm64' }
         const destination = receiptLocation(managed, name, pending.target, pending)
         await mkdir(destination, { recursive: true })
         await writeFile(join(destination, 'interpreter'), 'pending runtime')
         await writeFile(join(managed, name, 'installation.pending'), JSON.stringify(pending))
-        const receipt = { version: selection === 'committed' ? pending.version : '0.9.0',
+        const receipt = {
+          version: selection === 'installed' ? lockVersion : selection === 'committed' ? pending.version : '0.9.0',
           generation: selection === 'committed' ? pending.generation : 'b'.repeat(36),
-          sha256: 'c'.repeat(64), pendingRemoval: false, retired: [] }
+          sha256: 'c'.repeat(64), pendingRemoval: false, retired: [],
+        }
         const active = receiptLocation(managed, name, target, receipt)
         if (selection !== 'absent') {
           await mkdir(active, { recursive: true })
@@ -112,16 +116,25 @@ describe('Main runtime manager independence', () => {
         const manager = new RuntimeManager({ userData: root, verify: async () => {},
           fetch: async () => { throw new Error('unexpected download') } })
         try {
-          expect(Object.keys(await manager.prepare())).toEqual(selection === 'absent' ? [] : [name])
-          if (selection === 'committed') {
+          const started = await manager.prepare()
+          if (selection === 'absent') {
+            expect(started).toEqual({})
+            expect(manager.state()[name]).toMatchObject({ phase: 'failed', error: 'interrupted' })
+          } else if (selection === 'committed') {
+            expect(started).toEqual(runtimePaths(name, active, receipt.version, process.platform))
             expect(await readFile(join(destination, 'interpreter'), 'utf8')).toBe('active runtime')
             expect(manager.state()[name].error).toBeUndefined()
           } else {
+            expect(started).toEqual(runtimePaths(name, active, receipt.version, process.platform))
+            expect(manager.state()[name]).toMatchObject({
+              phase: selection, error: 'interrupted', restartRequired: false,
+              installedVersion: receipt.version, location: active,
+            })
             await expect(readFile(join(destination, 'interpreter'))).rejects.toMatchObject({ code: 'ENOENT' })
-            expect(manager.state()[name].error).toBe('interrupted')
           }
           if (selection !== 'absent') {
             expect(await readFile(join(active, 'interpreter'), 'utf8')).toBe('active runtime')
+            expect(await readFile(join(managed, name, 'active.json'), 'utf8')).toContain(receipt.generation)
             expect(readRuntimeReceipt(managed, name)).toEqual(receipt)
           }
           await expect(readFile(join(managed, name, 'installation.pending'))).rejects.toMatchObject({ code: 'ENOENT' })
@@ -131,6 +144,33 @@ describe('Main runtime manager independence', () => {
         }
       })
     }
+    it(`keeps corrupt ${name} when an interrupted update fails verification`, async () => {
+      const { root } = await fixture()
+      const managed = join(root, 'managed-toolchains')
+      const target = `${process.platform}-${process.arch}`
+      const pending = { version: '1.2.3', generation: 'a'.repeat(36), target: 'win32-arm64' }
+      const destination = receiptLocation(managed, name, pending.target, pending)
+      await mkdir(destination, { recursive: true })
+      await writeFile(join(destination, 'interpreter'), 'pending runtime')
+      await writeFile(join(managed, name, 'installation.pending'), JSON.stringify(pending))
+      const receipt = { version: '0.9.0', generation: 'b'.repeat(36), sha256: 'c'.repeat(64), pendingRemoval: false, retired: [] }
+      const active = receiptLocation(managed, name, target, receipt)
+      await mkdir(active, { recursive: true })
+      await writeFile(join(active, 'interpreter'), 'active runtime')
+      await writeFile(join(managed, name, 'active.json'), JSON.stringify(receipt))
+      const manager = new RuntimeManager({
+        userData: root, verify: async () => { throw new Error('damaged executable') },
+        fetch: async () => { throw new Error('unexpected download') },
+      })
+      try {
+        expect(await manager.prepare()).toEqual({})
+        expect(manager.state()[name]).toMatchObject({ phase: 'failed', error: 'corrupt' })
+        expect(await readFile(join(active, 'interpreter'), 'utf8')).toBe('active runtime')
+        expect(readRuntimeReceipt(managed, name)).toEqual(receipt)
+      } finally {
+        await manager.shutdown()
+      }
+    })
   }
   it('supports Python alone and reports a pinned update without downloading it', async () => {
     const { root, bytes, entry } = await fixture()

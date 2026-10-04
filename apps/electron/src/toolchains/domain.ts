@@ -39,6 +39,9 @@ export interface RuntimeState {
   location?: string | undefined
   received?: number | undefined
   total?: number | undefined
+  /** Sanitized failure. `interrupted` may accompany `installed` or `update-available`
+   * and names a discarded generation; the current interpreter stays usable.
+   */
   error?: RuntimeError | undefined
   restartRequired: boolean
 }

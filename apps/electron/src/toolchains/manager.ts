@@ -50,6 +50,11 @@ export class RuntimeManager {
   }
 
   /** Verify selections and finish deferred deletion before any Host can use them.
+   * An uncommitted generation that differs from the active selector is deleted. A pending record for the
+   * committed generation is not an interruption. Discarding a generation adds `error: 'interrupted'` to a
+   * verified `installed` or `update-available` runtime and keeps its version, location, and `restartRequired`.
+   * A missing commit stays `failed` / `interrupted`. `failed` / `corrupt` is left unchanged. Pending removal
+   * is not reported as installed.
    * @returns Optional startup executables; an invalid runtime is reported individually.
    */
   async prepare(): Promise<DesktopToolchains> {
@@ -94,7 +99,11 @@ export class RuntimeManager {
         this.set(name, { phase: 'failed', error: 'corrupt' })
       } finally {
         await rm(pending, { force: true })
-        if (interrupted) this.set(name, { phase: 'failed', error: 'interrupted' })
+        if (interrupted) {
+          const current = this.states[name]
+          if (current.phase === 'installed' || current.phase === 'update-available') this.set(name, { error: 'interrupted' })
+          else if (!(current.phase === 'failed' && current.error === 'corrupt')) this.set(name, { phase: 'failed', error: 'interrupted' })
+        }
       }
     }
     return this.toolchains

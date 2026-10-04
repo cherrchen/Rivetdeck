@@ -6,11 +6,11 @@ Desktop 无需托管 Node.js 或 Python 即可启动。Core 执行由 Electron �
 
 ## 初始化与迁移
 
-客户端 shell 对每个 Desktop 用户数据 profile 显示一次可选初始化对话框。Node 和 Python 默认未选中。跳过会保存初始化完成状态，不下载任何内容。跳过、失败或移除后，设置 → 网络与运行环境始终可用。旧用户在功能引入时收到一次对话框。应用更新或之后移除运行环境不会重置完成状态。旧版随包环境和系统解释器不会被复制或显示为托管安装。
+客户端 shell 对每个 Desktop 用户数据 profile 显示一次可选初始化对话框。Node 和 Python 默认未选中。安装所选环境会保存完成状态、在后台开始下载，并推进当前步骤。跳过会保存完成状态，不下载任何内容。遮罩、Escape 和关闭控件不保存完成状态。跳过、失败或移除后，设置 → 网络与运行环境始终可用。旧用户在功能引入时收到一次对话框。应用更新或之后移除运行环境不会重置完成状态。旧版随包环境和系统解释器不会被复制或显示为托管安装。
 
 ## 生命周期与存储
 
-Main 拥有独立运行环境操作，并向初始化与设置共享状态。下载使用仓库 lockfile 的固定 HTTPS URL 与 SHA256、安全归档验证和解压、解释器版本检查、npm/npx 检查，以及 Python ssl/sqlite3/ctypes 与 pip 检查。一个运行环境失败会保留另一个。安装失败显示本地化错误类别，技术细节保留在 Main 日志中。取消会等待清理；中断的 staging 和未由 active selector 提交的 generation 在 Host 启动前清理并报告以便重试。待完成安装记录其版本、平台和 generation，因此即使进程在 selector 提交后崩溃，清理也会保留已激活的运行时。
+Main 拥有独立运行环境操作，并向初始化与设置共享状态。下载使用仓库 lockfile 的固定 HTTPS URL 与 SHA256、安全归档验证和解压、解释器版本检查、npm/npx 检查，以及 Python ssl/sqlite3/ctypes 与 pip 检查。一个运行环境失败会保留另一个。安装失败显示本地化错误类别，技术细节保留在 Main 日志中。取消会等待清理。中断的 staging 和未由 active selector 提交的 generation 在 Host 启动前清理。已验证的前代 generation 保持 installed 或 update-available，并带有被丢弃一代的 interrupted 告警。没有提交时保持 failed 与 interrupted。校验失败保持 corrupt。待完成安装记录其版本、平台和 generation，因此即使进程在 selector 提交后崩溃，清理也会保留已激活的运行时。
 
 验证通过的 generation 位于 `userData/managed-toolchains/<runtime>/<version>/<platform-arch>/<generation>`。下载和解压在独立 staging 中完成。Main 仅在验证与不可变重命名成功后原子写入 active selector。更新安装新的 generation，在重启前保留前代，并在 pinned 版本不同时显示可用更新。应用更新保留用户数据安装，不自动下载。
 
