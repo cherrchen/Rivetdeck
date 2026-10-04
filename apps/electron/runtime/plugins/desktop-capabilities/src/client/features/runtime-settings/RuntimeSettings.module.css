@@ -1,3 +1,4 @@
+.setupDialog { width: min(600px, 100%); }
 .section { display: flex; flex-direction: column; gap: 16px; max-width: 760px; color: var(--dsw-alias-label-primary); }
 .heading { margin: 0; font-size: 14px; line-height: 22px; font-weight: 500; }
 .section p { margin: 0; font-size: 13px; line-height: 20px; }

@@ -99,7 +99,7 @@ Release 资源在固定的应用自有路径中包含 Rust Network Runtime。Man
 
 Windows 上受监督进程是随包发布的 Node.js 运行时（`resources/core-runtime/node.exe`），以 `windowsHide` 和一个继承的 stdin 设备句柄启动，因此它持有一个隐藏控制台，`pwsh`、`git`、`cmd` 等 agent shell 命令会继承该控制台，而不会打开 Windows Terminal 窗口；其它平台使用 Electron 的 Node 兼容子模式。
 
-Desktop Core 在 macOS/Linux 使用 Electron，在 Windows 使用仅包含 `node.exe` 和许可证的控制台执行器。Host 与插件包管理器使用 Core 执行器，不依赖可选 Agent 运行环境。Node.js 与 Python 通过可选初始化对话框或设置 → 网络与运行环境，分别安装到 Electron `userData/managed-toolchains` 下的版本化 generation。跳过状态独立于安装状态持久保存。Agent PATH 依次搜索请求、项目、用户和 Main 原始环境，最后才使用托管 fallback；显式删除 PATH 保持删除语义。仅已安装环境生成对应 shim。安装、更新和移除在重启后生效，保护运行中的任务。存储、网络与迁移行为见[运行环境](../../docs/electron/runtime-environments.zh.md)。
+Desktop Core 在 macOS/Linux 使用 Electron，在 Windows 使用仅包含 `node.exe` 和许可证的控制台执行器。Host 与插件包管理器使用 Core 执行器，不依赖可选 Agent 运行环境。Node.js 与 Python 通过可选初始化对话框或设置 → 网络与运行环境，分别安装到 Electron `userData/managed-toolchains` 下的版本化 generation。初始化对话框与模型首次配置对话框采用相同的 600px 宽度，并适应窗口的浮层边距。跳过状态独立于安装状态持久保存。Agent PATH 依次搜索请求、项目、用户和 Main 原始环境，最后才使用托管 fallback；显式删除 PATH 保持删除语义。仅已安装环境生成对应 shim。安装、更新和移除在重启后生效，保护运行中的任务。存储、网络与迁移行为见[运行环境](../../docs/electron/runtime-environments.zh.md)。
 
 运行环境下载使用固定 HTTPS 归档及 [`toolchains.lock.json`](toolchains.lock.json) 中的 SHA256。Main 与构建准备流程共享安全解压实现，在原子激活前验证解释器版本、npm/npx、Python import 和 pip。发布准备使用 `prepare:core`；完整托管运行环境不进入安装包资源。
 

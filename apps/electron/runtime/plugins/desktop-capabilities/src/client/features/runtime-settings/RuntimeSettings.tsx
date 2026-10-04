@@ -96,7 +96,7 @@ export function RuntimeSetup({ runtimes, t, complete }: Common & PropsRuntime<'s
     } catch { setError(true) }
   }
   if (snapshot === undefined || !required || dismissed) return null
-  return <Modal open title={t('setup')} closeLabel={t('close')}
+  return <Modal open className={css.setupDialog!} title={t('setup')} closeLabel={t('close')}
     onClose={() => { void dismiss() }} description={t('intro')}
     footer={<><Button size="sm" variant="outline" onClick={() => { void dismiss() }}>{t('skip')}</Button>
       <Button disabled={!NAMES.some(name => selected[name]) || NAMES.some(name => busy(snapshot[name]))}
