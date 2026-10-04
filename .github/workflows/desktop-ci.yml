@@ -220,6 +220,10 @@ jobs:
         run: pnpm --filter @dsh-electron/dsh-electron prepare:toolchains
       - name: Smoke-test Desktop toolchains
         run: pnpm --filter @dsh-electron/dsh-electron smoke:toolchains
+      - name: Verify user package commands survive managed reinstall
+        env:
+          DSH_ELECTRON_RUNTIME_ARCHIVE_SMOKE: '1'
+        run: pnpm exec vitest run apps/electron/tests/runtime-python-continuity.spec.ts
 
   managed-runtime-lifecycle:
     name: ${{ matrix.os }} Optional runtime lifecycle

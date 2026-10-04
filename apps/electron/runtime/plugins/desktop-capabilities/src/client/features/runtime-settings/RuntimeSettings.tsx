@@ -1,5 +1,5 @@
 /** Runtime views observe Main state; local state holds only selection and dialog visibility. */
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button, Modal, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { RuntimeCapability, RuntimeName, RuntimeSnapshot, RuntimeState } from '../../../../../../../src/toolchains/domain.ts'
@@ -12,18 +12,6 @@ type Translator = Common['t']
 const NAMES = ['node', 'python'] as const
 const busy = (state: RuntimeState) => ['downloading', 'verifying', 'installing'].includes(state.phase)
 const ignoreImplicitDismiss = (): void => {}
-
-/** Keep the setup close control out of the modal focus trap. */
-function ConcealSetupClose() {
-  useLayoutEffect(() => {
-    const button = document.querySelector(`.${css.setupDialog ?? ''} h2 + button`)
-    if (!(button instanceof HTMLButtonElement)) return
-    // The trap's entry selector matches every enabled button, including one hidden with CSS.
-    button.disabled = true
-    button.hidden = true
-  })
-  return null
-}
 
 function useRuntimes(runtimes: RuntimeCapability) {
   const [snapshot, setSnapshot] = useState<RuntimeSnapshot>()
@@ -93,8 +81,8 @@ export function RuntimeSettings({ runtimes, restart, t }: Common) {
 
 /** First-profile optional consent dialog mounted after the Core Host and client shell are ready.
  * Install and Skip persist completion and then call `complete()`. Install starts each selected
- * download without waiting for it. The mask, Escape, and close control do not persist completion
- * or call `complete()`.
+ * download without waiting for it. No close control is rendered; the mask and Escape
+ * do not persist completion or call `complete()`.
  */
 export function RuntimeSetup({ runtimes, t, complete }: Common & PropsRuntime<'settings.onboarding'>) {
   const { snapshot, required } = useRuntimes(runtimes)
@@ -131,21 +119,25 @@ export function RuntimeSetup({ runtimes, t, complete }: Common & PropsRuntime<'s
     })()
   }
   if (snapshot === undefined || !required || dismissed) return null
-  return <Modal open className={css.setupDialog!} title={t('setup')} closeLabel={t('close')}
-    onClose={ignoreImplicitDismiss} description={t('intro')}
-    footer={<><Button size="sm" variant="outline" disabled={settling} onClick={() => { settle(false) }}>{t('skip')}</Button>
+  return <Modal open headless className={css.setupDialog!} title={t('setup')} onClose={ignoreImplicitDismiss}>
+    <div className={css.setupContent}>
+      <h2 className={css.setupTitle}>{t('setup')}</h2>
+      <p className={css.setupDescription}>{t('intro')}</p>
+      <div className={css.section}>
+        {error && <p role="alert">{t('operationError')}</p>}
+        {NAMES.map(name => <div key={name}>
+          <div className={css.choice}><span>{t(name)} · {snapshot[name].version}</span>
+            <Switch checked={selected[name]} label={t(name)} onChange={checked => setSelected({ ...selected, [name]: checked })} />
+          </div>
+          <RuntimeRow allowInstall={snapshot.onboardingCompleted} state={snapshot[name]}
+            runtimes={runtimes} t={t} actionError={() => setError(true)} />
+        </div>)}
+      </div>
+    </div>
+    <div className={css.setupFooter}>
+      <Button size="sm" variant="outline" disabled={settling} onClick={() => { settle(false) }}>{t('skip')}</Button>
       <Button disabled={settling || !NAMES.some(name => selected[name]) || NAMES.some(name => busy(snapshot[name]))}
-        onClick={() => { settle(true) }}>{t('selected')}</Button></>}>
-    <div className={css.section}>
-      <ConcealSetupClose />
-      {error && <p role="alert">{t('operationError')}</p>}
-      {NAMES.map(name => <div key={name}>
-        <div className={css.choice}><span>{t(name)} · {snapshot[name].version}</span>
-          <Switch checked={selected[name]} label={t(name)} onChange={checked => setSelected({ ...selected, [name]: checked })} />
-        </div>
-        <RuntimeRow allowInstall={snapshot.onboardingCompleted} state={snapshot[name]}
-          runtimes={runtimes} t={t} actionError={() => setError(true)} />
-      </div>)}
+        onClick={() => { settle(true) }}>{t('selected')}</Button>
     </div>
   </Modal>
 }

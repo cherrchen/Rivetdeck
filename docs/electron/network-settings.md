@@ -48,11 +48,11 @@ The **Tests & diagnostics** tab also shows active mode, Gateway status, epoch, s
 
 ## Recover from a failed route
 
-When real business traffic fails at the selected proxy, the native dialog can permit another attempt, use Default once, open Settings → Network & Runtimes, or dismiss the incident. **Retry** permits another attempt at the same selected route; re-run the affected operation yourself. **Use Default This Time** restarts with a one-use override and keeps the saved mode. **Open Network Settings** opens the main window at the Network section and shows the unresolved failure without changing mode.
+When real business traffic fails at the selected proxy, the native dialog can permit another attempt, use Default once, open Settings → Network & Runtimes, or dismiss the incident. **Retry** permits another attempt at the same selected route; re-run the affected operation yourself. **Use Default This Time** restarts with a one-use override and keeps the saved mode. **Open Network Settings** opens the main window at the Network settings root without changing mode or opening the diagnostics dialog.
 
-The page also shows the last unresolved proxy failure and offers the same route retry. Tests do not create that failure. System policy changes and an explicit Reload start a new epoch; a failed proxy does not authorize another route or Direct.
+Open **Advanced diagnostics → Tests & diagnostics** to see the last unresolved proxy failure, preference warnings, and the same route retry. Tests do not create that failure. System policy changes and an explicit Reload start a new epoch; a failed proxy does not authorize another route or Direct.
 
-If you cancel a Basic proxy credential prompt, the failure remains visible. A later request that needs credentials can prompt again in the same epoch.
+If you cancel a Basic proxy credential prompt, diagnostics retain the unresolved failure. A later request that needs credentials can prompt again in the same epoch.
 
 <a id="troubleshoot"></a>
 

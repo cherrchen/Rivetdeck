@@ -496,7 +496,7 @@ if (!primaryInstance) {
       override: process.env.DSH_ELECTRON_NODE_BINARY,
     })
     const harnessHome = process.env.DSH_HOME ?? resolveHarnessHome(app.getPath('home'))
-    const shim = prepareToolchainShims(userDataPath, toolchains, process.platform)
+    const shim = prepareToolchainShims({ userData: userDataPath, harnessHome }, toolchains, process.platform)
     const toolchainPolicy: DesktopToolchainPolicy = {
       version: 2,
       mode: 'fallback',

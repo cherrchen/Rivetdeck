@@ -89,6 +89,59 @@ describe('Main runtime installer', () => {
 
 describe('Main runtime manager independence', () => {
   for (const name of ['node', 'python'] as const) {
+    it(`retains only Python predecessors across reinstall, update, restart, and removal of ${name}`, async () => {
+      const { root, bytes, entry } = await fixture()
+      const manifest = structuredClone(loadManifest())
+      const target = `${process.platform}-${process.arch}` as keyof typeof manifest.node.targets
+      Object.assign(manifest[name].targets[target], entry)
+      const options = { userData: root, manifest, fetch: async () => new Response(bytes), verify: async () => {} }
+      const managers: RuntimeManager[] = []
+      const start = async () => {
+        const manager = new RuntimeManager(options)
+        managers.push(manager)
+        await manager.prepare()
+        return manager
+      }
+      try {
+        const first = await start()
+        await first.install(name)
+        const original = first.state()[name].location!
+        await first.install(name)
+        const replacement = first.state()[name].location!
+        await first.shutdown()
+        const second = await start()
+        if (name === 'python') {
+          expect(await readFile(join(original, 'bin/interpreter'), 'utf8')).toBe('runtime')
+          expect(readRuntimeReceipt(join(root, 'managed-toolchains'), name)?.retired).toHaveLength(1)
+        } else {
+          await expect(readFile(join(original, 'bin/interpreter'))).rejects.toMatchObject({ code: 'ENOENT' })
+        }
+        manifest[name].version = '9.9.9'
+        await second.shutdown()
+        const updating = await start()
+        await updating.install(name)
+        const current = updating.state()[name].location!
+        await updating.shutdown()
+        const third = await start()
+        if (name === 'python') {
+          expect(await readFile(join(original, 'bin/interpreter'), 'utf8')).toBe('runtime')
+          expect(await readFile(join(replacement, 'bin/interpreter'), 'utf8')).toBe('runtime')
+          expect(readRuntimeReceipt(join(root, 'managed-toolchains'), name)?.retired).toHaveLength(2)
+        } else {
+          await expect(readFile(join(replacement, 'bin/interpreter'))).rejects.toMatchObject({ code: 'ENOENT' })
+        }
+        await third.remove(name)
+        expect(await readFile(join(current, 'bin/interpreter'), 'utf8')).toBe('runtime')
+        await third.shutdown()
+        const removed = await start()
+        expect(removed.state()[name].phase).toBe('not-installed')
+        for (const location of [original, replacement, current]) {
+          await expect(readFile(join(location, 'bin/interpreter'))).rejects.toMatchObject({ code: 'ENOENT' })
+        }
+      } finally { await Promise.all(managers.map(manager => manager.shutdown())) }
+    })
+  }
+  for (const name of ['node', 'python'] as const) {
     for (const selection of ['absent', 'installed', 'update-available', 'committed'] as const) {
       it(`recovers interrupted ${name} installation with ${selection} active selection`, async () => {
         const { root } = await fixture()

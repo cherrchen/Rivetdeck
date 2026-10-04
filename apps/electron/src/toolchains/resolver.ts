@@ -3,7 +3,9 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { RuntimeName } from './domain.ts'
 
-/** Committed installation receipt. Retired generations are cleaned only before Host startup. */
+/** Committed installation receipt. Python predecessors remain until explicit removal;
+ * Node predecessors are cleaned before Host startup.
+ */
 export interface RuntimeReceipt {
   version: string
   generation: string

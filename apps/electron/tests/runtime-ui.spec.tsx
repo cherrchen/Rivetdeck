@@ -3,7 +3,7 @@ import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, describe, expect, it } from 'vitest'
 import { RuntimeSettings, RuntimeSetup } from '../runtime/plugins/desktop-capabilities/src/client/features/runtime-settings/RuntimeSettings.tsx'
-import { en } from '../runtime/plugins/desktop-capabilities/src/client/features/runtime-settings/locales.ts'
+import { en, zh } from '../runtime/plugins/desktop-capabilities/src/client/features/runtime-settings/locales.ts'
 import type { RuntimeCapability, RuntimeName, RuntimeSnapshot } from '../src/toolchains/domain.ts'
 
 const containers: HTMLElement[] = []
@@ -57,7 +57,7 @@ function button(text: string) {
 async function click(element: HTMLElement) { await act(async () => { element.click() }) }
 function dialog() { return document.querySelector('[role="dialog"]') }
 
-function mount(fake: ReturnType<typeof capability>) {
+function mount(fake: ReturnType<typeof capability>, translate = t) {
   const container = document.createElement('div')
   document.body.append(container)
   containers.push(container)
@@ -68,8 +68,8 @@ function mount(fake: ReturnType<typeof capability>) {
     root.render(<>
       {setup && <RuntimeSetup
         complete={() => { completions += 1; setup = false; render() }}
-        runtimes={fake.runtimes} restart={async () => {}} t={t} />}
-      <RuntimeSettings runtimes={fake.runtimes} restart={async () => {}} t={t} />
+        runtimes={fake.runtimes} restart={async () => {}} t={translate} />}
+      <RuntimeSettings runtimes={fake.runtimes} restart={async () => {}} t={translate} />
     </>)
   }
   return {
@@ -141,22 +141,19 @@ describe('optional runtime views', () => {
     } finally { await view.unmount() }
   })
 
-  it('ignores the mask, Escape, and the close control', async () => {
+  it.each([['English', en], ['Chinese', zh]] as const)('omits the close control and ignores the mask and Escape in %s', async (_locale, messages) => {
     const fake = capability()
-    const view = mount(fake)
+    const view = mount(fake, key => messages[key])
     try {
       await act(async () => { view.render() })
-      const close = document.querySelector<HTMLButtonElement>('[role="dialog"] h2 + button')
-      expect(close).not.toBeNull()
-      expect(close?.hidden).toBe(true)
-      expect(close?.disabled).toBe(true)
-      expect(document.activeElement).not.toBe(close)
+      expect(dialog()?.getAttribute('aria-label')).toBe(messages.setup)
+      expect(dialog()?.querySelector('h2')?.textContent).toBe(messages.setup)
+      expect(document.querySelector(`[role="dialog"] button[aria-label="${messages.close}"]`)).toBeNull()
       expect(document.activeElement?.getAttribute('role')).toBe('switch')
       const mask = document.querySelector<HTMLElement>('[role="presentation"] > [aria-hidden="true"]')
       expect(mask).not.toBeNull()
       await click(mask!)
       await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
-      await click(close!)
       expect(fake.state().onboardingCompleted).toBe(false)
       expect(view.completions()).toBe(0)
       expect(dialog()).not.toBeNull()

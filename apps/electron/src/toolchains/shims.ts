@@ -23,15 +23,24 @@ function writeShim(directory: string, name: string, body: string, windows: boole
   chmodSync(path, 0o700)
 }
 
-/** Create user-writable fallback commands that invoke exact application assets. */
-export function prepareToolchainShims(harnessHome: string, toolchains: DesktopToolchains, platform: NodeJS.Platform): {
+/** Create fallback commands in Desktop storage while retaining Harness-owned user packages.
+ * @param storage Separate Desktop user-data and Harness home directories.
+ * @param toolchains Verified startup interpreters.
+ * @param platform Target command syntax and package layout.
+ * @returns Shim and persistent user-package locations for Agent fallback execution.
+ */
+export function prepareToolchainShims(
+  storage: { userData: string; harnessHome: string },
+  toolchains: DesktopToolchains,
+  platform: NodeJS.Platform,
+): {
   shimDirectory: string
   pythonUserBase: string
   nodeGlobalBinDirectory: string
   pythonUserBinDirectory: string
 } {
-  const root = join(harnessHome, 'electron')
-  const shimDirectory = join(root, 'toolchains', 'bin')
+  const root = join(storage.harnessHome, 'electron')
+  const shimDirectory = join(storage.userData, 'electron', 'toolchains', 'bin')
   const pythonUserBase = join(root, 'python-user')
   const nodeGlobal = join(root, 'node-global')
   const windows = platform === 'win32'

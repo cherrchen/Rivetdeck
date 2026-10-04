@@ -78,8 +78,12 @@ export class RuntimeManager {
           if (interrupted) this.set(name, { phase: 'failed', error: 'interrupted' })
           continue
         }
-        for (const retired of receipt.retired) {
-          await rm(receiptLocation(this.root, name, this.target, retired), { recursive: true, force: true })
+        // Python scripts and project virtual environments retain absolute interpreter paths.
+        if (name === 'node' || receipt.pendingRemoval) {
+          for (const retired of receipt.retired) {
+            await rm(receiptLocation(this.root, name, this.target, retired), { recursive: true, force: true })
+          }
+          receipt.retired = []
         }
         const location = receiptLocation(this.root, name, this.target, receipt)
         if (receipt.pendingRemoval) {
@@ -87,7 +91,6 @@ export class RuntimeManager {
           await rm(join(this.root, name, 'active.json'), { force: true })
           continue
         }
-        receipt.retired = []
         this.receipts.set(name, receipt)
         await this.writeReceipt(name, receipt)
         this.set(name, { installedVersion: receipt.version, location })
