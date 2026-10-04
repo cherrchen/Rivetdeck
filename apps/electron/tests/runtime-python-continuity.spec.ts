@@ -11,7 +11,7 @@ import { prepareToolchainShims } from '../src/toolchains/shims.ts'
 // The toolchain CI matrix prepares the pinned archive before enabling this offline regression.
 describe.runIf(process.env.DSH_ELECTRON_RUNTIME_ARCHIVE_SMOKE === '1')('User package command continuity', () => {
   it('executes npm and Python package commands and a project venv after repeated reinstall and restart', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'dsh-python-continuity-'))
+    const root = await mkdtemp(join(tmpdir(), 'dsh python continuity-'))
     const lock = loadManifest()
     const target = `${process.platform}-${process.arch}` as keyof typeof lock.python.targets
     const entry = lock.python.targets[target]
@@ -48,8 +48,11 @@ describe.runIf(process.env.DSH_ELECTRON_RUNTIME_ARCHIVE_SMOKE === '1')('User pac
         NPM_CONFIG_GLOBALCONFIG: join(root, 'npm-global-config'),
       }
       const run = (executable: string, args: string[]) => {
+        // cmd.exe owns the quotes around batch paths; Node must not escape them again.
         const result = executable.endsWith('.cmd')
-          ? spawnSync('cmd.exe', ['/d', '/s', '/c', `""${executable}" ${args.map(arg => `"${arg}"`).join(' ')}"`], { env, encoding: 'utf8', timeout: 60_000 })
+          ? spawnSync('cmd.exe', ['/d', '/s', '/c', `""${executable}" ${args.map(arg => `"${arg}"`).join(' ')}"`], {
+            env, encoding: 'utf8', timeout: 60_000, windowsVerbatimArguments: true,
+          })
           : spawnSync(executable, args, { env, encoding: 'utf8', timeout: 60_000 })
         expect(result.error, result.stderr).toBeUndefined()
         expect(result.signal, result.stderr).toBeNull()
