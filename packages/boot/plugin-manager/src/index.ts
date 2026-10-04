@@ -301,14 +301,9 @@ export class PluginManager extends TypertRemoteService {
         const compatibility = evaluatePluginCompatibility(info, exemptions)
         if (compatibility !== undefined && !compatibility.exempted) throw new ManagementFailure('incompatible-version', [incompatiblePlugin(compatibility)])
         const dir = resolveBundleDir('dsh', name, this.profile.installAnchor, this.profile.dir)
-        const installedDir = join(this.profile.dir, 'node_modules', name)
-        const installedManifest = installed && existsSync(join(installedDir, 'package.json'))
-          ? readProfileManifest('dsh', installedDir) : undefined
-        const display = installedManifest ?? info
-        const meta = readPluginMeta(display.name ?? name,
-          pathToFileURL(join(installedManifest === undefined ? dir : installedDir, 'package.json')).href)
-        bundles.push({ name, ...(display.version === undefined ? {} : { version: display.version }),
-          ...(display.description === undefined || display.description === '' ? {} : { description: display.description }),
+        const meta = readPluginMeta(info.name ?? name, pathToFileURL(join(dir, 'package.json')).href)
+        bundles.push({ name, ...(info.version === undefined ? {} : { version: info.version }),
+          ...(info.description === undefined || info.description === '' ? {} : { description: info.description }),
           ...meta === undefined ? {} : { meta },
           enabled, installed, optional, removable: removable && readOnlyReason === undefined,
           ...(readOnlyReason === undefined ? {} : { readOnlyReason }),
