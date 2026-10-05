@@ -48,32 +48,36 @@ try {
   $report.installed = $true
   $report.packageFullName = $installed.PackageFullName
   $application = Join-Path $installed.InstallLocation 'app/Rivetdeck.exe'
-  & node (Join-Path $PSScriptRoot 'smoke-runtime-setup.mjs') $application --offline --startup-only --store
-  if ($LASTEXITCODE -ne 0) { throw 'Installed AppX startup smoke failed.' }
-  $report.startup = $true
-  & node (Join-Path $PSScriptRoot 'smoke-core-plugins.mjs') (Join-Path $installed.InstallLocation 'app/resources/core-runtime/node.exe') (Join-Path $installed.InstallLocation 'app/resources/app')
-  if ($LASTEXITCODE -ne 0) { throw 'Installed AppX Core plugin smoke failed.' }
-  $report.plugins = $true
-  & node (Join-Path $PSScriptRoot 'smoke-runtime-setup.mjs') $application --install --store
-  if ($LASTEXITCODE -ne 0) { throw 'Installed AppX managed runtime lifecycle failed.' }
-  $report.runtimes = $true
-  Write-Host "STORE_INSTALLATION_VERIFIED $Architecture $($identity.version)"
+  $failures = [Collections.Generic.List[string]]::new()
+  & node (Join-Path $PSScriptRoot 'smoke-runtime-setup.mjs') $application --offline --startup-only --store --artifacts (Join-Path $ReportDirectory 'startup')
+  $report.startup = $LASTEXITCODE -eq 0
+  if (-not $report.startup) { $failures.Add('Installed AppX startup smoke failed.') }
+  & node (Join-Path $PSScriptRoot 'smoke-core-plugins.mjs') (Join-Path $installed.InstallLocation 'app/resources/core-runtime/node.exe') (Join-Path $installed.InstallLocation 'app/resources/app') --store-executable $application
+  $report.plugins = $LASTEXITCODE -eq 0
+  if (-not $report.plugins) { $failures.Add('Installed AppX Core plugin smoke failed.') }
+  & node (Join-Path $PSScriptRoot 'smoke-runtime-setup.mjs') $application --install --store --artifacts (Join-Path $ReportDirectory 'runtimes')
+  $report.runtimes = $LASTEXITCODE -eq 0
+  if (-not $report.runtimes) { $failures.Add('Installed AppX managed runtime lifecycle failed.') }
+  if ($failures.Count -eq 0) { Write-Host "STORE_INSTALLATION_VERIFIED $Architecture $($identity.version)" }
   if ($RunCertificationKit) {
-    $appCert = "${env:ProgramFiles(x86)}/Windows Kits/10/App Certification Kit/appcert.exe"
-    $report.wack = 'unavailable'
-    if (-not (Test-Path $appCert)) { throw 'Windows App Certification Kit is not installed on this runner.' }
-    if ($report.sessionId -eq 0) { throw 'WACK requires an active user session; this runner is in Session 0.' }
-    & $appCert reset
-    if ($LASTEXITCODE -ne 0) { throw 'WACK reset failed.' }
-    $report.wack = 'running'
-    $wackReport = Join-Path $ReportDirectory 'wack.xml'
-    & $appCert test -packagefullname $installed.PackageFullName -reportoutputpath $wackReport
-    $report.wackExitCode = $LASTEXITCODE
-    if (-not (Test-Path $wackReport)) { throw 'WACK did not produce an XML report.' }
-    [xml]$results = Get-Content $wackReport -Raw
-    $report.wack = $results.REPORT.OVERALL_RESULT
-    if ($report.wackExitCode -ne 0 -or $report.wack -notmatch '^(PASS|PASSED)$') { throw "WACK failed: $($report.wack), exit $($report.wackExitCode). See wack.xml." }
+    try {
+      $appCert = "${env:ProgramFiles(x86)}/Windows Kits/10/App Certification Kit/appcert.exe"
+      $report.wack = 'unavailable'
+      if (-not (Test-Path $appCert)) { throw 'Windows App Certification Kit is not installed on this runner.' }
+      if ($report.sessionId -eq 0) { throw 'WACK requires an active user session; this runner is in Session 0.' }
+      & $appCert reset
+      if ($LASTEXITCODE -ne 0) { throw 'WACK reset failed.' }
+      $report.wack = 'running'
+      $wackReport = Join-Path $ReportDirectory 'wack.xml'
+      & $appCert test -packagefullname $installed.PackageFullName -reportoutputpath $wackReport
+      $report.wackExitCode = $LASTEXITCODE
+      if (-not (Test-Path $wackReport)) { throw 'WACK did not produce an XML report.' }
+      [xml]$results = Get-Content $wackReport -Raw
+      $report.wack = $results.REPORT.OVERALL_RESULT
+      if ($report.wackExitCode -ne 0 -or $report.wack -notmatch '^(PASS|PASSED)$') { throw "WACK failed: $($report.wack), exit $($report.wackExitCode). See wack.xml." }
+    } catch { $failures.Add($_.Exception.Message) }
   }
+  if ($failures.Count -gt 0) { throw ($failures -join ' ') }
 } catch {
   $report.error = $_.Exception.Message
   throw

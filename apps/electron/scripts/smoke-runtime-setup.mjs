@@ -1,7 +1,7 @@
 /** Real packaged Desktop smoke; --startup-only checks Core boot without advancing onboarding. */
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { execFileSync } from 'node:child_process'
@@ -9,6 +9,9 @@ const root = resolve(import.meta.dirname, '../../..')
 const require = createRequire(join(root, 'apps/web/package.json'))
 const { _electron } = require('playwright')
 const executablePath = resolve(process.argv[2])
+const artifactsIndex = process.argv.indexOf('--artifacts')
+assert.ok(artifactsIndex === -1 || (process.argv[artifactsIndex + 1] && !process.argv[artifactsIndex + 1].startsWith('--')), '--artifacts requires an output directory')
+const artifacts = artifactsIndex === -1 ? undefined : resolve(process.argv[artifactsIndex + 1])
 const scratch = await mkdtemp(join(tmpdir(), 'dsh-runtime-smoke-'))
 const userData = join(scratch, 'userData')
 const env = { ...process.env, DSH_HOME: join(scratch, 'harness'), DSH_TELEMETRY_DISABLED: '1' }
@@ -145,6 +148,17 @@ try {
   console.error('smoke artifacts:', scratch)
   throw error
 } finally {
-  await close()
-  if (!process.argv.includes('--keep')) await rm(scratch, { recursive: true, force: true })
+  try { await close() } finally {
+    try {
+      if (artifacts !== undefined) {
+        await mkdir(artifacts, { recursive: true })
+        for (const file of await readdir(scratch)) {
+          if (file.endsWith('.png')) await copyFile(join(scratch, file), join(artifacts, file))
+        }
+        await writeFile(join(artifacts, 'events.json'), `${JSON.stringify({ platform: process.platform, arch: process.arch, events }, null, 2)}\n`)
+      }
+    } finally {
+      if (!process.argv.includes('--keep')) await rm(scratch, { recursive: true, force: true })
+    }
+  }
 }

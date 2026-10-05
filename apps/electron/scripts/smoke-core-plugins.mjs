@@ -1,4 +1,6 @@
 /** Real plugin lifecycle through the packaged Core executor and bundled pnpm. */
+import assert from 'node:assert/strict'
+import { createRequire } from 'node:module'
 import { execFileSync } from 'node:child_process'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -7,6 +9,9 @@ import { pathToFileURL } from 'node:url'
 
 const executable = resolve(process.argv[2])
 const appPath = resolve(process.argv[3])
+const storeIndex = process.argv.indexOf('--store-executable')
+assert.ok(storeIndex === -1 || process.argv[storeIndex + 1], '--store-executable requires the installed application path')
+const storeExecutable = storeIndex === -1 ? undefined : resolve(process.argv[storeIndex + 1])
 const scratch = await mkdtemp(join(tmpdir(), 'dsh-core-plugins-'))
 const moduleUrl = relative => pathToFileURL(join(appPath, relative)).href
 const code = `
@@ -35,8 +40,25 @@ for (const args of [['add', name + '@' + manifest.dependencies[name]], ['remove'
 assert.equal(existsSync(join(home, 'managed-toolchains')), false)
 console.log('Core-only plugin add/remove/reinstall and profile reconciliation passed; bundled pnpm ' + JSON.parse(readFileSync(join(appPath, 'node_modules/pnpm/package.json'), 'utf8')).version)
 `
+let application
 try {
   const script = join(scratch, 'probe.mjs')
   await writeFile(script, code)
-  execFileSync(executable, [script], { env: { ...process.env, ELECTRON_RUN_AS_NODE: process.platform === 'win32' ? '' : '1', DSH_HOME: scratch }, stdio: 'inherit', windowsHide: true, timeout: 180_000 })
-} finally { await rm(scratch, { recursive: true, force: true }) }
+  if (storeExecutable) {
+    const require = createRequire(resolve(import.meta.dirname, '../../web/package.json'))
+    const { _electron } = require('playwright')
+    const env = { ...process.env, DSH_HOME: join(scratch, 'application-home'), DSH_TELEMETRY_DISABLED: '1' }
+    delete env.ELECTRON_RUN_AS_NODE
+    application = await _electron.launch({ executablePath: storeExecutable, args: [`--user-data-dir=${join(scratch, 'userData')}`], env, timeout: 120_000 })
+    await application.firstWindow({ timeout: 120_000 })
+    const output = await application.evaluate((_, request) => {
+      if (process.windowsStore !== true) throw new Error('Core plugin probe requires the installed Store application identity')
+      // WindowsApps executables require the calling process to carry this package identity.
+      return process.getBuiltinModule('child_process').execFileSync(request.executable, [request.script], { env: { ...process.env, ELECTRON_RUN_AS_NODE: '', DSH_HOME: request.home }, encoding: 'utf8', windowsHide: true, timeout: 180_000 })
+    }, { executable, script, home: scratch })
+    process.stdout.write(output)
+  } else execFileSync(executable, [script], { env: { ...process.env, ELECTRON_RUN_AS_NODE: process.platform === 'win32' ? '' : '1', DSH_HOME: scratch }, stdio: 'inherit', windowsHide: true, timeout: 180_000 })
+} finally {
+  try { await application?.close() }
+  finally { await rm(scratch, { recursive: true, force: true }) }
+}

@@ -8,8 +8,8 @@ const root = resolve(import.meta.dirname, '..')
 describe('Desktop synchronization and release workflows', () => {
   it('builds Store-only AppX artifacts on native runners without publishing a GitHub release', () => {
     const store = loadWorkflow('.github/workflows/desktop-store.yml')
-    expect(store.on).toMatchObject({ workflow_dispatch: null, push: { branches: ['feat/microsoft-store-*'] } })
-    expect(store.permissions).toEqual({ contents: 'read' })
+    expect(store.on).toMatchObject({ workflow_dispatch: { inputs: { package_run_id: { type: 'string', required: false } } }, push: { branches: ['feat/microsoft-store-*'] } })
+    expect(store.permissions).toEqual({ contents: 'read', actions: 'read' })
     const job = workflowJob(store, 'package')
     expect(job.strategy).toMatchObject({ matrix: { include: [
       { runner: 'windows-latest', arch: 'x64' },
@@ -19,6 +19,9 @@ describe('Desktop synchronization and release workflows', () => {
     const steps = job.steps.filter(isRecord)
     const build = steps.find(step => step.name === 'Build unsigned Store package')
     expect(build?.run).toContain('--config .electron-build/store/builder.json --win appx --${{ matrix.arch }} --publish never')
+    expect(build?.if).toBe('${{ !inputs.package_run_id }}')
+    const reuse = steps.find(step => step.name === 'Download existing Store package')
+    expect(reuse).toMatchObject({ if: "${{ inputs.package_run_id != '' }}", uses: 'actions/download-artifact@v4', with: { 'run-id': '${{ inputs.package_run_id }}' } })
     const verify = steps.findIndex(step => step.name === 'Verify Store package contents')
     const upload = steps.findIndex(step => step.uses === 'actions/upload-artifact@v4')
     expect(verify).toBeGreaterThan(steps.indexOf(build!))

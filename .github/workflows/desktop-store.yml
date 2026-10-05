@@ -3,6 +3,11 @@ run-name: Store submission packages (${{ github.ref_name }})
 
 on:
   workflow_dispatch:
+    inputs:
+      package_run_id:
+        description: 'Optional source run ID: qualify its existing unsigned artifacts without rebuilding'
+        type: string
+        required: false
   push:
     branches: ['feat/microsoft-store-*']
     paths:
@@ -16,6 +21,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
 
 env:
   DSH_TELEMETRY_DISABLED: '1'
@@ -54,31 +60,54 @@ jobs:
         run: pnpm --filter @dsh-electron/dsh-electron prepare:store
 
       - name: Build upstream application
+        if: ${{ !inputs.package_run_id }}
         run: pnpm run build
 
       - name: Compile Electron application
+        if: ${{ !inputs.package_run_id }}
         run: pnpm --filter @dsh-electron/dsh-electron build
 
       - name: Test Store distribution
         run: pnpm exec vitest run apps/electron/tests/windows-store.spec.ts apps/electron/tests/updater.spec.ts scripts/desktop-workflow.spec.ts
 
       - name: Prepare Core Host executor
+        if: ${{ !inputs.package_run_id }}
         env:
           DSH_ELECTRON_TARGET_ARCH: ${{ matrix.arch }}
           DSH_ELECTRON_TARGET_PLATFORM: win32
         run: pnpm --filter @dsh-electron/dsh-electron prepare:core
 
       - name: Prepare Network Runtime
+        if: ${{ !inputs.package_run_id }}
         run: pnpm --filter @dsh-electron/dsh-electron prepare:network-runtime
 
       - name: Write About build identity
+        if: ${{ !inputs.package_run_id }}
         env:
           RIVETDECK_BUILD: ${{ github.run_number }}
           RIVETDECK_COMMIT: ${{ github.sha }}
         run: node apps/electron/scripts/write-build-info.mjs
 
       - name: Build unsigned Store package
+        if: ${{ !inputs.package_run_id }}
         run: pnpm --filter @dsh-electron/dsh-electron exec electron-builder --config .electron-build/store/builder.json --win appx --${{ matrix.arch }} --publish never
+
+      - name: Download existing Store package
+        if: ${{ inputs.package_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: rivetdeck-store-${{ matrix.arch }}
+          path: dist/electron-store
+          run-id: ${{ inputs.package_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Record package source
+        shell: pwsh
+        env:
+          SOURCE_RUN_ID: ${{ inputs.package_run_id || github.run_id }}
+        run: |
+          New-Item -ItemType Directory -Path "$env:RUNNER_TEMP/store-qualification" -Force | Out-Null
+          @{ packageRunId = $env:SOURCE_RUN_ID; qualificationCommit = '${{ github.sha }}' } | ConvertTo-Json | Set-Content "$env:RUNNER_TEMP/store-qualification/source.json"
 
       - name: Verify Store package contents
         id: contents
