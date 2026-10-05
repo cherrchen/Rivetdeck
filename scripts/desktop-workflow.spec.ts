@@ -236,6 +236,12 @@ describe('Desktop synchronization and release workflows', () => {
     const release = loadWorkflow('.github/workflows/desktop-release.yml')
     const packageJob = workflowJob(release, 'package')
     if (!Array.isArray(packageJob.steps)) throw new TypeError('Desktop release must define packaging steps')
+    const identity = packageJob.steps.filter(isRecord).find(step => step.name === 'Write About build identity')
+    expect(identity?.env).toMatchObject({
+      RIVETDECK_BUILD: '${{ github.run_number }}',
+      RIVETDECK_COMMIT: '${{ github.sha }}',
+    })
+    expect(identity?.run).toContain('write-build-info.mjs')
     const smoke = packageJob.steps.filter(isRecord).find(step => step.name === 'Smoke-test Windows installer')
     expect(smoke?.run).toContain("-Architecture '${{ matrix.arch }}'")
     const installerSmoke = readFileSync(resolve(root, 'apps/electron/scripts/smoke-windows-installer.ps1'), 'utf8')

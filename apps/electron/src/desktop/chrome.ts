@@ -32,7 +32,7 @@ function overlayWindowChrome(): IntegratedWindowChrome {
   }
 }
 
-/** Window options shared by the main and about windows. */
+/** Window options shared by integrated Desktop chrome windows. */
 export function desktopWindowChrome(platform: NodeJS.Platform): IntegratedWindowChrome {
   switch (platform) {
     case 'darwin':
@@ -58,14 +58,8 @@ export function allowsClipboardWrite(
   }
 }
 
-/** Resolve the public project page, preferring package repository metadata. */
-export function resolveProjectUrl(manifest: DesktopManifest): string | undefined {
-  const repository = manifest.repository
-  const candidate = typeof repository === 'string'
-    ? repository
-    : isRecord(repository) && typeof repository.url === 'string'
-      ? repository.url
-      : manifest.homepage
+/** Normalize a package URL field into an http(s) href without a trailing slash. */
+function normalizeHttpUrl(candidate: unknown): string | undefined {
   if (typeof candidate !== 'string') return undefined
   const normalized = candidate.replace(/^git\+/, '').replace(/\.git$/, '')
   try {
@@ -74,6 +68,22 @@ export function resolveProjectUrl(manifest: DesktopManifest): string | undefined
   } catch {
     return undefined
   }
+}
+
+/** Resolve the public GitHub project page from package repository metadata. */
+export function resolveProjectUrl(manifest: DesktopManifest): string | undefined {
+  const repository = manifest.repository
+  const candidate = typeof repository === 'string'
+    ? repository
+    : isRecord(repository) && typeof repository.url === 'string'
+      ? repository.url
+      : undefined
+  return normalizeHttpUrl(candidate)
+}
+
+/** Resolve the product website from package homepage metadata. */
+export function resolveHomepageUrl(manifest: DesktopManifest): string | undefined {
+  return normalizeHttpUrl(manifest.homepage)
 }
 
 /** Build the native page context menu from Chromium editing capabilities. */

@@ -73,7 +73,7 @@ The native page context menu exposes cut, copy, paste, select all, and reload ac
 
 The tray uses a monochrome DeepSeek glyph rasterized from the tracked `assets/tray/deepseek.svg` (LobeHub lobe-icons, MIT). `pnpm run build:tray` emits per-DPI PNGs under `build/tray/`; Windows and Linux select a black glyph for a light native theme and a white glyph for a dark native theme at the nearest packaged pixel size for the primary display scale factor, refreshing when Electron reports a theme or display-metrics change. macOS uses pre-rasterized template PNGs so the operating system controls menu-bar contrast.
 
-The About window reads the repository URL from this package manifest, displays the packaged icon and version, and opens the project link in the system browser. Its renderer is sandboxed and its Content Security Policy admits only its embedded styles and icon.
+The About window uses the operating-system window frame and a Ghostty-like layout for the packaged icon, application name, description, version metadata, and GitHub / Homepage actions from this package manifest. Colors follow system UI tokens. Release installers stamp `build-info.json` with the desktop-release workflow run number as Build and the short commit SHA as Commit. Its renderer is sandboxed and its Content Security Policy admits only its embedded styles and icon.
 
 Main rewrites the BrowserWindow / Dock title when the shared AppFrame falls back to the upstream `brand.localBuild` label (`DSH Local Build` / `DSH 本地构建`), replacing that product segment with the Desktop `productName` (`Rivetdeck`) while keeping any session title prefix.
 

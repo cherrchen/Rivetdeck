@@ -73,7 +73,7 @@ Electron 应用是私有安装程序，不作为 npm 发布成员。依赖同步
 
 托盘使用从受版本控制的 `assets/tray/deepseek.svg`（LobeHub lobe-icons，MIT）栅格化的单色 DeepSeek 图形。`pnpm run build:tray` 会在 `build/tray/` 下生成各 DPI 的 PNG；Windows 和 Linux 在原生浅色主题下选择黑色图形、在深色主题下选择白色图形，并按主显示器缩放因子选取最近的打包像素尺寸，在 Electron 报告主题或 display-metrics 变化时刷新。macOS 使用预渲染的 template PNG，由操作系统控制菜单栏对比度。
 
-“关于”窗口从此包的 manifest（元数据清单）读取仓库 URL，显示打包的图标和版本，并在系统浏览器中打开项目链接。其渲染进程在沙箱中运行，Content Security Policy 只允许内嵌样式和图标。
+“关于”窗口使用操作系统原生窗口边框，并以接近 Ghostty 的布局展示打包图标、应用名称、说明文案、版本元数据，以及来自此包 manifest 的“GitHub / 主页”操作按钮。配色跟随系统 UI token。正式安装包会写入 `build-info.json`：Build 为 desktop-release workflow 的运行次数，Commit 为短提交 SHA。其渲染进程在沙箱中运行，Content Security Policy 只允许内嵌样式和图标。
 
 当共享 AppFrame 回退到上游 `brand.localBuild` 标签（`DSH Local Build` / `DSH 本地构建`）时，Main 会改写 BrowserWindow / Dock 标题，将该产品名段替换为 Desktop `productName`（`Rivetdeck`），并保留会话标题前缀。
 

@@ -200,6 +200,12 @@ jobs:
       - name: Prepare Network Runtime
         run: pnpm --filter @dsh-electron/dsh-electron prepare:network-runtime
 
+      - name: Write About build identity
+        env:
+          RIVETDECK_BUILD: ${{ github.run_number }}
+          RIVETDECK_COMMIT: ${{ github.sha }}
+        run: node apps/electron/scripts/write-build-info.mjs
+
       - name: Build installer
         run: pnpm --filter @dsh-electron/dsh-electron exec electron-builder ${{ matrix.args }} --publish never
 
