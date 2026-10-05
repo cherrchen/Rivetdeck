@@ -103,7 +103,7 @@ Store 目标使用 [`windows-store.json`](windows-store.json) 中的 Partner Cen
 
 下载两个 AppX artifact，上传到 Partner Center 中的 Rivetdeck 产品。[Store 包要求](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/app-package-requirements)允许提交未签名的 AppX，并说明通过认证后的 Store 签名流程。Store 外安装需要合适的签名证书。完整信任应用能力需要 Store 审核。产品页面为 [Microsoft Store 中的 Rivetdeck](https://apps.microsoft.com/detail/9P5FQ7D2PQVQ)。
 
-Windows 工作流用临时测试证书签名包副本，安装后检查包身份和 Store-only 菜单，通过已安装应用的包身份执行 Core 插件操作，并验证托管运行时安装，运行 Windows App Certification Kit（WACK），最后卸载。提交 artifact 保持未签名。验证报告与应用截图单独上传。可选工作流参数 `package_run_id` 复用先前运行的未签名包，并记录来源运行；缺少 WACK 或 runner 位于 Session 0 时，验证明确失败。WACK 属于预检，Partner Center 认证仍需独立审核。macOS 本地检查覆盖配置、manifest 输入、磁贴尺寸和更新隔离。
+Windows 工作流在缺少 WACK 时通过微软签名的 Windows SDK 安装程序补装，再用临时测试证书签名包副本，安装后检查包身份和 Store-only 菜单，通过已安装应用的包身份执行 Core 插件操作，并验证托管运行时安装，运行 Windows App Certification Kit（WACK），最后卸载。提交 artifact 保持未签名。验证报告与应用截图单独上传。可选工作流参数 `package_run_id` 复用先前运行的未签名包，并记录来源运行；缺少 WACK 或 runner 位于 Session 0 时，验证明确失败。WACK 属于预检，Partner Center 认证仍需独立审核。macOS 本地检查覆盖配置、manifest 输入、磁贴尺寸和更新隔离。
 
 ## 运行时与安全
 

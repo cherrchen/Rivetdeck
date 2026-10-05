@@ -39,7 +39,7 @@ jobs:
           - runner: windows-11-arm
             arch: arm64
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v6
 
@@ -68,7 +68,7 @@ jobs:
         run: pnpm --filter @dsh-electron/dsh-electron build
 
       - name: Test Store distribution
-        run: pnpm exec vitest run apps/electron/tests/windows-store.spec.ts apps/electron/tests/updater.spec.ts scripts/desktop-workflow.spec.ts
+        run: pnpm exec vitest run apps/electron/tests/windows-store.spec.ts apps/electron/tests/updater.spec.ts apps/electron/tests/atomic-path.spec.ts apps/electron/tests/runtime-installer.spec.ts scripts/desktop-workflow.spec.ts
 
       - name: Prepare Core Host executor
         if: ${{ !inputs.package_run_id }}
@@ -117,8 +117,14 @@ jobs:
           if ($packages.Count -ne 1) { throw 'Expected exactly one Store package for this architecture.' }
           ./apps/electron/scripts/verify-windows-store.ps1 -PackagePath $packages[0].FullName -Architecture '${{ matrix.arch }}'
 
+      - name: Prepare Windows App Certification Kit
+        continue-on-error: true
+        timeout-minutes: 15
+        shell: pwsh
+        run: ./apps/electron/scripts/prepare-wack.ps1 -ReportDirectory "$env:RUNNER_TEMP/store-qualification/wack-setup"
+
       - name: Install, launch, and qualify Store package
-        timeout-minutes: 30
+        timeout-minutes: 60
         shell: pwsh
         run: |
           $package = Get-Item "dist/electron-store/*-${{ matrix.arch }}.appx"

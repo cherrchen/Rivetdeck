@@ -6,6 +6,24 @@ param(
   [switch]$RunCertificationKit
 )
 $ErrorActionPreference = 'Stop'
+# Bound each owned process tree so a stuck application shutdown cannot suppress later checks.
+function Invoke-QualificationNode([string[]]$Arguments, [int]$TimeoutSeconds) {
+  $start = [Diagnostics.ProcessStartInfo]::new((Get-Command node).Source)
+  $start.UseShellExecute = $false
+  $start.CreateNoWindow = $true
+  foreach ($argument in $Arguments) { $start.ArgumentList.Add($argument) }
+  $child = [Diagnostics.Process]::Start($start)
+  try {
+    $timedOut = -not $child.WaitForExit($TimeoutSeconds * 1000)
+    if ($timedOut) {
+      try { $child.Kill($true) }
+      catch [InvalidOperationException] { if (-not $child.HasExited) { throw } }
+      $child.WaitForExit()
+      Write-Host "Store qualification command timed out after $TimeoutSeconds seconds: $($Arguments[0])"
+    }
+    return [pscustomobject]@{ exitCode = $child.ExitCode; timedOut = $timedOut }
+  } finally { $child.Dispose() }
+}
 $identity = Get-Content (Join-Path $PSScriptRoot '../windows-store.json') -Raw | ConvertFrom-Json
 if (Get-AppxPackage -Name $identity.identityName) { throw 'Refusing to replace an existing Rivetdeck installation.' }
 $source = (Resolve-Path $PackagePath).Path
@@ -49,14 +67,17 @@ try {
   $report.packageFullName = $installed.PackageFullName
   $application = Join-Path $installed.InstallLocation 'app/Rivetdeck.exe'
   $failures = [Collections.Generic.List[string]]::new()
-  & node (Join-Path $PSScriptRoot 'smoke-runtime-setup.mjs') $application --offline --startup-only --store --artifacts (Join-Path $ReportDirectory 'startup')
-  $report.startup = $LASTEXITCODE -eq 0
+  $code = Invoke-QualificationNode -Arguments @((Join-Path $PSScriptRoot 'smoke-runtime-setup.mjs'), $application, '--offline', '--startup-only', '--store', '--artifacts', (Join-Path $ReportDirectory 'startup')) -TimeoutSeconds 300
+  $report.startupProcess = $code
+  $report.startup = -not $code.timedOut -and $code.exitCode -eq 0
   if (-not $report.startup) { $failures.Add('Installed AppX startup smoke failed.') }
-  & node (Join-Path $PSScriptRoot 'smoke-core-plugins.mjs') (Join-Path $installed.InstallLocation 'app/resources/core-runtime/node.exe') (Join-Path $installed.InstallLocation 'app/resources/app') --store-executable $application
-  $report.plugins = $LASTEXITCODE -eq 0
+  $code = Invoke-QualificationNode -Arguments @((Join-Path $PSScriptRoot 'smoke-core-plugins.mjs'), (Join-Path $installed.InstallLocation 'app/resources/core-runtime/node.exe'), (Join-Path $installed.InstallLocation 'app/resources/app'), '--store-executable', $application) -TimeoutSeconds 300
+  $report.pluginsProcess = $code
+  $report.plugins = -not $code.timedOut -and $code.exitCode -eq 0
   if (-not $report.plugins) { $failures.Add('Installed AppX Core plugin smoke failed.') }
-  & node (Join-Path $PSScriptRoot 'smoke-runtime-setup.mjs') $application --install --store --artifacts (Join-Path $ReportDirectory 'runtimes')
-  $report.runtimes = $LASTEXITCODE -eq 0
+  $code = Invoke-QualificationNode -Arguments @((Join-Path $PSScriptRoot 'smoke-runtime-setup.mjs'), $application, '--install', '--store', '--artifacts', (Join-Path $ReportDirectory 'runtimes')) -TimeoutSeconds 1200
+  $report.runtimesProcess = $code
+  $report.runtimes = -not $code.timedOut -and $code.exitCode -eq 0
   if (-not $report.runtimes) { $failures.Add('Installed AppX managed runtime lifecycle failed.') }
   if ($failures.Count -eq 0) { Write-Host "STORE_INSTALLATION_VERIFIED $Architecture $($identity.version)" }
   if ($RunCertificationKit) {
