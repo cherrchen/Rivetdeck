@@ -265,6 +265,21 @@ describe('Desktop synchronization and release workflows', () => {
     expect(smoke.run).toContain('smoke-windows-installer.ps1')
   })
 
+  it('runs Linux packaged smokes against the Rivetdeck executable name', () => {
+    const ci = loadWorkflow('.github/workflows/desktop-ci.yml')
+    const release = loadWorkflow('.github/workflows/desktop-release.yml')
+    const ciLifecycle = workflowJob(ci, 'managed-runtime-lifecycle')
+    const releasePackage = workflowJob(release, 'package')
+    if (!Array.isArray(ciLifecycle.steps) || !Array.isArray(releasePackage.steps)) {
+      throw new TypeError('Desktop workflows must define Linux smoke steps')
+    }
+    const ciLinux = ciLifecycle.steps.filter(isRecord).find(step => step.name === 'Smoke-test runtime lifecycle and Core plugins (Linux)')
+    const releaseLinux = releasePackage.steps.filter(isRecord).find(step => step.name === 'Smoke-test packaged zero-runtime Desktop (Linux)')
+    expect(ciLinux?.run).toContain('-name rivetdeck')
+    expect(ciLinux?.run).not.toContain('-name deepseek-harness')
+    expect(releaseLinux?.run).toContain('-name rivetdeck')
+    expect(releaseLinux?.run).not.toContain('-name deepseek-harness')
+  })
 })
 
 

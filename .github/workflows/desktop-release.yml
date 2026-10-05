@@ -223,7 +223,7 @@ jobs:
       - name: Smoke-test packaged zero-runtime Desktop (Linux)
         if: runner.os == 'Linux'
         run: |
-          binary="$(find dist/electron -name deepseek-harness -type f -print -quit)"
+          binary="$(find dist/electron -name rivetdeck -type f -print -quit)"
           sudo chown root:root "$(dirname "$binary")/chrome-sandbox"
           sudo chmod 4755 "$(dirname "$binary")/chrome-sandbox"
           xvfb-run -a node apps/electron/scripts/smoke-runtime-setup.mjs "$binary"
