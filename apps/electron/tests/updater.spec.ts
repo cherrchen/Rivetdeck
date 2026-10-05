@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => {
     netSession: { fetch: vi.fn() },
   }
   return {
-    app: { isPackaged: true, name: 'Rivetdeck', getVersion: () => '1.0.0' },
+    app: { isPackaged: true, name: 'Rivetdeck', getVersion: () => '1.0.0', getLocale: () => 'en-US' },
     autoUpdater,
     dialog: {
       showMessageBox: vi.fn<(options: unknown) => Promise<{ response: number }>>()

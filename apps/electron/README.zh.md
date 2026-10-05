@@ -77,6 +77,7 @@ Electron 应用是私有安装程序，不作为 npm 发布成员。依赖同步
 
 当共享 AppFrame 回退到上游 `brand.localBuild` 标签（`DSH Local Build` / `DSH 本地构建`）时，Main 会改写 BrowserWindow / Dock 标题，将该产品名段替换为 Desktop `productName`（`Rivetdeck`），并保留会话标题前缀。
 
+Main 自有的产品文案（菜单、托盘、关于窗口、更新对话框、恢复与网络提示）由 `src/locale.ts` 持有，并按 `app.getLocale()` 在英文与中文之间选择。
 
 ## 更新
 

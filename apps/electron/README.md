@@ -77,6 +77,7 @@ The About window reads the repository URL from this package manifest, displays t
 
 Main rewrites the BrowserWindow / Dock title when the shared AppFrame falls back to the upstream `brand.localBuild` label (`DSH Local Build` / `DSH 本地构建`), replacing that product segment with the Desktop `productName` (`Rivetdeck`) while keeping any session title prefix.
 
+Main-owned product copy (menus, tray, About, updater dialogs, recovery, and network prompts) is locale-owned in `src/locale.ts` and selected from `app.getLocale()` as English or Chinese.
 
 ## Updates
 

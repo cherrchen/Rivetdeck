@@ -6,6 +6,12 @@ import {
   isAllowedExternalUrl,
   resolveProjectUrl,
 } from './desktop/index.ts'
+import {
+  formatDesktopMessage,
+  resolveDesktopMainLocale,
+  type DesktopMainLocale,
+  type DesktopMainMessages,
+} from './locale.ts'
 import { readDesktopManifest } from './manifest.ts'
 
 let aboutWindow: BrowserWindow | undefined
@@ -17,9 +23,12 @@ export async function showAboutWindow(parent: BrowserWindow | undefined): Promis
     aboutWindow.focus()
     return
   }
+  const locale = resolveDesktopMainLocale(app.getLocale())
+  const messages = locale.messages
   const manifest = readDesktopManifest(app.getAppPath())
   const projectUrl = resolveProjectUrl(manifest)
   const icon = nativeImage.createFromPath(join(app.getAppPath(), 'build', 'icon.png'))
+  const windowTitle = formatDesktopMessage(messages.aboutWindowTitle, { name: app.name })
   aboutWindow = new ElectronBrowserWindow({
     ...desktopWindowChrome(process.platform),
     width: 440,
@@ -31,7 +40,7 @@ export async function showAboutWindow(parent: BrowserWindow | undefined): Promis
     resizable: false,
     ...(parent === undefined ? {} : { parent }),
     show: false,
-    title: `About ${app.name}`,
+    title: windowTitle,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -48,6 +57,8 @@ export async function showAboutWindow(parent: BrowserWindow | undefined): Promis
   await window.loadURL(aboutDocument({
     applicationName: app.name,
     iconDataUrl: icon.isEmpty() ? undefined : icon.toDataURL(),
+    localeId: locale.id,
+    messages,
     projectUrl,
     version: app.getVersion(),
   }))
@@ -56,22 +67,27 @@ export async function showAboutWindow(parent: BrowserWindow | undefined): Promis
 interface AboutDocumentOptions {
   applicationName: string
   iconDataUrl: string | undefined
+  localeId: DesktopMainLocale['id']
+  messages: DesktopMainMessages
   projectUrl: string | undefined
   version: string
 }
 
 /** Build the self-contained about document loaded into its sandboxed window. */
 export function aboutDocument(options: AboutDocumentOptions): string {
+  const { messages } = options
   const icon = options.iconDataUrl === undefined
     ? '<div class="icon iconFallback" aria-hidden="true">R</div>'
     : `<img class="icon" src="${escapeAttribute(options.iconDataUrl)}" alt="">`
   const project = options.projectUrl === undefined
     ? ''
-    : `<a href="${escapeAttribute(options.projectUrl)}" target="_blank" rel="noreferrer">GitHub repository</a>`
+    : `<a href="${escapeAttribute(options.projectUrl)}" target="_blank" rel="noreferrer">${escapeHtml(messages.aboutRepository)}</a>`
+  const title = formatDesktopMessage(messages.aboutWindowTitle, { name: options.applicationName })
+  const version = formatDesktopMessage(messages.aboutVersion, { version: options.version })
   const html = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<html lang="${options.localeId}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'">
-<title>About ${escapeHtml(options.applicationName)}</title><style>
+<title>${escapeHtml(title)}</title><style>
 :root { color-scheme: light dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 * { box-sizing: border-box; }
 body { margin: 0; min-height: 100vh; overflow: hidden; color: light-dark(#171a21, #eff2f7); background: light-dark(#f7f8fb, #171a21); }
@@ -85,7 +101,7 @@ h1 { margin: 0; font-size: 25px; line-height: 1.2; letter-spacing: -0.025em; }
 p { max-width: 300px; margin: 0; color: light-dark(#555d6c, #b9bfca); font-size: 13px; line-height: 1.65; }
 a { margin-top: 20px; color: light-dark(#2455e6, #86a3ff); font-size: 13px; text-underline-offset: 3px; -webkit-app-region: no-drag; }
 a:focus-visible { outline: 2px solid #3964fe; outline-offset: 4px; border-radius: 2px; }
-</style></head><body><div class="titlebar">About</div><main>${icon}<h1>${escapeHtml(options.applicationName)}</h1><div class="version">Version ${escapeHtml(options.version)}</div><div class="rule"></div><p>Desktop application built on DeepSeek Harness with its local Web interface.</p>${project}</main></body></html>`
+</style></head><body><div class="titlebar">${escapeHtml(messages.aboutChromeTitle)}</div><main>${icon}<h1>${escapeHtml(options.applicationName)}</h1><div class="version">${escapeHtml(version)}</div><div class="rule"></div><p>${escapeHtml(messages.aboutBody)}</p>${project}</main></body></html>`
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
 }
 
