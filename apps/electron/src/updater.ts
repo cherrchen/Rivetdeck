@@ -5,6 +5,11 @@ import type {
 } from 'electron'
 import { app, dialog, Notification } from 'electron'
 import electronUpdater from 'electron-updater'
+import {
+  formatDesktopMessage,
+  resolveDesktopMainLocale,
+  type DesktopMainMessages,
+} from './locale.ts'
 import type { UpdateChannel } from './preferences.ts'
 import { resolveUpdateFeed, type UpdateRepository } from './update-feed.ts'
 
@@ -80,11 +85,12 @@ export function createUpdater(options: UpdaterOptions): UpdaterController {
     get state() { return state },
     async check(manual) {
       const parent = options.getWindow()
+      const m = mainMessages()
       if (!app.isPackaged) {
         if (manual) await showMessage(parent, {
           type: 'info',
-          message: 'Updates are checked in packaged builds',
-          detail: 'Build and install a release package to test the GitHub update channel.',
+          message: m.updatePackagedOnlyTitle,
+          detail: m.updatePackagedOnlyDetail,
         })
         return
       }
@@ -95,18 +101,18 @@ export function createUpdater(options: UpdaterOptions): UpdaterController {
       if (state === 'checking') {
         if (manual) await showMessage(parent, {
           type: 'info',
-          message: 'Checking for updates',
-          detail: `A ${channelLabel(channel)} update check is already in progress.`,
+          message: m.updateCheckingTitle,
+          detail: formatDesktopMessage(m.updateCheckingDetail, { channel: channelLabel(channel, m) }),
         })
         return
       }
       if (state === 'downloading') {
         if (manual) await showMessage(parent, {
           type: 'info',
-          message: 'Downloading update',
+          message: m.updateDownloadingTitle,
           detail: progress === undefined
-            ? 'The update is downloading in the background.'
-            : `The update is downloading in the background (${String(progress)}%).`,
+            ? m.updateDownloadingDetail
+            : formatDesktopMessage(m.updateDownloadingDetailProgress, { progress }),
         })
         return
       }
@@ -122,8 +128,8 @@ export function createUpdater(options: UpdaterOptions): UpdaterController {
           setState('idle')
           if (manual) await showMessage(parent, {
             type: 'info',
-            message: `${app.name} is up to date`,
-            detail: `No published version is available on the ${channelLabel(channel)} update channel.`,
+            message: formatDesktopMessage(m.updateUpToDate, { name: app.name }),
+            detail: formatDesktopMessage(m.updateNoPublishedDetail, { channel: channelLabel(channel, m) }),
           })
           return
         }
@@ -134,8 +140,8 @@ export function createUpdater(options: UpdaterOptions): UpdaterController {
           setState('downloading', progress ?? 0)
           if (manual) await showMessage(parent, {
             type: 'info',
-            message: 'Update found',
-            detail: `Version ${result.updateInfo.version} is downloading in the background.`,
+            message: m.updateFoundTitle,
+            detail: formatDesktopMessage(m.updateFoundDetail, { version: result.updateInfo.version }),
           })
           if (result.downloadPromise !== null && result.downloadPromise !== undefined) {
             void result.downloadPromise.catch((error: unknown) => {
@@ -147,8 +153,11 @@ export function createUpdater(options: UpdaterOptions): UpdaterController {
         setState('idle')
         if (manual) await showMessage(parent, {
           type: 'info',
-          message: `${app.name} is up to date`,
-          detail: `Version ${app.getVersion()} is the newest available version on the ${channelLabel(channel)} update channel.`,
+          message: formatDesktopMessage(m.updateUpToDate, { name: app.name }),
+          detail: formatDesktopMessage(m.updateCurrentNewestDetail, {
+            version: app.getVersion(),
+            channel: channelLabel(channel, m),
+          }),
         })
       } catch (error: unknown) {
         await handleUpdateError(error, manual, parent, setState, loggedErrors)
@@ -180,10 +189,11 @@ async function handleUpdateError(
   logUpdateError(error, loggedErrors)
   setState('error')
   if (!manual) return
+  const m = mainMessages()
   await showMessage(parent, {
     type: 'error',
-    message: 'Unable to check for updates',
-    detail: 'GitHub Releases could not be reached. Check your network connection and try again.',
+    message: m.updateCheckFailedTitle,
+    detail: m.updateCheckFailedDetail,
   })
 }
 
@@ -195,13 +205,18 @@ function logUpdateError(error: unknown, loggedErrors: WeakSet<object>): void {
   console.error('Update check or download failed', error)
 }
 
-function channelLabel(channel: UpdateChannel): string {
-  return channel === 'prerelease' ? 'Pre-Release' : 'Stable / Release'
+function mainMessages(): DesktopMainMessages {
+  return resolveDesktopMainLocale(app.getLocale()).messages
+}
+
+function channelLabel(channel: UpdateChannel, messages: DesktopMainMessages): string {
+  return channel === 'prerelease' ? messages.menuChannelPrerelease : messages.menuChannelStable
 }
 
 function notifyDownloaded(applicationName: string, version: string, install: () => void): void {
-  const title = `${applicationName} update ready`
-  const body = `Version ${version} was downloaded. Click to restart and install it.`
+  const m = mainMessages()
+  const title = formatDesktopMessage(m.updateReadyNotificationTitle, { name: applicationName })
+  const body = formatDesktopMessage(m.updateReadyNotificationBody, { version })
   if (Notification.isSupported()) {
     const notification = new Notification({ title, body })
     notification.on('click', install)
@@ -220,15 +235,16 @@ async function promptToInstall(
   version: string | undefined,
   install: () => Promise<void>,
 ): Promise<void> {
+  const m = mainMessages()
   const result = await showMessage(parent, {
     type: 'info',
-    buttons: ['Restart and install', 'Later'],
+    buttons: [m.updateRestartInstall, m.updateLater],
     defaultId: 0,
     cancelId: 1,
-    message: 'Update ready to install',
+    message: m.updateReadyTitle,
     detail: version === undefined
-      ? `Restart ${applicationName} to finish installing the downloaded update.`
-      : `Version ${version} is ready. Restart ${applicationName} to finish installing it.`,
+      ? formatDesktopMessage(m.updateReadyRestartDetail, { name: applicationName })
+      : formatDesktopMessage(m.updateReadyVersionDetail, { version, name: applicationName }),
   })
   if (result.response === 0) await install()
 }

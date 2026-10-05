@@ -16,6 +16,7 @@ import { DesktopNetworkConfigError, DesktopNetworkOperationError } from './netwo
 import { parseNetworkTestRequest } from './network/test-service.ts'
 import { DesktopServices, parsePickDirectoryOptions } from './desktop/services.ts'
 import type { HarnessTransport } from './harness/transport.ts'
+import { resolveDesktopMainLocale } from './locale.ts'
 const updaterSubscriptions = new WeakMap<WebContents, () => void>()
 const themeSubscriptions = new WeakMap<WebContents, () => void>()
 const networkSubscriptions = new WeakMap<WebContents, Set<() => void>>()
@@ -188,7 +189,8 @@ export function installDesktopIpc(
     } catch (error) {
       const known = error instanceof DesktopNetworkConfigError || error instanceof DesktopNetworkOperationError
       return { ok: false, error: { code: known ? error.code : 'UNKNOWN',
-        message: known ? error.message : 'Network settings could not be saved.' } }
+        message: known ? error.message
+          : resolveDesktopMainLocale(app.getLocale()).messages.networkSettingsSaveFailed } }
     }
   })
 

@@ -2,24 +2,24 @@
 # section, a hash of its English and Chinese blocks outside code blocks and generated regions.
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write apps/electron/README.md
-/deepseek-harness-desktop:
-  en: 3cb1ea6afb988cff
-  zh: ffed5add155b98db
-/deepseek-harness-desktop/architecture-current:
+/rivetdeck:
+  en: aac5413e84873c8e
+  zh: ee1d461acccb119f
+/rivetdeck/architecture-current:
   en: fc4c57f046bb0f70
   zh: be135762735d97a6
-/deepseek-harness-desktop/development:
+/rivetdeck/development:
   en: 44be1cff5c00aa06
   zh: a9133ad9ec86ffcf
-/deepseek-harness-desktop/desktop-integration:
-  en: 72757ca6f8a0bc95
-  zh: 62385c768d7cf235
-/deepseek-harness-desktop/updates:
+/rivetdeck/desktop-integration:
+  en: 632a941a0038d117
+  zh: 107747eb81c8718c
+/rivetdeck/updates:
   en: 4bbcade8bdeda66c
   zh: 16c227e674da4b2d
-/deepseek-harness-desktop/packaging:
-  en: c1e4e4054f434df9
-  zh: 23ddf6a6af34037a
-/deepseek-harness-desktop/runtime-and-security:
+/rivetdeck/packaging:
+  en: 29fc3f9695443d69
+  zh: 76f08ff1e717b6b9
+/rivetdeck/runtime-and-security:
   en: 46082ba3c8a3fdf4
   zh: 99b37a63410aba7a

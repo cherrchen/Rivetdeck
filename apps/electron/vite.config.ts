@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react'
 import { clientBuildEnvironmentDefines } from '../../scripts/client-build-environment.ts'
 
 const src = (rel: string): string => fileURLToPath(new URL(rel, import.meta.url))
-const DEFAULT_CLIENT_TITLE = 'DeepSeek Harness'
+const DEFAULT_CLIENT_TITLE = 'Rivetdeck'
 
 /** Escape build-time text before placing it in the HTML title element. */
 function escapeHtmlText(value: string): string {
@@ -18,7 +18,7 @@ function clientDocumentTitle(): Plugin {
   return {
     name: 'dsh-electron-client-document-title',
     transformIndexHtml(html) {
-      return html.replace('<title>DeepSeek Harness</title>', `<title>${title}</title>`)
+      return html.replace('<title>Rivetdeck</title>', `<title>${title}</title>`)
     },
   }
 }

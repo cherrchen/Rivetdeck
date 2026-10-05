@@ -8,6 +8,7 @@ interface ElectronManifest {
   dshElectron?: { runtimePlugins?: string[]; ecosystemPlugins?: string[] }
   build: {
     extraMetadata: { name: string }
+    files: string[]
     extraResources: Array<{ from: string; to: string }>
     nsis: { useZip: boolean; differentialPackage: boolean; include: string; script?: string }
     win: { extraResources?: Array<{ from: string; to: string }> }
@@ -23,7 +24,8 @@ describe('Electron packaging', () => {
     expect(manifest.build.nsis.differentialPackage).toBe(false)
     expect(manifest.build.nsis.include).toBe('.electron-build/nsis/include.nsh')
     expect(manifest.build.nsis.script).toBeUndefined()
-    expect(manifest.build.extraMetadata.name).toBe('deepseek-harness-desktop')
+    expect(manifest.build.extraMetadata.name).toBe('rivetdeck')
+    expect(manifest.build.files).toContain('build-info.json')
   })
 
   it('keeps managed distributions out of installers and ships only the Windows Core executor', async () => {

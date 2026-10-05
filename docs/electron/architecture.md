@@ -1,4 +1,4 @@
-# DeepSeek Harness Desktop Architecture and Development Guide
+# Rivetdeck Architecture and Development Guide
 
 English | [中文](architecture.zh.md)
 
@@ -12,7 +12,7 @@ English | [中文](architecture.zh.md)
 
 ## 1. Purpose
 
-DeepSeek Harness Desktop is a downstream Electron desktop application built on top of the upstream `deepseek-ai/deepseek-harness` repository.
+Rivetdeck is a downstream Electron desktop application built on top of the upstream `deepseek-ai/deepseek-harness` repository.
 
 The project has two simultaneous goals:
 

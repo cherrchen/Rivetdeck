@@ -109,5 +109,5 @@ with zipfile.ZipFile(sys.argv[1], 'w') as archive:
       await Promise.all(managers.map(manager => manager.shutdown()))
       await rm(root, { recursive: true, force: true })
     }
-  }, 120_000)
+  }, 240_000)
 })

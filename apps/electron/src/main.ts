@@ -26,6 +26,7 @@ import {
   allowsClipboardWrite,
   contextMenuTemplate,
   desktopWindowChrome,
+  desktopWindowTitle,
   isAllowedExternalUrl,
 } from './desktop/index.ts'
 import { DesktopServices } from './desktop/services.ts'
@@ -65,7 +66,7 @@ import { createRuntimeFetch } from './toolchains/download.ts'
 import { prepareToolchainShims } from './toolchains/shims.ts'
 import type { DesktopToolchainPolicy } from './toolchains/domain.ts'
 import { migrateLegacyPluginState } from './legacy-plugin-migration.ts'
-import { resolveDesktopMainLocale } from './locale.ts'
+import { formatDesktopMessage, resolveDesktopMainLocale } from './locale.ts'
 import {
   trayIconNeedsLogicalLoad,
   trayIconPath,
@@ -136,7 +137,7 @@ async function startHarness(
       if (scan.settled) return
       scan.settled = true
       scan.output = ''
-      const timeoutError = new Error(`DeepSeek Harness did not become ready within ${String(HARNESS_START_TIMEOUT_MS / 1000)} seconds.`)
+      const timeoutError = new Error(`Rivetdeck did not become ready within ${String(HARNESS_START_TIMEOUT_MS / 1000)} seconds.`)
       void stopHarness(child).then(() => {
         reject(timeoutError)
       }, (cleanupError: unknown) => {
@@ -154,7 +155,7 @@ async function startHarness(
 
     child.once('error', fail)
     child.once('exit', (code, signal) => {
-      fail(new Error(`DeepSeek Harness exited before startup (code ${String(code)}, signal ${String(signal)}).`))
+      fail(new Error(`Rivetdeck exited before startup (code ${String(code)}, signal ${String(signal)}).`))
     })
     child.stdout.on('data', (chunk: Buffer) => {
       const text = chunk.toString('utf8')
@@ -181,6 +182,7 @@ async function createWindow(): Promise<BrowserWindow> {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#f8f9fb',
+    title: app.name,
     webPreferences: {
       preload,
       contextIsolation: true,
@@ -191,6 +193,13 @@ async function createWindow(): Promise<BrowserWindow> {
   mainWindow = window
   window.webContents.on('preload-error', (_event, preloadPath, error) => {
     console.error(`desktop preload failed (${preloadPath}):`, error)
+  })
+  // AppFrame falls back to upstream `brand.localBuild` ("DSH 本地构建") when
+  // client packages were built without DSH_CLIENT_TITLE; keep the Dock / frame
+  // product segment on the Desktop productName instead.
+  window.webContents.on('page-title-updated', (event, title) => {
+    event.preventDefault()
+    window.setTitle(desktopWindowTitle(title, app.name))
   })
   window.on('close', (event) => {
     if (quitting) return
@@ -264,15 +273,18 @@ async function relaunchDesktop(): Promise<void> {
 }
 
 function installDesktopMenus(): void {
+  const m = resolveDesktopMainLocale(app.getLocale()).messages
   const checkForUpdates = (): void => { void updater?.check(true) }
   const installOrCheck = updateMenuItem(checkForUpdates)
   const updateChannel = updateChannelMenu()
   const showAbout = (): void => { void showAboutWindow(mainWindow) }
+  const aboutLabel = formatDesktopMessage(m.menuAbout, { name: app.name })
+  const showLabel = formatDesktopMessage(m.menuShow, { name: app.name })
   const appMenu: MenuItemConstructorOptions[] = process.platform === 'darwin'
     ? [{
       label: app.name,
       submenu: [
-        { label: `About ${app.name}`, click: showAbout },
+        { label: aboutLabel, click: showAbout },
         installOrCheck,
         updateChannel,
         { type: 'separator' },
@@ -282,24 +294,28 @@ function installDesktopMenus(): void {
         { role: 'hideOthers' },
         { role: 'unhide' },
         { type: 'separator' },
-        { label: `Quit ${app.name}`, accelerator: 'CommandOrControl+Q', click: requestQuit },
+        {
+          label: formatDesktopMessage(m.menuQuitNamed, { name: app.name }),
+          accelerator: 'CommandOrControl+Q',
+          click: requestQuit,
+        },
       ],
     }]
     : [{
-      label: 'File',
+      label: m.menuFile,
       submenu: [
-        { label: `Show ${app.name}`, click: showMainWindow },
+        { label: showLabel, click: showMainWindow },
         installOrCheck,
         updateChannel,
-        { label: `About ${app.name}`, click: showAbout },
+        { label: aboutLabel, click: showAbout },
         { type: 'separator' },
-        { label: 'Quit', accelerator: 'CommandOrControl+Q', click: requestQuit },
+        { label: m.menuQuit, accelerator: 'CommandOrControl+Q', click: requestQuit },
       ],
     }]
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     ...appMenu,
-    { label: 'Edit', submenu: [{ role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
-    { label: 'View', submenu: [{ role: 'reload' }, ...(!app.isPackaged ? [{ role: 'toggleDevTools' as const }] : [])] },
+    { label: m.menuEdit, submenu: [{ role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
+    { label: m.menuView, submenu: [{ role: 'reload' }, ...(!app.isPackaged ? [{ role: 'toggleDevTools' as const }] : [])] },
   ]))
 
   if (tray === undefined) {
@@ -310,33 +326,35 @@ function installDesktopMenus(): void {
     screen.on('display-metrics-changed', refreshTrayIcon)
   }
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: `Show ${app.name}`, click: showMainWindow },
+    { label: showLabel, click: showMainWindow },
     installOrCheck,
     updateChannel,
-    { label: `About ${app.name}`, click: showAbout },
+    { label: aboutLabel, click: showAbout },
     { type: 'separator' },
-    { label: 'Quit', click: requestQuit },
+    { label: m.menuQuit, click: requestQuit },
   ]))
   desktop.emitUpdater()
 }
 
 function updateMenuItem(checkForUpdates: () => void): MenuItemConstructorOptions {
-  if (updater?.state === 'checking') return { label: 'Checking for Updates…', enabled: false }
+  const m = resolveDesktopMainLocale(app.getLocale()).messages
+  if (updater?.state === 'checking') return { label: m.menuCheckingUpdates, enabled: false }
   if (updater?.state === 'downloading') {
     return {
       label: updater.progress === undefined
-        ? 'Downloading Update…'
-        : `Downloading Update… ${String(updater.progress)}%`,
+        ? m.menuDownloadingUpdate
+        : formatDesktopMessage(m.menuDownloadingUpdateProgress, { progress: updater.progress }),
       enabled: false,
     }
   }
   if (updater?.state === 'downloaded') {
-    return { label: 'Restart to Install Update', click: () => { void updater?.installDownloaded() } }
+    return { label: m.menuRestartInstall, click: () => { void updater?.installDownloaded() } }
   }
-  return { label: 'Check for Updates…', click: checkForUpdates }
+  return { label: m.menuCheckUpdates, click: checkForUpdates }
 }
 
 function updateChannelMenu(): MenuItemConstructorOptions {
+  const m = resolveDesktopMainLocale(app.getLocale()).messages
   const enabled = updater?.state !== 'checking'
     && updater?.state !== 'downloading'
     && updater?.state !== 'downloaded'
@@ -345,10 +363,10 @@ function updateChannelMenu(): MenuItemConstructorOptions {
     void updater?.check(true)
   }
   return {
-    label: 'Update Channel',
+    label: m.menuUpdateChannel,
     submenu: [
-      { label: 'Pre-Release', type: 'radio', checked: updater?.channel === 'prerelease', enabled, click: () => { select('prerelease') } },
-      { label: 'Stable / Release', type: 'radio', checked: updater?.channel === 'stable', enabled, click: () => { select('stable') } },
+      { label: m.menuChannelPrerelease, type: 'radio', checked: updater?.channel === 'prerelease', enabled, click: () => { select('prerelease') } },
+      { label: m.menuChannelStable, type: 'radio', checked: updater?.channel === 'stable', enabled, click: () => { select('stable') } },
     ],
   }
 }

@@ -1,6 +1,6 @@
 # AGENTS.downstream.md
 
-This repository is the **DeepSeek Harness Desktop** downstream fork of [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness). It packages the upstream agent harness as a native Electron desktop application for macOS, Windows, and Linux. Upstream owns the core runtime, packages, and documentation spine; this fork owns the desktop shell, downstream CI/CD, release channels, and repository landing pages.
+This repository is the **Rivetdeck** downstream fork of [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness). It packages the upstream agent harness as a native Electron desktop application for macOS, Windows, and Linux. Upstream owns the core runtime, packages, and documentation spine; this fork owns the desktop shell, downstream CI/CD, release channels, and repository landing pages.
 
 ## Repository relationship
 

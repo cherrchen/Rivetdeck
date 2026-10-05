@@ -1,8 +1,8 @@
-# DeepSeek Harness Desktop
+# Rivetdeck
 
 [English](README.md) | 中文
 
-此应用将上游 DeepSeek Harness 封装为原生桌面壳。Electron Main 在环回端口上监督已构建的 `dsh web` 后端以保持兼容，而 `BrowserWindow` 加载本包内基于 `@deepseek-ai/dsh-client-web` 构建的 Electron 自有 Renderer（`dsh-electron://localhost/`）。Host bootstrap、插件 bundle、一元 Host 调用（包括插件自有的 Connection RPC channel）与事件流仅通过 Main（类型化 preload IPC 与自定义协议代理）到达受监督进程。profile、会话与 `$DSH_HOME` 存储仍遵循上游 Harness 行为。
+Rivetdeck 将上游 DeepSeek Harness 封装为原生桌面壳。Electron Main 在环回端口上监督已构建的 `dsh web` 后端以保持兼容，而 `BrowserWindow` 加载本包内基于 `@deepseek-ai/dsh-client-web` 构建的 Electron 自有 Renderer（`dsh-electron://localhost/`）。Host bootstrap、插件 bundle、一元 Host 调用（包括插件自有的 Connection RPC channel）与事件流仅通过 Main（类型化 preload IPC 与自定义协议代理）到达受监督进程。profile、会话与 `$DSH_HOME` 存储仍遵循上游 Harness 行为。
 
 CURRENT 与 TARGET 架构、所有权规则、里程碑与 ADR 详见 [../../docs/electron/architecture.zh.md](../../docs/electron/architecture.zh.md)。
 
@@ -73,7 +73,11 @@ Electron 应用是私有安装程序，不作为 npm 发布成员。依赖同步
 
 托盘使用从受版本控制的 `assets/tray/deepseek.svg`（LobeHub lobe-icons，MIT）栅格化的单色 DeepSeek 图形。`pnpm run build:tray` 会在 `build/tray/` 下生成各 DPI 的 PNG；Windows 和 Linux 在原生浅色主题下选择黑色图形、在深色主题下选择白色图形，并按主显示器缩放因子选取最近的打包像素尺寸，在 Electron 报告主题或 display-metrics 变化时刷新。macOS 使用预渲染的 template PNG，由操作系统控制菜单栏对比度。
 
-“关于”窗口从此包的 manifest（元数据清单）读取仓库 URL，显示打包的图标和版本，并在系统浏览器中打开项目链接。其渲染进程在沙箱中运行，Content Security Policy 只允许内嵌样式和图标。
+“关于”窗口使用操作系统原生窗口边框，并以接近 Ghostty 的布局展示打包图标、应用名称、说明文案、版本元数据，以及来自此包 manifest 的“GitHub / 主页”操作按钮。配色跟随系统 UI token。正式安装包会写入 `build-info.json`：Build 为 desktop-release workflow 的运行次数，Commit 为短提交 SHA。其渲染进程在沙箱中运行，Content Security Policy 只允许内嵌样式和图标。
+
+当共享 AppFrame 回退到上游 `brand.localBuild` 标签（`DSH Local Build` / `DSH 本地构建`）时，Main 会改写 BrowserWindow / Dock 标题，将该产品名段替换为 Desktop `productName`（`Rivetdeck`），并保留会话标题前缀。
+
+Main 自有的产品文案（菜单、托盘、关于窗口、更新对话框、恢复与网络提示）由 `src/locale.ts` 持有，并按 `app.getLocale()` 在英文与中文之间选择。
 
 ## 更新
 
@@ -85,7 +89,7 @@ Electron 应用是私有安装程序，不作为 npm 发布成员。依赖同步
 
 ## 打包
 
-包元数据将产品名声明为 `DeepSeek Harness`，Electron 与 `electron-builder` 会将它用于开发环境界面、应用元数据、安装程序和可执行文件。打包后的元数据使用无 scope 的 `deepseek-harness-desktop` 应用名称，因此 updater 缓存目录不会从仅供 workspace 使用的 `@dsh-electron/dsh-electron` 名称派生。包配置在 Windows 上生成允许用户选择安装目录的向导式 NSIS 安装程序，并使用带退出码检查的 7-Zip 解压 ZIP 载荷，支持超过 Windows MAX_PATH 的包成员路径，并在解压失败时拒绝安装；在 macOS 上生成 DMG 和 ZIP 产物，在 Linux 上生成 AppImage 和 DEB 产物。生成的 NSIS include 保留 Windows 原生路径分隔符，确保安装程序与卸载程序编译都能解析文件路径。release 工作流使用 GitHub 托管的原生架构 runner，为 x64 和 ARM64 构建每一种格式；每个 Windows runner 都会在上传前安装已完成的产物，检查可执行文件、runtime 和两个快捷方式，并在全新用户数据、没有托管运行环境且 registry 不可达的条件下启动已安装应用，再卸载并上传。CI 构建未签名产物，因此仓库无需配置签名凭据；需要分发可信二进制文件的维护者必须提供 `electron-builder` 支持的平台签名环境。
+包元数据将产品名声明为 `Rivetdeck`，Electron 与 `electron-builder` 会将它用于开发环境界面、应用元数据、安装程序和可执行文件。打包后的元数据使用无 scope 的 `rivetdeck` 应用名称，因此 updater 缓存目录不会从仅供 workspace 使用的 `@dsh-electron/dsh-electron` 名称派生。包配置在 Windows 上生成允许用户选择安装目录的向导式 NSIS 安装程序，并使用带退出码检查的 7-Zip 解压 ZIP 载荷，支持超过 Windows MAX_PATH 的包成员路径，并在解压失败时拒绝安装；在 macOS 上生成 DMG 和 ZIP 产物，在 Linux 上生成 AppImage 和 DEB 产物。生成的 NSIS include 保留 Windows 原生路径分隔符，确保安装程序与卸载程序编译都能解析文件路径。release 工作流使用 GitHub 托管的原生架构 runner，为 x64 和 ARM64 构建每一种格式；每个 Windows runner 都会在上传前安装已完成的产物，检查可执行文件、runtime 和两个快捷方式，并在全新用户数据、没有托管运行环境且 registry 不可达的条件下启动已安装应用，再卸载并上传。CI 构建未签名产物，因此仓库无需配置签名凭据；需要分发可信二进制文件的维护者必须提供 `electron-builder` 支持的平台签名环境。
 
 桌面 release 在 `develop` 上使用 `v{a.b.c}-beta.{x}`，在 `main` 上使用 `v{a.b.c}-rc.{x}`，稳定版使用 `v{a.b.c}`。[`sync-upstream.yml`](../../.github/workflows/sync-upstream.yml) 将上游合并到 `develop`，准备并推送下一个 Beta commit，仅在 Desktop CI 针对该提交成功后发布其 tag。开发者在创建 `develop` 到 `main` 的发布 PR（Pull Request）前，先运行 `pnpm electron:set-version <apps/cli version>`，再运行 `pnpm install --no-frozen-lockfile`，然后提交 Electron manifest 和 lockfile。Desktop CI 会拒绝来自其他分支、使用 Beta 版本或版本与 [`apps/cli/package.json`](../cli/package.json) 不一致的发布 PR。PR 合并后，[`desktop-promote.yml`](../../.github/workflows/desktop-promote.yml) 在已准备好的 `main` 提交上创建 RC 或 Stable tag，不修改任何分支。[`desktop-release.yml`](../../.github/workflows/desktop-release.yml) 在发布安装包前校验 tag 所在分支与 package 版本。
 

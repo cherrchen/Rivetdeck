@@ -1,8 +1,8 @@
-# DeepSeek Harness Desktop
+# Rivetdeck
 
 English | [中文](README.zh.md)
 
-DeepSeek Harness Desktop packages [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) as a native desktop application for macOS, Windows, and Linux. It keeps the upstream Web application, agent runtime, profiles, and workspace workflow while providing an operating-system window and desktop installers.
+Rivetdeck packages [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) as a native desktop application for macOS, Windows, and Linux. It keeps the upstream Web application, agent runtime, profiles, and workspace workflow while providing an operating-system window and desktop installers.
 
 <a id="status"></a>
 
@@ -48,7 +48,7 @@ Harness profiles and state live in the platform-specific application-data direct
 
 ## Bundled plugins
 
-DeepSeek Harness Desktop preinstalls two portable DSH ecosystem bundles published from standalone repositories. Both appear in the web profile's Installed plugins and can be enabled or disabled there.
+Rivetdeck preinstalls two portable DSH ecosystem bundles published from standalone repositories. Both appear in the web profile's Installed plugins and can be enabled or disabled there.
 
 | Plugin | Desktop role | Summary |
 |---|---|---|

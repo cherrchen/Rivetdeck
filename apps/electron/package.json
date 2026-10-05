@@ -1,10 +1,10 @@
 {
   "name": "@dsh-electron/dsh-electron",
-  "productName": "DeepSeek Harness",
-  "description": "Electron desktop shell for DeepSeek Harness",
+  "productName": "Rivetdeck",
+  "description": "Electron desktop shell built on DeepSeek Harness",
   "version": "0.2.0-beta.1",
   "private": true,
-  "homepage": "https://github.com/cherrchen/deepseek-harness-electron",
+  "homepage": "https://rivetdeck.hometown123.top",
   "repository": {
     "type": "git",
     "url": "https://github.com/cherrchen/deepseek-harness-electron.git"
@@ -33,7 +33,7 @@
     "smoke:toolchains": "node ./scripts/smoke-toolchains.mjs",
     "prepare:network-runtime": "node ./scripts/prepare-network-runtime.mjs",
     "test:network-runtime": "cargo test --locked --manifest-path native/network-runtime/Cargo.toml && pnpm run prepare:network-runtime && vitest run --config vitest.network-runtime.config.ts",
-    "package": "pnpm run prepare:core && pnpm run prepare:network-runtime && electron-builder --publish never",
+    "package": "pnpm run prepare:core && pnpm run prepare:network-runtime && node ./scripts/write-build-info.mjs && electron-builder --publish never",
     "start": "pnpm run build && pnpm run prepare:core && pnpm run prepare:network-runtime && env -u ELECTRON_RUN_AS_NODE electron .",
     "test": "pnpm run build:runtime-plugins && vitest run --root ../.. apps/electron/tests",
     "test:ownership": "vitest run --config vitest.ownership.config.ts",
@@ -194,12 +194,12 @@
     "vitest": "^4.1.8"
   },
   "build": {
-    "appId": "ai.deepseek.harness.desktop",
+    "appId": "app.rivetdeck.desktop",
     "asar": false,
     "extraMetadata": {
-      "name": "deepseek-harness-desktop"
+      "name": "rivetdeck"
     },
-    "artifactName": "DeepSeek-Harness-${version}-${os}-${arch}.${ext}",
+    "artifactName": "Rivetdeck-${version}-${os}-${arch}.${ext}",
     "directories": {
       "output": "../../dist/electron"
     },
@@ -211,6 +211,7 @@
       "build/icon-mac.png",
       "build/tray/*.png",
       "package.json",
+      "build-info.json",
       "toolchains.lock.json",
       "scripts/toolchains/common.mjs",
       "scripts/toolchains/manifest.mjs"
@@ -261,7 +262,7 @@
     },
     "linux": {
       "category": "Development",
-      "executableName": "deepseek-harness",
+      "executableName": "rivetdeck",
       "icon": "build/icons",
       "maintainer": "cherrchen <cherrchen@users.noreply.github.com>",
       "target": [

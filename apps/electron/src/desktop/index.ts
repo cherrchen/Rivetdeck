@@ -4,7 +4,9 @@ export {
   contextMenuTemplate,
   desktopWindowChrome,
   resolveProjectUrl,
+  resolveHomepageUrl,
 } from './chrome.ts'
+export { desktopWindowTitle } from './document-title.ts'
 export {
   directoryOpenDialogOptions,
   pickDirectoryResult,
