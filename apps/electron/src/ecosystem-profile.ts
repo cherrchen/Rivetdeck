@@ -13,8 +13,20 @@ export const WEB_PROFILE_NAME = 'web'
 
 const SEED_MARKER = join('electron', 'ecosystem-preinstalled')
 
-/** Package runner supplied by Electron's bundled Node and pnpm. */
-export type EcosystemPackageManager = Pick<PackageOperationOptions, 'command' | 'args' | 'env'>
+/** Package runner supplied by the Core executor and bundled pnpm. */
+export type EcosystemPackageManager = Pick<PackageOperationOptions, 'command' | 'args' | 'env' | 'signal'>
+
+/** Initialize the Core profile without registry access; bundled plugins resolve in its Host projection.
+ * @param appPath Application-owned packages.
+ * @param harnessHome Profile persistence directory.
+ * @param packageManager Core executor and bundled pnpm.
+ */
+export async function prepareCoreProfile(appPath: string, harnessHome: string, packageManager: EcosystemPackageManager): Promise<void> {
+  ensureRuntimePluginsLinked(appPath, harnessHome)
+  const dir = resolveProfileDir(WEB_PROFILE_NAME, harnessHome)
+  if (existsSync(join(dir, 'package.json'))) return
+  await manage(['install', '--offline', '--config.auto-install-peers=false'], appPath, harnessHome, packageManager)
+}
 
 /**
  * Preinstall ecosystem packages once and repair links left by older Desktop releases.

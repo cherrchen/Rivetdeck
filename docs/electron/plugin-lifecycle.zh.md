@@ -34,7 +34,7 @@ Plugins 页仅由 composition package 为 Desktop Capabilities 注册 Official `
 
 ## 启动组合
 
-启动顺序为：迁移旧版插件状态；发现并校验随包产物；将 required runtime 插件链接进共享 profile resolution；通过 `dsh plugin` 执行首次 ecosystem 预装和旧链接修复；物化 Host profile 投影；写出按 ownership 去重的 Host overlay；以该 overlay 启动 Desktop Host 入口。包操作失败时，Desktop 启动会显示诊断并停止。
+启动顺序为：迁移旧版插件状态；发现并校验随包产物；将 required runtime 插件链接进共享 profile resolution；物化 Host profile 投影；写出按 ownership 去重的 Host overlay；以该 overlay 启动 Desktop Host 入口；加载客户端窗口。随后通过 `dsh plugin` 在后台执行首次 ecosystem 预装和旧链接修复。ecosystem 包操作失败会记录日志，Host 和随包插件保持可用。退出时取消并等待该操作完全结束。
 
 共享包操作持有 web profile 的 `package.json` 写入锁，并更新其 manifest 与 lockfile。Desktop 的预装标记位于 `$DSH_HOME/electron` 下。
 
@@ -49,3 +49,15 @@ Theme Studio 作为 `@dsh-electron/dsh-theme-studio@0.1.3` 从 npm 安装，并�
 ## 边界
 
 `ctx.desktop` 向 Desktop-aware 插件提供操作系统能力，不包含插件管理组。Renderer 通过现有 Main transport 接收 Host 插件脚本和 RPC。Desktop Host 禁用上游 manager Loader 行，并以显式 builtin 插入 `DesktopPluginManager`。它保留指向 `ProfileContext.dir = web` 的上游包操作，报告有效包版本与本地化来源标签，并将 bundle 声明对应到真实 Loader 条目。共享 UI 遵循 Host 的删除权限。`$DSH_HOME/electron/runtime-inventory.json` 支持诊断记录实际解析的包与模块路径、版本、来源、启停及 Loader/Fiber 状态；它们是观测结果，不是配置。
+
+## Desktop 配置写入者
+
+Host overlay 将上游 `config-editor` 行替换为 `cordis:desktop-config-editor` builtin。相同行保留原有配置与 settings namespace。`config.lockWaitMs` 是非负整数，默认 `120000` 毫秒，限制获取共享 profile 写入锁的等待时间。超时不改变 profile patch。获取锁后，写入者重新读取已提交配置，校验编辑，并在应用失败时回滚 patch。Desktop 提供者负责写入事务，继承上游读取；上游升级需要复核事务实现。普通 CLI 与 Web 宿主保留上游 ConfigEditor 行为。
+
+<a id="downstream-ui-contribution"></a>
+
+## 下游 UI 修改贡献
+
+`packages/client/ui-plugin-manager/` 的卸载权限修改作为下游独立修改贡献保留。Host 设置 `removable: false` 时，Installed 卡片保持可见并可以启停，但不能 Uninstall。普通可移除 profile bundle 保留 Uninstall。这是上游归属规则的限定例外，不表示已向上游提交贡献。
+
+每次 DSH 升级检查上游是否实现等价的清单可见性、卸载权限与 Enable/Disable 行为。仅在候选上游版本通过这些用例后才移除下游修改。如果上游不实现该功能，则持续维护此贡献及其所属测试。[包审查](upstream-package-audit.zh.md)记录历史比较与验证限制。

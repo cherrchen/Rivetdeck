@@ -18,6 +18,7 @@ const HOLES = {
   'sidebar.brand.name': { kind: 'single', scope: 'root' },
   'conversation.hero.brand.mark': { kind: 'single', scope: 'root' },
   'settings.section': { kind: 'list', scope: 'root' },
+  'settings.onboarding': { kind: 'list', scope: 'root' },
   'plugins.item': { kind: 'list', scope: 'root' },
   'plugins.detail.badge': { kind: 'list', scope: 'root' },
   'plugins.detail.section': { kind: 'list', scope: 'root' },
@@ -88,7 +89,9 @@ describe('desktop capabilities client composition', () => {
     expect(slots.entries('sidebar.brand.mark')).toHaveLength(1)
     expect(slots.entries('sidebar.brand.name')).toHaveLength(1)
     expect(slots.entries('conversation.hero.brand.mark')).toHaveLength(1)
+    expect(slots.entries('settings.section').map(entry => entry.options.id)).toEqual(['network'])
     expect(slots.entries('settings.section')[0]?.options).toMatchObject({ id: 'network', order: 60 })
+    expect(slots.entries('settings.onboarding').map(entry => entry.options.id)).toEqual(['runtime-setup'])
     expect(slots.entries('plugins.item').map(entry => entry.options.id)).toEqual([
       'desktop-capabilities',
     ])

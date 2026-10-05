@@ -33,7 +33,8 @@ describe('upstream plugin manager runtime', () => {
       expect(existsSync(join(runtime.binDirectory, 'pnpm'))).toBe(true)
       expect(readFileSync(join(runtime.binDirectory, 'pnpm'), 'utf8')).toContain(pnpmBin)
       expect(readFileSync(join(runtime.binDirectory, 'pnpm'), 'utf8')).toContain('/bundle/bin/node')
-      expect(readFileSync(join(runtime.binDirectory, 'pnpm'), 'utf8')).not.toContain('ELECTRON_RUN_AS_NODE')
+      expect(readFileSync(join(runtime.binDirectory, 'pnpm'), 'utf8')).toContain('ELECTRON_RUN_AS_NODE=1')
+      expect(readFileSync(join(runtime.binDirectory, 'node'), 'utf8')).toContain('/bundle/bin/node')
     } finally {
       await rm(harnessHome, { recursive: true, force: true })
     }

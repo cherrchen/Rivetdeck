@@ -84,8 +84,8 @@ describe('Electron Harness runtime', () => {
 })
 
 describe('Host runtime resolution', () => {
-  const packagedNode = join('/resources', 'toolchains', 'node', 'node.exe')
-  const preparedNode = join('/app', '.electron-build', 'toolchains', 'node', 'win32-x64', 'node.exe')
+  const packagedNode = join('/resources', 'core-runtime', 'node.exe')
+  const preparedNode = join('/app', '.electron-build', 'core-runtime', 'win32-x64', 'node.exe')
 
   it('keeps Electron as the Host executable outside Windows', () => {
     expect(resolveHostRuntime({
@@ -147,7 +147,7 @@ describe('Host runtime resolution', () => {
       platform: 'win32',
       arch: 'x64',
       exists: () => false,
-    })).toThrow(/prepare:node/u)
+    })).toThrow(/prepare:core/u)
   })
 })
 
@@ -201,4 +201,19 @@ describe('supervised Host console', () => {
     expect(owned.ownsConsole).toBe(true)
     expect(detached.ownsConsole).toBe(false)
   })
+})
+
+
+describe('Windows Core executor', () => {
+  it.runIf(process.platform === 'win32' && process.env.DSH_ELECTRON_CORE_SMOKE === '1')(
+    'owns a hidden console independently from managed Node and Python', async () => {
+      const runtime = resolveHostRuntime({
+        appPath: join(import.meta.dirname, '..'), resourcesPath: '/unused', packaged: false,
+      })
+      expect(runtime.executable).toContain('core-runtime')
+      expect(runtime.env).toEqual({})
+      await expect(probeHostChild(spawnHarnessChild(runtime.executable, ['-e', HOST_CHILD_PROBE], { cwd: tmpdir() })))
+        .resolves.toMatchObject({ bytes: 0, ownsConsole: true })
+    },
+  )
 })

@@ -17,9 +17,9 @@
 }
 
 .header h2 {
-  font-size: 20px;
+  font-size: 18px;
   line-height: 28px;
-  font-weight: 400;
+  font-weight: 600;
 }
 
 .header p,
@@ -123,7 +123,7 @@
   min-width: 0;
   font-size: 12px;
   line-height: 18px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .fieldError {
@@ -133,9 +133,7 @@
 }
 
 .passwordStatus,
-.statusRow,
-.footer,
-.actions {
+.statusRow {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -153,30 +151,45 @@
   min-width: 0;
 }
 
-.testList {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+/* Test card row (figma 'Frame 2117131228' cube row: 8 gap, hairline cards).
+ * The 120 basis is the content box, so one card's outer minimum is
+ * 120 + 32 padding + 1 border: four of them plus three 8 gaps fit the 559
+ * content box the settings dialog leaves at its default width. */
+.testCards {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.testCard {
+  box-sizing: border-box;
+  flex: 1 1 120px;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 20px 16px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-xl);
 }
 
-.testList li {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 0;
-  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
-  font-size: 12px;
-  line-height: 18px;
+.testCardTitle {
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 400;
+  color: var(--dsw-alias-label-primary);
 }
 
-.testList li span {
+.testCardStatus {
   display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 6px;
-  text-align: right;
+  text-align: center;
+  font-size: 12px;
+  line-height: 18px;
   color: var(--dsw-alias-label-secondary);
 }
 
@@ -209,13 +222,59 @@
   font-family: ui-monospace, SFMono-Regular, monospace;
 }
 
-.footer {
-  justify-content: space-between;
-  padding-top: 4px;
+.footerActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 @media (max-width: 600px) {
   .fields { grid-template-columns: 1fr; }
-  .footer { flex-wrap: wrap; }
   .rowText { padding-right: 12px; }
 }
+
+.subheading { margin: 0; font-size: 14px; line-height: 22px; font-weight: 500; }
+.loading { display: flex; align-items: center; justify-content: center; min-height: 160px; }
+
+.spinner { animation: network-spin 1s linear infinite; }
+@keyframes network-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+
+.controls { display: flex; flex-direction: column; gap: 16px; }
+
+.diagnosticTrigger {
+  align-self: flex-start;
+  margin-inline-start: -10px;
+  padding: 0 10px;
+  gap: 6px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.diagnosticDialog {
+  box-sizing: border-box;
+  width: min(640px, 100%);
+  height: min(600px, 100%);
+  max-height: 100%;
+  padding: 0;
+  gap: 0;
+}
+
+.diagnosticLayout { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.diagnosticHeader { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 24px 24px 20px 28px; }
+.diagnosticHeader h2 { margin: 0; font-size: 20px; line-height: 28px; font-weight: 500; }
+.diagnosticClose { width: 32px; height: 32px; min-height: 32px; padding: 0; border-radius: var(--dsw-radius-md); color: var(--dsw-alias-label-tertiary); }
+.diagnosticTabs { flex: none; margin: 0 28px 22px; }
+.diagnosticPanel {
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 0 24px 24px 28px;
+}
+.diagnosticPanel:focus-visible { outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)); outline-offset: -2px; }
+
+.dialogError { margin: 0 28px 16px; color: var(--dsw-alias-state-error-primary); font-size: 12px; line-height: 18px; }

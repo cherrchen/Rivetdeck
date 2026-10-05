@@ -17,8 +17,8 @@ export function loadManifest() {
 }
 
 export function validateManifest(lock) {
-  if (lock.schemaVersion !== 1 || lock.node?.version !== '24.17.0'
-    || lock.python?.version !== '3.14.7' || lock.python?.release !== '20260924'
+  if (lock.schemaVersion !== 1 || !/^\d+\.\d+\.\d+$/u.test(lock.node?.version ?? '')
+    || !/^\d+\.\d+\.\d+$/u.test(lock.python?.version ?? '') || !/^\d{8}$/u.test(lock.python?.release ?? '')
     || lock.python?.distribution !== 'python-build-standalone' || lock.python?.flavor !== 'install_only_stripped') {
     throw new Error('desktop toolchains: invalid lock metadata')
   }

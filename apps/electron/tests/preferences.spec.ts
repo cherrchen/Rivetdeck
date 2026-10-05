@@ -92,3 +92,17 @@ async function temporaryRoot(): Promise<string> {
 async function stored(root: string): Promise<unknown> {
   return JSON.parse(await readFile(join(root, 'desktop-preferences.json'), 'utf8'))
 }
+
+describe('runtime onboarding preferences', () => {
+  it('prompts fresh and existing users once, and preserves Skip across other settings updates', async () => {
+    const root = await temporaryRoot()
+    const store = new DesktopPreferencesStore(root)
+    expect(store.load().preferences.runtimeOnboardingCompleted).not.toBe(true)
+    await writeFile(store.path, JSON.stringify(DEFAULT_DESKTOP_PREFERENCES))
+    expect(store.load().preferences.runtimeOnboardingCompleted).toBe(false)
+    await store.update({ runtimeOnboardingCompleted: true })
+    await store.updateNetwork({ mode: 'direct' })
+    await saveUpdateChannel(root, 'stable')
+    expect(new DesktopPreferencesStore(root).load().preferences.runtimeOnboardingCompleted).toBe(true)
+  })
+})

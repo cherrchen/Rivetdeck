@@ -1,0 +1,25 @@
+# Desktop Runtime Environments
+
+English | [中文](runtime-environments.zh.md)
+
+Desktop starts with no managed Node.js or Python. Core execution belongs to Electron: macOS/Linux use Electron's Node-compatible child mode, while Windows ships only a console-subsystem `node.exe` and its license in `resources/core-runtime`. The hidden-console stdin inheritance remains in `spawnHarnessChild`. Fresh Core profile initialization uses an offline package operation with no dependencies. Ecosystem registry reconciliation runs after the client window loads, retains bundled plugin availability on failure, and is cancelled/drained before shutdown. The Host and bundled pnpm use this Core executor; optional runtime removal cannot remove it.
+
+## Setup and migration
+
+The client shell displays an optional setup dialog once per Desktop user-data profile. Node and Python start unselected. Installing the selected runtimes persists completion, starts those downloads in the background, and advances the step. Skip persists completion without downloading anything. The mask and Escape do not persist completion. The dialog renders no close control. Settings → Network & Runtimes remains available after Skip, failure, or removal. Existing users receive the dialog once when the feature is introduced. App updates and later runtime removal do not reset completion. Legacy bundled runtimes and system interpreters are neither copied nor reported as managed installations.
+
+## Lifecycle and storage
+
+Main owns independent runtime operations and shares their snapshots with onboarding and Settings. Downloads use the repository lockfile's fixed HTTPS URL and SHA256, secure archive validation/extraction, interpreter version checks, npm/npx checks, and Python ssl/sqlite3/ctypes and pip checks. A failure in one runtime retains the other. Failed installs expose a translated category and retain technical details in Main logs. Cancellation waits for cleanup. Interrupted staging and uncommitted installation destinations are cleared before Host startup. A verified previous generation stays installed or update-available and carries an interrupted alert for the discarded generation. A missing commit stays failed and interrupted. Verification failure stays corrupt. The pending installation records its version, platform, and generation so cleanup retains the active runtime even after a crash following selector commit.
+
+Each verified generation lives under `userData/managed-toolchains/<runtime>/<version>/<platform-arch>/<generation>`. Downloads and extraction remain in separate staging. Main atomically writes the active selector only after verification and immutable rename. Updates install a new generation and report update availability when the pinned version differs. Node predecessors are deleted on restart. Python predecessors remain across restarts because installed console scripts and project virtual environments refer to their absolute interpreter paths. These commands keep their original Python version; retention uses additional disk space. App updates preserve user-data installations without automatic downloads.
+
+Installation and update require restart before Agent fallback paths change. Runtime removal is deferred until restart, preserving subprocesses that use either Agent fallback paths or explicit interpreter paths. Explicit removal deletes the selected managed generation and all retained predecessors; it retains user package directories, project files, system interpreters, and Core. Console scripts and virtual environments referring to a removed interpreter need to be reinstalled or recreated before use. Quit drains installation operations before stopping Network Runtime.
+
+User packages retain their existing Harness locations: `$DSH_HOME/electron/python-user` for Python and `$DSH_HOME/electron/node-global` for npm global installs. When `DSH_HOME` is absent, the Harness home is `~/.dsh` (Windows: `%USERPROFILE%\.dsh`). Managed shims live separately in `userData/electron/toolchains/bin`. No user-package directory is moved or merged during startup. Python user packages remain version-specific; a new Python minor version can require package reinstallation.
+
+## Network and executable selection
+
+Main downloads through an Electron Session registered with the existing Desktop proxy applier. Default preserves Chromium routing, Direct explicitly bypasses proxies, and System/Manual use the Network Runtime Gateway without a direct fallback. Redirects must remain HTTPS. Network epoch changes cancel active installations; Settings changes restart the application. An offline install reports failure without blocking the Host or setup dismissal.
+
+Agent subprocesses preserve explicit request, project, user, and ambient PATH priority. Only verified managed runtimes add their command directories and managed shims as fallbacks. Missing managed runtimes remain absent; executable lookup uses other available sources or reports executable-not-found. Core package-manager commands use a Host-only path excluded from this policy.

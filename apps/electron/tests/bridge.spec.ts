@@ -17,6 +17,8 @@ describe('desktop bridge constants', () => {
 
   it('exposes a closed IPC channel set', () => {
     expect(Object.values(DesktopIpcChannel)).toEqual([
+      'desktop:runtimes:get-state', 'desktop:runtimes:install', 'desktop:runtimes:cancel',
+      'desktop:runtimes:remove', 'desktop:runtimes:complete-onboarding', 'desktop:runtimes:subscribe',
       'deepseek-desktop:host:getBootstrap',
       'deepseek-desktop:host:request',
       'deepseek-desktop:host:openStream',

@@ -868,6 +868,9 @@ importers:
       '@deepseek-ai/dsh-compaction-tool-result-pruner':
         specifier: workspace:^
         version: link:../../packages/compaction/compaction-tool-result-pruner
+      '@deepseek-ai/dsh-config-editor':
+        specifier: workspace:^
+        version: link:../../packages/boot/config-editor
       '@deepseek-ai/dsh-cordis-host-runner':
         specifier: workspace:^
         version: link:../../packages/extensions/cordis-host-runner
@@ -1102,15 +1105,24 @@ importers:
       electron-updater:
         specifier: ^6.8.9
         version: 6.8.9
+      extract-zip:
+        specifier: ^2.0.1
+        version: 2.0.1(supports-color@9.4.0)
       js-yaml:
         specifier: ^4.2.0
         version: 4.3.1
       pnpm:
         specifier: 11.7.0
         version: 11.7.0
+      tar:
+        specifier: ^7.5.22
+        version: 7.5.22
       ws:
         specifier: ^8.21.0
         version: 8.21.0
+      yaml:
+        specifier: ^2.8.1
+        version: 2.9.0
     devDependencies:
       '@deepseek-ai/dsh-client-ui-layout':
         specifier: workspace:^
@@ -1138,16 +1150,13 @@ importers:
         version: 8.18.1
       '@vitejs/plugin-react':
         specifier: ^4.0.0
-        version: 4.7.0(vite@6.4.3(@types/node@22.20.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)(yaml@2.9.0))
+        version: 4.7.0(supports-color@9.4.0)(vite@6.4.3(@types/node@22.20.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)(yaml@2.9.0))
       electron:
         specifier: 43.0.0
         version: 43.0.0
       electron-builder:
         specifier: 26.15.3
         version: 26.15.3(electron-builder-squirrel-windows@26.15.3)
-      extract-zip:
-        specifier: ^2.0.1
-        version: 2.0.1(supports-color@9.4.0)
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -1157,9 +1166,6 @@ importers:
       sharp:
         specifier: ^0.35.3
         version: 0.35.3(@types/node@22.20.0)
-      tar:
-        specifier: ^7.5.22
-        version: 7.5.22
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -22945,6 +22951,26 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@babel/core@7.29.7(supports-color@9.4.0)':
+    dependencies:
+      '@babel/code-frame': 7.29.7
+      '@babel/generator': 7.29.7
+      '@babel/helper-compilation-targets': 7.29.7
+      '@babel/helper-module-transforms': 7.29.7(@babel/core@7.29.7(supports-color@9.4.0))
+      '@babel/helpers': 7.29.7
+      '@babel/parser': 7.29.7
+      '@babel/template': 7.29.7
+      '@babel/traverse': 7.29.7(supports-color@9.4.0)
+      '@babel/types': 7.29.7
+      '@jridgewell/remapping': 2.3.5
+      convert-source-map: 2.0.0
+      debug: 4.4.3(supports-color@9.4.0)
+      gensync: 1.0.0-beta.2
+      json5: 2.2.3
+      semver: 6.3.1
+    transitivePeerDependencies:
+      - supports-color
+
   '@babel/generator@7.29.7':
     dependencies:
       '@babel/parser': 7.29.7
@@ -22976,6 +23002,15 @@ snapshots:
     dependencies:
       '@babel/traverse': 7.29.7(supports-color@9.4.0)
       '@babel/types': 7.29.7
+    transitivePeerDependencies:
+      - supports-color
+
+  '@babel/helper-module-transforms@7.29.7(@babel/core@7.29.7(supports-color@9.4.0))':
+    dependencies:
+      '@babel/core': 7.29.7(supports-color@9.4.0)
+      '@babel/helper-module-imports': 7.29.7
+      '@babel/helper-validator-identifier': 7.29.7
+      '@babel/traverse': 7.29.7(supports-color@9.4.0)
     transitivePeerDependencies:
       - supports-color
 
@@ -23013,9 +23048,19 @@ snapshots:
     dependencies:
       '@babel/types': 8.0.0-rc.6
 
+  '@babel/plugin-transform-react-jsx-self@7.29.7(@babel/core@7.29.7(supports-color@9.4.0))':
+    dependencies:
+      '@babel/core': 7.29.7(supports-color@9.4.0)
+      '@babel/helper-plugin-utils': 7.29.7
+
   '@babel/plugin-transform-react-jsx-self@7.29.7(@babel/core@7.29.7)':
     dependencies:
       '@babel/core': 7.29.7
+      '@babel/helper-plugin-utils': 7.29.7
+
+  '@babel/plugin-transform-react-jsx-source@7.29.7(@babel/core@7.29.7(supports-color@9.4.0))':
+    dependencies:
+      '@babel/core': 7.29.7(supports-color@9.4.0)
       '@babel/helper-plugin-utils': 7.29.7
 
   '@babel/plugin-transform-react-jsx-source@7.29.7(@babel/core@7.29.7)':
@@ -25284,6 +25329,18 @@ snapshots:
     optionalDependencies:
       d3-selection: 3.0.0
       d3-transition: 3.0.1(d3-selection@3.0.0)
+
+  '@vitejs/plugin-react@4.7.0(supports-color@9.4.0)(vite@6.4.3(@types/node@22.20.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)(yaml@2.9.0))':
+    dependencies:
+      '@babel/core': 7.29.7(supports-color@9.4.0)
+      '@babel/plugin-transform-react-jsx-self': 7.29.7(@babel/core@7.29.7(supports-color@9.4.0))
+      '@babel/plugin-transform-react-jsx-source': 7.29.7(@babel/core@7.29.7(supports-color@9.4.0))
+      '@rolldown/pluginutils': 1.0.0-beta.27
+      '@types/babel__core': 7.20.5
+      react-refresh: 0.17.0
+      vite: 6.4.3(@types/node@22.20.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)(yaml@2.9.0)
+    transitivePeerDependencies:
+      - supports-color
 
   '@vitejs/plugin-react@4.7.0(vite@6.4.3(@types/node@22.20.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)(yaml@2.9.0))':
     dependencies:

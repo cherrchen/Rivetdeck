@@ -1,0 +1,25 @@
+# Bilingual-pair consistency record for upstream-package-audit.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/electron/upstream-package-audit.md
+/electron-upstream-package-audit:
+  en: f7541d909b971a34
+  zh: 8e80801608c85be6
+/electron-upstream-package-audit/summary:
+  en: 8f5148343e713cb2
+  zh: 5ec14e2f7dbbaa45
+/electron-upstream-package-audit/table-of-contents:
+  en: 509af39cf47883c0
+  zh: f8b17c1cf9d09248
+/electron-upstream-package-audit/current-package-differences:
+  en: 0536f72629b5c6bf
+  zh: 1b8acb86c76f0bea
+/electron-upstream-package-audit/historical-sync-findings:
+  en: d282663ee15b20d7
+  zh: c92ef2d13bca121c
+/electron-upstream-package-audit/acceptance-evidence:
+  en: 6642c06ac54e22b3
+  zh: eadbe6933b708a3a
+/electron-upstream-package-audit/maintenance:
+  en: e3a4f1a2ccaf78a6
+  zh: bdbe0586c58a145c

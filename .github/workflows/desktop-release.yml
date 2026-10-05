@@ -165,6 +165,9 @@ jobs:
           ref: ${{ needs.validate.outputs.tag }}
           fetch-depth: 1
 
+      - name: Fetch pinned upstream audit baseline
+        run: git fetch --depth=1 --no-tags https://github.com/deepseek-ai/deepseek-harness.git refs/tags/dsh-v0.2.0-rc.2:refs/tags/dsh-v0.2.0-rc.2
+
       - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v6
@@ -188,14 +191,11 @@ jobs:
       - name: Test Electron runtime
         run: pnpm --filter @dsh-electron/dsh-electron test
 
-      - name: Prepare Desktop toolchains
+      - name: Prepare Core Host executor
         env:
           DSH_ELECTRON_TARGET_ARCH: ${{ matrix.arch }}
           DSH_ELECTRON_TARGET_PLATFORM: ${{ runner.os == 'Windows' && 'win32' || runner.os == 'macOS' && 'darwin' || 'linux' }}
-        run: pnpm --filter @dsh-electron/dsh-electron prepare:toolchains
-
-      - name: Smoke-test Desktop toolchains
-        run: pnpm --filter @dsh-electron/dsh-electron smoke:toolchains
+        run: pnpm --filter @dsh-electron/dsh-electron prepare:core
 
       - name: Prepare Network Runtime
         run: pnpm --filter @dsh-electron/dsh-electron prepare:network-runtime
@@ -209,6 +209,18 @@ jobs:
         run: |
           $installer = Get-ChildItem "dist/electron/*-${{ matrix.arch }}.exe" | Select-Object -First 1 -ExpandProperty FullName
           ./apps/electron/scripts/smoke-windows-installer.ps1 -InstallerPath $installer -Architecture '${{ matrix.arch }}'
+
+      - name: Smoke-test packaged zero-runtime Desktop (macOS)
+        if: runner.os == 'macOS'
+        run: node apps/electron/scripts/smoke-runtime-setup.mjs "$(find dist/electron -path '*/Contents/MacOS/DeepSeek Harness' -type f -print -quit)"
+
+      - name: Smoke-test packaged zero-runtime Desktop (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          binary="$(find dist/electron -name deepseek-harness -type f -print -quit)"
+          sudo chown root:root "$(dirname "$binary")/chrome-sandbox"
+          sudo chmod 4755 "$(dirname "$binary")/chrome-sandbox"
+          xvfb-run -a node apps/electron/scripts/smoke-runtime-setup.mjs "$binary"
 
       - uses: actions/upload-artifact@v4
         with:

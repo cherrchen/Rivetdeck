@@ -1,6 +1,7 @@
 /** Workspace packages imported by desktop entry code outside the CLI production graph. */
 export const DESKTOP_ENTRY_WORKSPACE_DEPENDENCIES = Object.freeze([
   '@deepseek-ai/dsh-client-web',
+  '@deepseek-ai/dsh-config-editor',
   '@deepseek-ai/dsh-plugin-manager',
   // The network subprocess plugin extends this class; it is a CLI dependency, not a peer.
   '@deepseek-ai/dsh-subprocess-local',

@@ -84,7 +84,7 @@ describe('desktop capability provider contract', () => {
 
     const desktop: DesktopCapabilitiesContract = createDesktopCapabilities(requireDesktopBridge())
     expect(Object.keys(desktop).sort()).toEqual([
-      'app', 'clipboard', 'dialog', 'network', 'notification', 'shell', 'theme', 'updater', 'window',
+      'app', 'clipboard', 'dialog', 'network', 'notification', 'runtimes', 'shell', 'theme', 'updater', 'window',
     ])
     expect(await desktop.dialog.pickDirectory()).toEqual({ path: '/tmp' })
     expect(await desktop.updater.getState()).toEqual({ state: 'idle' })

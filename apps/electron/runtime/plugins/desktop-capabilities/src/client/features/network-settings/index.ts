@@ -24,12 +24,13 @@ export const name = 'network-settings'
 /** Services required by the Network settings page. */
 export const inject = ['slots', 'locale', 'desktop', 'remote', 'remote.llm']
 
-/** Register one top-level Network section. */
+/** Register the combined Network and Runtime settings section. */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'network-settings: dictionaries')
   const t = ctx.locale.bind(NS)
   const settingsT = ctx.locale.bind('settings')
   const injected = (): NetworkSettingsInjected => ({
+    runtimeSettings: { runtimes: ctx.desktop.runtimes, restart: () => ctx.desktop.app.relaunch(), t: ctx.locale.bind('settings.runtimesElectron') },
     network: ctx.desktop.network,
     shell: ctx.desktop.shell,
     providers: async () => {

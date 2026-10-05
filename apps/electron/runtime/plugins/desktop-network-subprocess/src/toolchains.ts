@@ -5,11 +5,11 @@ interface ExecutablePolicy { executable: string; binDirectory: string; version: 
 
 /** Serialized Main-owned fallback locations accepted by the Host provider. */
 export interface ToolchainPolicy {
-  version: 1
+  version: 2
   mode: 'fallback'
   basePath: string
-  node: ExecutablePolicy
-  python: ExecutablePolicy
+  node?: ExecutablePolicy
+  python?: ExecutablePolicy
   shimDirectory: string
   pythonUserBase: string
   nodeGlobalBinDirectory: string
@@ -24,11 +24,11 @@ function exactKeys(value: Record<string, unknown>, keys: string[]): boolean {
   return Object.keys(value).sort().join(',') === keys.sort().join(',')
 }
 
-function executable(value: unknown, version: string): value is ExecutablePolicy {
+function executable(value: unknown): value is ExecutablePolicy {
   return record(value) && exactKeys(value, ['executable', 'binDirectory', 'version'])
     && typeof value.executable === 'string' && isAbsolute(value.executable)
     && typeof value.binDirectory === 'string' && isAbsolute(value.binDirectory)
-    && value.version === version
+    && typeof value.version === 'string' && /^\d+\.\d+\.\d+$/u.test(value.version)
 }
 
 /** Reject malformed Host descriptors before any Agent process starts. */
@@ -36,9 +36,9 @@ export function parseToolchainPolicy(serialized: string | undefined): ToolchainP
   if (serialized === undefined) return undefined
   let value: unknown
   try { value = JSON.parse(serialized) } catch { throw new Error('desktop toolchains: invalid policy JSON') }
-  if (!record(value) || !exactKeys(value, ['version', 'mode', 'basePath', 'node', 'python', 'shimDirectory', 'pythonUserBase', 'nodeGlobalBinDirectory', 'pythonUserBinDirectory'])
-    || value.version !== 1 || value.mode !== 'fallback' || typeof value.basePath !== 'string'
-    || !executable(value.node, '24.17.0') || !executable(value.python, '3.14.7')
+  if (!record(value) || !exactKeys(value, ['version', 'mode', 'basePath', ...(value.node === undefined ? [] : ['node']), ...(value.python === undefined ? [] : ['python']), 'shimDirectory', 'pythonUserBase', 'nodeGlobalBinDirectory', 'pythonUserBinDirectory'])
+    || value.version !== 2 || value.mode !== 'fallback' || typeof value.basePath !== 'string'
+    || (value.node !== undefined && !executable(value.node)) || (value.python !== undefined && !executable(value.python))
     || typeof value.shimDirectory !== 'string' || !isAbsolute(value.shimDirectory)
     || typeof value.pythonUserBase !== 'string' || !isAbsolute(value.pythonUserBase)
     || typeof value.nodeGlobalBinDirectory !== 'string' || !isAbsolute(value.nodeGlobalBinDirectory)
@@ -46,8 +46,8 @@ export function parseToolchainPolicy(serialized: string | undefined): ToolchainP
     throw new Error('desktop toolchains: invalid policy')
   }
   return {
-    version: 1, mode: 'fallback', basePath: value.basePath,
-    node: value.node, python: value.python,
+    version: 2, mode: 'fallback', basePath: value.basePath,
+    ...(value.node === undefined ? {} : { node: value.node }), ...(value.python === undefined ? {} : { python: value.python }),
     shimDirectory: value.shimDirectory, pythonUserBase: value.pythonUserBase,
     nodeGlobalBinDirectory: value.nodeGlobalBinDirectory, pythonUserBinDirectory: value.pythonUserBinDirectory,
   }
@@ -78,8 +78,10 @@ export function toolchainOverrides(
   const key = requested?.[0] ?? 'PATH'
   result[key] = requested !== undefined && requested[1] === undefined ? undefined : [
     requested?.[1], layerPath('project-env'), layerPath('user-env'), policy.basePath,
-    policy.shimDirectory, policy.nodeGlobalBinDirectory, policy.pythonUserBinDirectory,
-    policy.node.binDirectory, policy.python.binDirectory,
+    policy.node !== undefined || policy.python !== undefined ? policy.shimDirectory : undefined,
+    policy.node === undefined ? undefined : policy.nodeGlobalBinDirectory,
+    policy.python === undefined ? undefined : policy.pythonUserBinDirectory,
+    policy.node?.binDirectory, policy.python?.binDirectory,
   ]
     .filter(Boolean).join(platform === 'win32' ? win32.delimiter : posix.delimiter)
   if (!Object.keys(result).some(name => platform === 'win32' ? name.toUpperCase() === 'PYTHONUSERBASE' : name === 'PYTHONUSERBASE')) {

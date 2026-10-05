@@ -4,7 +4,7 @@
 
 ## Summary
 
-在 Settings → Network 中为 Desktop 应用和受监护的 Harness 选择 Default、Direct、System Proxy 或单一 Manual 代理。保存并重启后，模式或 Manual 配置生效。连接测试和高级诊断帮助查看当前路由，不改变该路由。
+在 Settings → Network & Runtimes 中为 Desktop 应用和受监护的 Harness 选择 Default、Direct、System Proxy 或单一 Manual 代理。保存并重启后，模式或 Manual 配置生效。连接测试和高级诊断帮助查看当前路由，不改变该路由。
 
 ## Contents
 
@@ -20,11 +20,11 @@
 
 ## 选择模式
 
-打开 Settings → Network，从网络模式菜单中选择一种模式。**Default** 保留应用现有网络行为。**Direct** 明确直连，并清理 Desktop 可控 Agent 子进程的代理环境变量。**System Proxy** 针对每个目标遵循操作系统策略，只执行第一条最终路由，其中包括明确的 `DIRECT`。**Manual Proxy** 对 Desktop 管理的流量使用一个 HTTP、HTTPS 或 SOCKS5 端点。
+打开 Settings → Network & Runtimes，从网络模式菜单中选择一种模式。**Default** 保留应用现有网络行为。**Direct** 明确直连，并清理 Desktop 可控 Agent 子进程的代理环境变量。**System Proxy** 针对每个目标遵循操作系统策略，只执行第一条最终路由，其中包括明确的 `DIRECT`。**Manual Proxy** 对 Desktop 管理的流量使用一个 HTTP、HTTPS 或 SOCKS5 端点。
 
 System 和 Manual 显示 **代理 Agent 网络请求**。启用后，支持标准代理环境变量的 Agent 工具会收到 Desktop Gateway。关闭后，Agent 子进程保留继承的代理变量和 `$DSH_HOME/.env` 中的代理变量。它不能强制 raw socket 或忽略这些变量的工具使用代理。Direct 始终清理可控 Agent 的代理变量；Default 保留 Agent 原有行为。
 
-选择 **保存并重启** 来应用有效的模式或 Manual 配置。连接测试失败不会禁用保存。**恢复 Default** 会请求确认、保留上次 Manual 端点并重启。System 生效时，高级区域提供 **重新加载系统代理配置**；此操作更新 OS 策略和网络 epoch，不改变模式，也不重启。
+选择 **保存并重启** 来应用有效的模式或 Manual 配置。连接测试失败不会禁用保存。**恢复 Default** 会请求确认、保留上次 Manual 端点并重启。System 生效时，诊断页签提供 **重新加载系统代理配置**；此操作更新 OS 策略和网络 epoch，不改变模式，也不重启。
 
 <a id="configure-a-manual-proxy"></a>
 
@@ -40,25 +40,25 @@ System 和 Manual 显示 **代理 Agent 网络请求**。启用后，支持标�
 
 **测试连接** 会针对当前生效模式运行代理、Internet、GitHub 和 LLM API 的 GET 探测。它使用不产生 incident 的 updater 网络路径，因此测试失败不会打开全局代理故障对话框，也不会改变网络 epoch。来自目标站点的任何 HTTP 响应（包括 401）都表示传输可达；Gateway 故障仍显示为不可达及符号化错误代码。界面仍会显示状态码。Internet 测试只使用一个已配置的 204 URL，不尝试其他地址。GitHub 测试只检查可达性，不检查 updater release。
 
-打开高级区域可编辑 Internet 和 GitHub 测试 URL，并为当前已注册的 provider 填写 LLM health URL。LLM 测试只向该 URL 发送 GET，不调用 completion endpoint，也不消耗模型 token。没有 provider 和 health URL 时，LLM 行显示 **未配置**。表单不会为自定义 provider 推断安全的 health URL。
+打开 **高级诊断** 可进入双页签对话框。**连接测试与诊断** 包含连接测试和当前路由信息；**测试端点** 可编辑 Internet 和 GitHub 测试 URL，并为当前已注册的 provider 填写 LLM health URL。**放弃** 撤销尚未保留的端点编辑；**保留** 将编辑暂存，供连接测试和页面的 **保存并重启** 使用。关闭对话框会丢弃尚未保留的编辑。LLM 测试只向该 URL 发送 GET，不调用 completion endpoint，也不消耗模型 token。没有 provider 和 health URL 时，LLM 行显示 **未配置**。表单不会为自定义 provider 推断安全的 health URL。
 
-高级区域还会显示当前模式、Gateway 状态、epoch、所选路由、上次故障，以及可用的 System 策略详情。System 的其他路由只用于诊断，绝不会自动尝试。页面仅显示脱敏元数据，不返回已存密码、认证 header 或 PAC 脚本。
+**连接测试与诊断** 页签还会显示当前模式、Gateway 状态、epoch、所选路由、上次故障，以及可用的 System 策略详情。System 的其他路由只用于诊断，绝不会自动尝试。页面仅显示脱敏元数据，不返回已存密码、认证 header 或 PAC 脚本。
 
 <a id="recover-from-a-failed-route"></a>
 
 ## 从路由故障恢复
 
-真实业务流量在所选代理上失败时，原生对话框可允许再次尝试、单次使用 Default、打开 Settings → Network 或暂不处理。**重试** 允许再次连接同一所选路由；请自行重试受影响的操作。**本次使用 Default** 通过一次性 override 重启，保留已保存模式。**打开网络设置** 会显示主窗口并选中 Network section，展示尚未解决的故障，但不改变模式。
+真实业务流量在所选代理上失败时，原生对话框可允许再次尝试、单次使用 Default、打开 Settings → Network & Runtimes 或暂不处理。**重试** 允许再次连接同一所选路由；请自行重试受影响的操作。**本次使用 Default** 通过一次性 override 重启，保留已保存模式。**打开网络设置** 会显示主窗口并打开网络设置根页面，不改变模式，也不打开诊断对话框。
 
-页面也会显示上次未解决的代理故障，并提供同一路由的重试。测试不会创建该故障。System 策略变化和显式 Reload 会创建新 epoch；代理失败不授权尝试其他路由或 Direct。
+打开「**高级诊断 → 连接测试与诊断**」可查看上次未解决的代理故障、偏好设置告警，并重试同一路由。测试不会创建该故障。System 策略变化和显式 Reload 会创建新 epoch；代理失败不授权尝试其他路由或 Direct。
 
-取消 Basic 代理凭据提示后，故障仍然可见。同一 epoch 中后续需要凭据的请求可以再次提示。
+取消 Basic 代理凭据提示后，诊断仍保留尚未解决的故障。同一 epoch 中后续需要凭据的请求可以再次提示。
 
 <a id="troubleshoot"></a>
 
 ## 排障
 
-所选代理失败后不会切换到其他代理或 Direct。使用故障对话框重试同一路由、单次使用 Default，或打开 Settings → Network。**Use Default This Time** 只重启一次，并保留已保存的模式。
+所选代理失败后不会切换到其他代理或 Direct。使用故障对话框重试同一路由、单次使用 Default，或打开 Settings → Network & Runtimes。**Use Default This Time** 只重启一次，并保留已保存的模式。
 
 如果保存时提示安全存储不可用，新密码不会写入。在 Linux 上启用 Secret Service 或 KWallet 后再次保存密码。`basic_text` 不是持久存储。
 

@@ -1,3 +1,4 @@
+import type { RuntimeCapability } from './toolchains/domain.ts'
 /**
  * Typed desktop bridge shared by the Electron preload and main process.
  * Channel names are closed; the renderer never receives a generic invoke API.
@@ -30,6 +31,12 @@ export const RENDERER_ENTRY_URL = `${RENDERER_ORIGIN}/index.html`
 
 /** Closed IPC channel set for the desktop bridge. */
 export const DesktopIpcChannel = {
+  runtimesGetState: 'desktop:runtimes:get-state',
+  runtimesInstall: 'desktop:runtimes:install',
+  runtimesCancel: 'desktop:runtimes:cancel',
+  runtimesRemove: 'desktop:runtimes:remove',
+  runtimesCompleteOnboarding: 'desktop:runtimes:complete-onboarding',
+  runtimesSubscribe: 'desktop:runtimes:subscribe',
   getBootstrap: 'deepseek-desktop:host:getBootstrap',
   request: 'deepseek-desktop:host:request',
   openStream: 'deepseek-desktop:host:openStream',
@@ -134,6 +141,7 @@ export type DesktopUnsubscribe = () => void
 
 /** Renderer-facing desktop bridge installed as `window.deepseekDesktop`. */
 export interface DeepseekDesktopBridge {
+  runtimes: RuntimeCapability
   host: {
     /** Fetch Host bootstrap (boot graph + parser preload URLs). */
     getBootstrap(): Promise<HostBootstrap>

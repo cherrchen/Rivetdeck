@@ -1,3 +1,4 @@
+import type { RuntimeManager } from '../toolchains/manager.ts'
 /**
  * Main-process desktop capability services behind the typed IPC bridge.
  */
@@ -36,6 +37,7 @@ import type { DesktopNetworkConfigInput, DesktopNetworkTestRequest } from '../ne
 
 /** Dependencies injected once the main window and updater exist. */
 export interface DesktopServicesOptions {
+  getRuntimes: () => RuntimeManager | undefined
   /** Resolve the live main BrowserWindow. */
   getWindow: () => BrowserWindowType | undefined
   /** Resolve the updater controller after it is created. */
@@ -57,6 +59,13 @@ export class DesktopServices {
   private readonly themeListeners = new Set<ThemeListener>()
   private readonly updaterListeners = new Set<UpdaterListener>()
   private themeHookInstalled = false
+
+  /** Resolve the Main-owned runtime manager; never construct one in a renderer. */
+  runtimes(): RuntimeManager {
+    const manager = this.options.getRuntimes()
+    if (manager === undefined) throw new Error('desktop runtimes: manager unavailable')
+    return manager
+  }
 
   private network(): DesktopNetworkController {
     const controller = this.options.getNetwork()

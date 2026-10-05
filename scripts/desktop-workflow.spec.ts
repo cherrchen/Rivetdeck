@@ -90,6 +90,7 @@ describe('Desktop synchronization and release workflows', () => {
       oneClick: false,
       allowToChangeInstallationDirectory: true,
       useZip: true,
+      include: '.electron-build/nsis/include.nsh',
       differentialPackage: false,
     })
   })
@@ -230,6 +231,34 @@ describe('Desktop synchronization and release workflows', () => {
     expect(notes?.run).not.toContain('deepseek-ai/deepseek-harness/commit')
     expect(create.run).toContain('gh release view "$RELEASE_TAG"')
   })
+
+  it('launches the installed Windows application before uninstalling on both architectures', () => {
+    const release = loadWorkflow('.github/workflows/desktop-release.yml')
+    const packageJob = workflowJob(release, 'package')
+    if (!Array.isArray(packageJob.steps)) throw new TypeError('Desktop release must define packaging steps')
+    const smoke = packageJob.steps.filter(isRecord).find(step => step.name === 'Smoke-test Windows installer')
+    expect(smoke?.run).toContain("-Architecture '${{ matrix.arch }}'")
+    const installerSmoke = readFileSync(resolve(root, 'apps/electron/scripts/smoke-windows-installer.ps1'), 'utf8')
+    const startup = installerSmoke.indexOf("& node (Join-Path $PSScriptRoot 'smoke-runtime-setup.mjs') $application --offline --startup-only")
+    expect(startup).toBeGreaterThan(-1)
+    expect(installerSmoke.slice(startup)).toContain('if ($LASTEXITCODE -ne 0)')
+    expect(installerSmoke.slice(startup)).toContain('} finally {')
+    expect(installerSmoke.indexOf('$uninstall = Start-Process')).toBeGreaterThan(startup)
+    expect(packageJob.steps.filter(isRecord).map(step => step.run).join('\n')).not.toContain('dist/electron/win-unpacked')
+  })
+  it('runs the deep-path NSIS installation smoke on Windows pull requests', () => {
+    const ci = loadWorkflow('.github/workflows/desktop-ci.yml')
+    const lifecycle = workflowJob(ci, 'managed-runtime-lifecycle')
+    if (!Array.isArray(lifecycle.steps)) throw new TypeError('Runtime lifecycle must define steps')
+    const smoke = lifecycle.steps.filter(isRecord).find(step => step.name === 'Verify Windows deep-path installer lifecycle')
+    expect(smoke?.if).toBe("runner.os == 'Windows'")
+    expect(smoke?.run).toContain('--prepackaged ../../dist/electron/win-unpacked')
+    expect(smoke?.run).toContain("if ($LASTEXITCODE -ne 0) { throw 'Windows NSIS build failed.' }")
+    if (typeof smoke?.run !== 'string') throw new TypeError('Windows installer smoke must define commands')
+    expect(smoke.run.indexOf('if ($LASTEXITCODE -ne 0)')).toBeLessThan(smoke.run.indexOf('$installer ='))
+    expect(smoke.run).toContain('smoke-windows-installer.ps1')
+  })
+
 })
 
 

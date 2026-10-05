@@ -30,7 +30,7 @@ Electron Main
 
 - Desktop 专属改动留在 `apps/electron/**`；不要通过改 `apps/web` 做 Desktop-only UI。
 - 保持 `src/renderer` 为薄 bootstrap/carrier；不要在此长出第二套产品前端。
-- Portable 与 Desktop-aware 产品功能归属独立发布的 DSH/Cordis package；`runtime/plugins/` 容纳 Desktop Capabilities composition 包与 Host-only provider。Desktop 必需的 Host 组合列在 `runtime/host.patch.yml` 中；随包 Git 与 Theme Studio 被 seed 进 web profile（[插件生命周期](../../docs/electron/plugin-lifecycle.zh.md)）。
+- Portable 与 Desktop-aware 产品功能归属独立发布的 DSH/Cordis package；`runtime/plugins/` 容纳 Desktop Capabilities composition 包与 Host-only provider。Desktop 必需的 Host 组合列在 `runtime/host.patch.yml` 中；随包 Git 与 Theme Studio 被 seed 进 web profile（[插件生命周期](../../docs/electron/plugin-lifecycle.zh.md)）。同一参考文档负责 Desktop 配置写入策略与保留的共享 UI 修改贡献。
 - Desktop-aware feature 保持 core fiber portable，并通过 optional `ctx.inject(['desktop'], ...)` child fiber 安装原生增强。它通过 `ctx.desktop` 能力服务消费原生能力，不得直接访问 `window.deepseekDesktop`。
 - 环回 Host 传输是内部兼容机制，无证据时不要为架构纯粹性替换它。
 
@@ -83,7 +83,7 @@ Electron 应用是私有安装程序，不作为 npm 发布成员。依赖同步
 
 ## 打包
 
-包元数据将产品名声明为 `DeepSeek Harness`，Electron 与 `electron-builder` 会将它用于开发环境界面、应用元数据、安装程序和可执行文件。打包后的元数据使用无 scope 的 `deepseek-harness-desktop` 应用名称，因此 updater 缓存目录不会从仅供 workspace 使用的 `@dsh-electron/dsh-electron` 名称派生。包配置在 Windows 上生成允许用户选择安装目录的向导式 NSIS 安装程序，并使用 ZIP 载荷解压，使 NSIS 在解压失败时拒绝安装，而不会只写入卸载程序；在 macOS 上生成 DMG 和 ZIP 产物，在 Linux 上生成 AppImage 和 DEB 产物。release 工作流使用 GitHub 托管的原生架构 runner，为 x64 和 ARM64 构建每一种格式；每个 Windows runner 都会在上传前安装已完成的产物，检查可执行文件、runtime 和两个快捷方式，然后卸载。CI 构建未签名产物，因此仓库无需配置签名凭据；需要分发可信二进制文件的维护者必须提供 `electron-builder` 支持的平台签名环境。
+包元数据将产品名声明为 `DeepSeek Harness`，Electron 与 `electron-builder` 会将它用于开发环境界面、应用元数据、安装程序和可执行文件。打包后的元数据使用无 scope 的 `deepseek-harness-desktop` 应用名称，因此 updater 缓存目录不会从仅供 workspace 使用的 `@dsh-electron/dsh-electron` 名称派生。包配置在 Windows 上生成允许用户选择安装目录的向导式 NSIS 安装程序，并使用带退出码检查的 7-Zip 解压 ZIP 载荷，支持超过 Windows MAX_PATH 的包成员路径，并在解压失败时拒绝安装；在 macOS 上生成 DMG 和 ZIP 产物，在 Linux 上生成 AppImage 和 DEB 产物。生成的 NSIS include 保留 Windows 原生路径分隔符，确保安装程序与卸载程序编译都能解析文件路径。release 工作流使用 GitHub 托管的原生架构 runner，为 x64 和 ARM64 构建每一种格式；每个 Windows runner 都会在上传前安装已完成的产物，检查可执行文件、runtime 和两个快捷方式，并在全新用户数据、没有托管运行环境且 registry 不可达的条件下启动已安装应用，再卸载并上传。CI 构建未签名产物，因此仓库无需配置签名凭据；需要分发可信二进制文件的维护者必须提供 `electron-builder` 支持的平台签名环境。
 
 桌面 release 在 `develop` 上使用 `v{a.b.c}-beta.{x}`，在 `main` 上使用 `v{a.b.c}-rc.{x}`，稳定版使用 `v{a.b.c}`。[`sync-upstream.yml`](../../.github/workflows/sync-upstream.yml) 将上游合并到 `develop`，准备并推送下一个 Beta commit，仅在 Desktop CI 针对该提交成功后发布其 tag。开发者在创建 `develop` 到 `main` 的发布 PR（Pull Request）前，先运行 `pnpm electron:set-version <apps/cli version>`，再运行 `pnpm install --no-frozen-lockfile`，然后提交 Electron manifest 和 lockfile。Desktop CI 会拒绝来自其他分支、使用 Beta 版本或版本与 [`apps/cli/package.json`](../cli/package.json) 不一致的发布 PR。PR 合并后，[`desktop-promote.yml`](../../.github/workflows/desktop-promote.yml) 在已准备好的 `main` 提交上创建 RC 或 Stable tag，不修改任何分支。[`desktop-release.yml`](../../.github/workflows/desktop-release.yml) 在发布安装包前校验 tag 所在分支与 package 版本。
 
@@ -97,11 +97,11 @@ Release 资源在固定的应用自有路径中包含 Rust Network Runtime。Man
 
 受监督的 Harness 进程仅绑定 `127.0.0.1` 上的随机端口，且永远不是 BrowserWindow 的页面源。Renderer 无 Node.js 集成，启用上下文隔离与 Chromium 沙箱，仅接收类型化的 `window.deepseekDesktop` 桥接，且不能离开 `dsh-electron://localhost`。以新窗口请求的 HTTP/HTTPS 链接在系统浏览器中打开。
 
-Windows 上受监督进程是随包发布的 Node.js 运行时（`resources/toolchains/node/node.exe`），以 `windowsHide` 和一个继承的 stdin 设备句柄启动，因此它持有一个隐藏控制台，`pwsh`、`git`、`cmd` 等 agent shell 命令会继承该控制台，而不会打开 Windows Terminal 窗口；其它平台使用 Electron 的 Node 兼容子模式。
+Windows 上受监督进程是随包发布的 Node.js 运行时（`resources/core-runtime/node.exe`），以 `windowsHide` 和一个继承的 stdin 设备句柄启动，因此它持有一个隐藏控制台，`pwsh`、`git`、`cmd` 等 agent shell 命令会继承该控制台，而不会打开 Windows Terminal 窗口；其它平台使用 Electron 的 Node 兼容子模式。
 
-Desktop 为六个发布目标打包独立的 Node.js 24.17.0 和 CPython 3.14.7。Agent 子进程依次搜索请求显式提供的 PATH、项目与用户 `.env` 中的 PATH、Main 启动时的原始 PATH，最后搜索随包 runtime 目录。显式删除 PATH 会保持删除语义。随包 `python`、`python3`、`pip`、`pip3`、`npm` 和 `npx` shim 在所有平台调用对应的 runtime。这些 Python 与 pip 命令将用户包写入 `~/.dsh/electron/python-user`，且 `python -m pip` 与 `pip` 等价；随包 npm 全局包写入 `~/.dsh/electron/node-global`。这些包的命令目录也加入 fallback PATH：macOS 和 Linux 使用 `bin`，Windows 使用 npm prefix 目录及 Python 的 `Scripts` 目录。项目虚拟环境和用户管理的 runtime 只要位于 PATH 前部，就保持优先。随包资产缺失时，Desktop 会在 Host 启动前报错。
+Desktop Core 在 macOS/Linux 使用 Electron，在 Windows 使用仅包含 `node.exe` 和许可证的控制台执行器。Host 与插件包管理器使用 Core 执行器，不依赖可选 Agent 运行环境。Node.js 与 Python 通过可选初始化对话框或设置 → 网络与运行环境，分别安装到 Electron `userData/managed-toolchains` 下的版本化 generation。初始化对话框与模型首次配置对话框采用相同的 600px 宽度，并适应窗口的浮层边距。安装所选环境会保存完成状态、在后台下载并推进步骤；跳过会保存完成状态且不下载；遮罩和 Escape 不保存完成状态，对话框不渲染关闭控件。Agent PATH 依次搜索请求、项目、用户和 Main 原始环境，最后才使用托管 fallback；显式删除 PATH 保持删除语义。仅已安装环境生成对应 shim。安装、更新和移除在重启后生效，保护运行中的任务。存储、网络与迁移行为见[运行环境](../../docs/electron/runtime-environments.zh.md)。
 
-构建准备流程下载固定 HTTPS 归档，并在解压前使用 [`toolchains.lock.json`](toolchains.lock.json) 中的 SHA256 校验。Node distribution 保留 `LICENSE`；python-build-standalone distribution 保留 `LICENSE.txt` 及随包依赖的许可证元数据。上游资产见 [Node.js release](https://nodejs.org/download/release/v24.17.0/) 与 [python-build-standalone release](https://github.com/astral-sh/python-build-standalone/releases/tag/20260924)。打包前运行 `pnpm --filter @dsh-electron/dsh-electron prepare:toolchains` 和 `pnpm --filter @dsh-electron/dsh-electron smoke:toolchains`，以验证当前原生目标。
+运行环境下载使用固定 HTTPS 归档及 [`toolchains.lock.json`](toolchains.lock.json) 中的 SHA256。Main 与构建准备流程共享安全解压实现，在原子激活前验证解释器版本、npm/npx、Python import 和 pip。发布准备使用 `prepare:core`；完整托管运行环境不进入安装包资源。
 
 Main 保留显式 `$DSH_HOME`；否则受监督进程使用操作系统用户主目录下的 `.dsh`，因此 Harness profile、设置、会话等状态在 macOS/Linux 使用 `~/.dsh`，在 Windows 使用 `%USERPROFILE%\.dsh`。Electron 将 Chromium 数据、缓存与桌面更新偏好保留在其平台专属 `userData` 目录。Agent shell 命令以当前用户主目录为初始工作区；用户可通过 Harness UI 选择其他工作区。
 

@@ -18,6 +18,14 @@ function createLazyDesktopCapabilities(): DesktopCapabilitiesContract {
     return cached
   }
   return {
+    runtimes: {
+      getState: async () => resolve().runtimes.getState(),
+      install: async name => resolve().runtimes.install(name),
+      cancel: async name => resolve().runtimes.cancel(name),
+      remove: async name => resolve().runtimes.remove(name),
+      completeOnboarding: async () => resolve().runtimes.completeOnboarding(),
+      subscribe: callback => resolve().runtimes.subscribe(callback),
+    },
     app: {
       getVersion: async () => resolve().app.getVersion(),
       getPlatform: async () => resolve().app.getPlatform(),
@@ -71,6 +79,7 @@ function createLazyDesktopCapabilities(): DesktopCapabilitiesContract {
 
 /** The `ctx.desktop` capability adapter over the typed preload bridge. */
 export class DesktopCapabilitiesService extends Service implements DesktopCapabilitiesContract {
+  readonly runtimes: DesktopCapabilitiesContract['runtimes']
   readonly app: DesktopCapabilitiesContract['app']
   readonly dialog: DesktopCapabilitiesContract['dialog']
   readonly clipboard: DesktopCapabilitiesContract['clipboard']
@@ -87,6 +96,7 @@ export class DesktopCapabilitiesService extends Service implements DesktopCapabi
   constructor(ctx: Context) {
     super(ctx, 'desktop')
     const capabilities = createLazyDesktopCapabilities()
+    this.runtimes = capabilities.runtimes
     this.app = capabilities.app
     this.dialog = capabilities.dialog
     this.clipboard = capabilities.clipboard

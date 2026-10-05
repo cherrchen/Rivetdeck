@@ -1,3 +1,4 @@
+import type { RuntimeSnapshot } from '../toolchains/domain.ts'
 /**
  * Sandboxed preload: expose the typed `deepseekDesktop` bridge only.
  * Built to a single CommonJS file — sandboxed ESM multi-file preloads do not load.
@@ -107,6 +108,14 @@ function openHostStream(
 }
 
 const bridge: DeepseekDesktopBridge = {
+  runtimes: {
+    getState: () => ipcRenderer.invoke(DesktopIpcChannel.runtimesGetState),
+    install: name => ipcRenderer.invoke(DesktopIpcChannel.runtimesInstall, name),
+    cancel: name => ipcRenderer.invoke(DesktopIpcChannel.runtimesCancel, name),
+    remove: name => ipcRenderer.invoke(DesktopIpcChannel.runtimesRemove, name),
+    completeOnboarding: () => ipcRenderer.invoke(DesktopIpcChannel.runtimesCompleteOnboarding),
+    subscribe: callback => subscribeChannel(DesktopIpcChannel.runtimesSubscribe, callback, value => value as RuntimeSnapshot),
+  },
   host: {
     getBootstrap: () => ipcRenderer.invoke(DesktopIpcChannel.getBootstrap),
     request: (init: HostHttpRequest) => ipcRenderer.invoke(DesktopIpcChannel.request, init),
