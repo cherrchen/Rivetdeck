@@ -103,7 +103,7 @@ Store 目标使用 [`windows-store.json`](windows-store.json) 中的 Partner Cen
 
 下载两个 AppX artifact，上传到 Partner Center 中的 Rivetdeck 产品。[Store 包要求](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/app-package-requirements)允许提交未签名的 AppX，并说明通过认证后的 Store 签名流程。Store 外安装需要合适的签名证书。完整信任应用能力需要 Store 审核。产品页面为 [Microsoft Store 中的 Rivetdeck](https://apps.microsoft.com/detail/9P5FQ7D2PQVQ)。
 
-Windows 工作流用临时测试证书签名包副本，在两种原生架构上安装后检查包身份和 Store-only 菜单，执行 Core 插件操作、托管运行时安装与卸载。独立的 x64 步骤通过微软签名的指定 Windows SDK 准备 WACK，验证另一个签名副本，并保留完整报告。必需测试的警告或失败阻止验证通过；可选测试根据 [Desktop Bridge 测试规则](https://learn.microsoft.com/en-us/windows/uwp/debug-test-perf/windows-desktop-bridge-app-tests#required-versus-optional-tests)保留为提示。该 SDK 在 ARM64 主机上排除 WACK 可执行组件；对应 runner 记录 `unsupported-host`，不会记录认证通过。提交 artifact 保持未签名。验证报告、应用截图和每个已安装应用验证步骤的 stdout/stderr 日志单独上传。可选工作流参数 `package_run_id` 复用先前运行的未签名包，并记录来源运行。WACK 要求活跃用户会话，属于预检；Partner Center 认证仍需独立审核。macOS 本地检查覆盖配置、manifest 输入、磁贴尺寸和更新隔离。
+Windows 工作流用临时测试证书签名包副本，在两种原生架构上安装后检查包身份和 Store-only 菜单，执行 Core 插件操作、托管运行时安装与卸载。独立的 x64 步骤通过微软签名的指定 Windows SDK 准备 WACK，卸载临时应用后通过 `-appxpackagepath` 传入签名副本，并保留可执行文件 manifest 和完整报告。必需测试的警告或失败阻止验证通过；可选测试根据 [Desktop Bridge 测试规则](https://learn.microsoft.com/en-us/windows/uwp/debug-test-perf/windows-desktop-bridge-app-tests#required-versus-optional-tests)保留为提示。该 SDK 在 ARM64 主机上排除 WACK 可执行组件；对应 runner 记录 `unsupported-host`，不会记录认证通过。提交 artifact 保持未签名。验证报告、应用截图和每个已安装应用验证步骤的 stdout/stderr 日志及配置写锁 PID 观察记录单独上传；诊断不包含配置内容和进程参数。可选工作流参数 `package_run_id` 复用先前运行的未签名包，并记录来源运行。WACK 要求活跃用户会话，属于预检；Partner Center 认证仍需独立审核。macOS 本地检查覆盖配置、manifest 输入、磁贴尺寸和更新隔离。
 
 ## 运行时与安全
 

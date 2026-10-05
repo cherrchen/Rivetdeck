@@ -109,7 +109,19 @@ try {
       if ($LASTEXITCODE -ne 0) { throw 'WACK reset failed.' }
       $report.wack = 'running'
       $wackReport = Join-Path $ReportDirectory 'wack.xml'
-      & $appCert test -packagefullname $installed.PackageFullName -reportoutputpath $wackReport
+      $manifestTool = Get-ChildItem "${env:ProgramFiles(x86)}/Windows Kits/10/bin/*/x64/mt.exe" | Sort-Object FullName -Descending | Select-Object -First 1
+      if (-not $manifestTool) { throw 'Windows SDK Manifest Tool is required to record the executable manifest.' }
+      & $manifestTool.FullName '-nologo' "-inputresource:$application;#1" "-out:$(Join-Path $ReportDirectory 'executable.manifest')"
+      if ($LASTEXITCODE -ne 0) { throw 'Windows SDK could not read the installed executable manifest.' }
+      & powershell.exe -NoLogo -NoProfile -File (Join-Path $PSScriptRoot 'diagnose-wack-binary.ps1') -KitDirectory (Split-Path $appCert) -BinaryPath $application -ManifestPath (Join-Path $ReportDirectory 'executable.manifest') -ManifestTool $manifestTool.FullName -ScratchDirectory $scratch -ReportDirectory $ReportDirectory
+      if ($LASTEXITCODE -ne 0) { Write-Warning 'WACK binary diagnostics failed; certification will retain its independent result.' }
+      # WACK's package-file workflow requires an uninstalled application.
+      Remove-AppxPackage -Package $installed.PackageFullName
+      if (Get-AppxPackage -Name $identity.identityName) { throw 'Store package remained registered before package-file certification.' }
+      $installed = $null
+      $report.uninstalled = $true
+      $report.wackInput = 'appxpackagepath'
+      & $appCert test -appxpackagepath $signed -reportoutputpath $wackReport
       $report.wackExitCode = $LASTEXITCODE
       if (-not (Test-Path $wackReport)) { throw 'WACK did not produce an XML report.' }
       [xml]$results = Get-Content $wackReport -Raw
@@ -127,6 +139,7 @@ try {
 } finally {
   try {
     # Remove only the package and certificates acquired by this invocation.
+    if ($RunCertificationKit -and -not $installed) { $installed = Get-AppxPackage -Name $identity.identityName }
     if ($installed) {
       Remove-AppxPackage -Package $installed.PackageFullName
       if (Get-AppxPackage -Name $identity.identityName) { throw 'Store package remained registered after uninstall.' }

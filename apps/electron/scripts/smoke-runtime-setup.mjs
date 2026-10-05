@@ -5,6 +5,7 @@ import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { execFileSync } from 'node:child_process'
+import { readProfileWriterState } from './profile-writer-diagnostics.mjs'
 const root = resolve(import.meta.dirname, '../../..')
 const require = createRequire(join(root, 'apps/web/package.json'))
 const { _electron } = require('playwright')
@@ -24,11 +25,30 @@ if (process.argv.includes('--offline')) {
 let application
 const events = []
 const diagnostics = []
+const profileLocks = []
+let lastLockState
+async function recordProfileLock(stage) {
+  let state
+  try { state = await readProfileWriterState(env.DSH_HOME) }
+  catch (error) {
+    // Exclusive-create writers can publish an empty record before their PID write completes.
+    console.error('Profile writer observation unavailable:', stage, error)
+    return
+  }
+  if (JSON.stringify(state) === lastLockState && stage === 'poll') return
+  lastLockState = JSON.stringify(state)
+  profileLocks.push({ time: new Date().toISOString(), stage, mainPid: application?.process().pid, ...state })
+}
+let lockPoll
 async function launch() {
   application = await _electron.launch({ executablePath, args: [`--user-data-dir=${userData}`], env, timeout: 120_000 })
   application.process().stderr.on('data', bytes => process.stderr.write(bytes))
   application.process().stdout.on('data', bytes => process.stdout.write(bytes))
   const page = await application.firstWindow({ timeout: 120_000 })
+  if (lockPoll === undefined) lockPoll = setInterval(() => {
+    const sample = recordProfileLock('poll').catch(error => { console.error('Profile lock diagnostic failed:', error) })
+    diagnostics.push(sample)
+  }, 1000)
   if (process.argv.includes('--store')) await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(1440, 900))
   page.on('pageerror', error => console.error('renderer error:', error))
   page.on('console', message => {
@@ -38,6 +58,7 @@ async function launch() {
     if (new URL(response.url()).pathname !== '/api/settings/mutate') return
     diagnostics.push(response.text().then(body => {
       console.error('Settings mutation response:', body)
+      return recordProfileLock('settings-response')
     }).catch(error => { console.error('Settings response could not be read:', error) }))
   })
   await page.waitForFunction(() => window.deepseekDesktop !== undefined)
@@ -92,6 +113,7 @@ async function smoke() {
   assert.equal((await page.evaluate(() => window.deepseekDesktop.runtimes.getState())).onboardingCompleted, true)
   events.push('Skip persisted without installation')
   const preview = page.getByRole('dialog', { name: /Preview Notice|预览版说明/ })
+  await recordProfileLock('before-preview-confirmation')
   await preview.getByRole('button', { name: /Continue|继续/, exact: true }).click({ timeout: 30_000 })
   await preview.waitFor({ state: 'hidden', timeout: 180_000 })
   await close()
@@ -160,7 +182,18 @@ try {
   console.error('smoke artifacts:', scratch)
   throw error
 } finally {
+  clearInterval(lockPoll)
   await Promise.all(diagnostics)
+  try { await recordProfileLock('probe-finished') }
+  catch (error) { console.error('Final profile lock diagnostic failed:', error) }
+  console.error('Profile writer lock observations:', JSON.stringify(profileLocks))
+  if (process.platform === 'win32' && profileLocks.some(row => row.holderPid !== null)) {
+    try {
+      const pids = [...new Set(profileLocks.flatMap(row => [row.mainPid, row.holderPid, row.packagePid]).filter(pid => Number.isSafeInteger(pid) && pid > 0))]
+      const command = `$ids = @(${pids.join(',')}); $rows = Get-CimInstance Win32_Process; do { $before = $ids.Count; $ids = @($ids + @($rows | Where-Object { $_.ParentProcessId -in $ids } | ForEach-Object ProcessId) | Sort-Object -Unique) } while ($ids.Count -gt $before); $rows | Where-Object { $_.ProcessId -in $ids } | Select-Object ProcessId,ParentProcessId,Name | ConvertTo-Json -Compress`
+      console.error('Probe process inventory:', execFileSync('pwsh', ['-NoLogo', '-NoProfile', '-Command', command], { encoding: 'utf8', timeout: 15_000, windowsHide: true }))
+    } catch (error) { console.error('Process inventory could not be read:', error.message) }
+  }
   try { await close() } finally {
     try {
       if (artifacts !== undefined) {
@@ -169,6 +202,7 @@ try {
           if (file.endsWith('.png')) await copyFile(join(scratch, file), join(artifacts, file))
         }
         await writeFile(join(artifacts, 'events.json'), `${JSON.stringify({ platform: process.platform, arch: process.arch, events }, null, 2)}\n`)
+        await writeFile(join(artifacts, 'profile-locks.json'), `${JSON.stringify(profileLocks, null, 2)}\n`)
       }
     } finally {
       if (!process.argv.includes('--keep')) await rm(scratch, { recursive: true, force: true })

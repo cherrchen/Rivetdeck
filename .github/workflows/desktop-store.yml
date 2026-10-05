@@ -70,7 +70,7 @@ jobs:
       - name: Test Store distribution
         shell: pwsh
         run: |
-          pnpm exec vitest run apps/electron/tests/windows-store.spec.ts apps/electron/tests/updater.spec.ts apps/electron/tests/atomic-path.spec.ts apps/electron/tests/runtime-installer.spec.ts scripts/desktop-workflow.spec.ts
+          pnpm exec vitest run apps/electron/tests/windows-store.spec.ts apps/electron/tests/updater.spec.ts apps/electron/tests/atomic-path.spec.ts apps/electron/tests/runtime-installer.spec.ts apps/electron/tests/profile-writer-diagnostics.spec.ts scripts/desktop-workflow.spec.ts
           if ($LASTEXITCODE -ne 0) { throw 'Store distribution tests failed.' }
           ./apps/electron/scripts/test-wack-report.ps1
 
