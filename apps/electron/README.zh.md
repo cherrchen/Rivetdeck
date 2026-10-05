@@ -81,7 +81,7 @@ Main 自有的产品文案（菜单、托盘、关于窗口、更新对话框、
 
 ## 更新
 
-打包构建默认使用 **Pre-Release** 通道，并将用户选择的通道持久化到 Electron 的用户数据目录。应用菜单和托盘菜单可以在两个通道间切换：**Pre-Release** 接收最新发布的 prerelease 或 stable release；**Stable / Release** 使用 GitHub 的最新正式 release，绝不选择 prerelease。通道选择读取 GitHub Release 元数据，识别 `v0.1.0-beta.1`、`v0.1.0-rc.3`、`v0.1.0` 等 tag；metadata 校验、语义版本比较、下载与安装仍由 `electron-updater` 负责。
+直接分发的打包构建默认使用 **Pre-Release** 通道，并将用户选择的通道持久化到 Electron 的用户数据目录。应用菜单和托盘菜单可以在两个通道间切换：**Pre-Release** 接收最新发布的 prerelease 或 stable release；**Stable / Release** 使用 GitHub 的最新正式 release，绝不选择 prerelease。通道选择读取 GitHub Release 元数据，识别 `v0.1.0-beta.1`、`v0.1.0-rc.3`、`v0.1.0` 等 tag；metadata 校验、语义版本比较、下载与安装仍由 `electron-updater` 负责。
 
 菜单会显示检查状态和下载进度，更新准备完成后提供重启入口。手动检查会报告没有更新或已开始下载。检查失败时，完整错误写入主进程日志，对话框只显示网络与重试指引。
 
@@ -92,6 +92,18 @@ Main 自有的产品文案（菜单、托盘、关于窗口、更新对话框、
 包元数据将产品名声明为 `Rivetdeck`，Electron 与 `electron-builder` 会将它用于开发环境界面、应用元数据、安装程序和可执行文件。打包后的元数据使用无 scope 的 `rivetdeck` 应用名称，因此 updater 缓存目录不会从仅供 workspace 使用的 `@dsh-electron/dsh-electron` 名称派生。包配置在 Windows 上生成允许用户选择安装目录的向导式 NSIS 安装程序，并使用带退出码检查的 7-Zip 解压 ZIP 载荷，支持超过 Windows MAX_PATH 的包成员路径，并在解压失败时拒绝安装；在 macOS 上生成 DMG 和 ZIP 产物，在 Linux 上生成 AppImage 和 DEB 产物。生成的 NSIS include 保留 Windows 原生路径分隔符，确保安装程序与卸载程序编译都能解析文件路径。release 工作流使用 GitHub 托管的原生架构 runner，为 x64 和 ARM64 构建每一种格式；每个 Windows runner 都会在上传前安装已完成的产物，检查可执行文件、runtime 和两个快捷方式，并在全新用户数据、没有托管运行环境且 registry 不可达的条件下启动已安装应用，再卸载并上传。CI 构建未签名产物，因此仓库无需配置签名凭据；需要分发可信二进制文件的维护者必须提供 `electron-builder` 支持的平台签名环境。
 
 桌面 release 在 `develop` 上使用 `v{a.b.c}-beta.{x}`，在 `main` 上使用 `v{a.b.c}-rc.{x}`，稳定版使用 `v{a.b.c}`。[`sync-upstream.yml`](../../.github/workflows/sync-upstream.yml) 将上游合并到 `develop`，准备并推送下一个 Beta commit，仅在 Desktop CI 针对该提交成功后发布其 tag。开发者在创建 `develop` 到 `main` 的发布 PR（Pull Request）前，先运行 `pnpm electron:set-version <apps/cli version>`，再运行 `pnpm install --no-frozen-lockfile`，然后提交 Electron manifest 和 lockfile。Desktop CI 会拒绝来自其他分支、使用 Beta 版本或版本与 [`apps/cli/package.json`](../cli/package.json) 不一致的发布 PR。PR 合并后，[`desktop-promote.yml`](../../.github/workflows/desktop-promote.yml) 在已准备好的 `main` 提交上创建 RC 或 Stable tag，不修改任何分支。[`desktop-release.yml`](../../.github/workflows/desktop-release.yml) 在发布安装包前校验 tag 所在分支与 package 版本。
+
+### Microsoft Store（Store-only Windows）
+
+Store 目标使用 [`windows-store.json`](windows-store.json) 中的 Partner Center 身份和独立四段包版本。初始版本为 `1.0.0.0`；桌面语义版本和 release tag 保留现有规则。包版本的首段必须非零，每段不得超过 65535，末段必须为零。每次新提交前递增 Store 版本，保持已分配的身份不变。
+
+`pnpm --filter @dsh-electron/dsh-electron prepare:store` 校验这些字段，并在 `.electron-build/store` 下生成 AppX manifest、品牌磁贴和 builder 配置。配置保留 Core 和 Network 资源，仅使用 AppX 目标，排除 NSIS 准备和 GitHub 更新元数据，并将 Store 分发标记写入打包后的 manifest。Store 构建不创建 GitHub 更新器；两个原生菜单显示 Store 更新归属，不提供通道选择或重启安装操作。Windows 包检测也会为已安装的 AppX 应用禁用 GitHub 更新。
+
+在原生 Windows 构建机上，按上方开发命令准备好上游与 Electron 构建后，`pnpm --filter @dsh-electron/dsh-electron package:store --x64` 准备运行时资源并构建 x64 提交包；ARM64 runner 使用 `--arm64`。生成的配置也支持 [`desktop-store.yml`](../../.github/workflows/desktop-store.yml) 中的直接 electron-builder 调用。此手动工作流从所选 ref 构建两种架构，校验每个包的身份和必要资源，并分别上传 `rivetdeck-store-x64` 与 `rivetdeck-store-arm64` artifact。输出独立存放于 `dist/electron-store`；工作流不发布 GitHub release，也不提交到 Partner Center。
+
+下载两个 AppX artifact，上传到 Partner Center 中的 Rivetdeck 产品。[Store 包要求](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/app-package-requirements)允许提交未签名的 AppX，并说明通过认证后的 Store 签名流程。Store 外安装需要合适的签名证书。完整信任应用能力需要 Store 审核。产品页面为 [Microsoft Store 中的 Rivetdeck](https://apps.microsoft.com/detail/9P5FQ7D2PQVQ)。
+
+提交前，AppX 编译、已安装包启动、托管运行时安装、插件操作和 Windows App Certification Kit 检查需要在原生 Windows 上验证。macOS 本地检查覆盖生成配置、manifest 输入、磁贴尺寸和更新隔离；这些检查不能确认 Store 认证或已安装 AppX 的行为。
 
 ## 运行时与安全
 

@@ -33,7 +33,8 @@ import { DesktopServices } from './desktop/services.ts'
 import { stopHarness } from './harness/process.ts'
 import { HttpHarnessTransport } from './harness/transport.ts'
 import { installDesktopIpc } from './ipc.ts'
-import { readDesktopManifest, resolveUpdateRepository } from './manifest.ts'
+import { readDesktopManifest, resolveUpdateRepository, usesStoreUpdates } from './manifest.ts'
+import { microsoftStoreUpdateMenu } from './store-update-menu.ts'
 import { RENDERER_ENTRY_URL, RENDERER_ORIGIN } from './bridge-types.ts'
 import { DesktopPreferencesStore, loadUpdateChannel, saveUpdateChannel, type UpdateChannel } from './preferences.ts'
 import { DesktopNetworkController } from './network/controller.ts'
@@ -75,7 +76,7 @@ import {
   trayIconSize,
 } from './tray.ts'
 import { createUpdater, updaterNetworkSession, type UpdaterController } from './updater.ts'
-import * as process from 'node:process'
+import process from 'node:process'
 
 type HarnessProcess = ChildProcessByStdio<null, Readable, Readable>
 
@@ -83,6 +84,7 @@ let harness: HarnessProcess | undefined
 let mainWindow: BrowserWindow | undefined
 let tray: Tray | undefined
 let updater: UpdaterController | undefined
+const storeManaged = usesStoreUpdates(readDesktopManifest(app.getAppPath()), process.windowsStore)
 let runtimes: RuntimeManager | undefined
 let ecosystemSetup: { abort: AbortController; done: Promise<void> } | undefined
 let network: DesktopNetworkController | undefined
@@ -275,8 +277,9 @@ async function relaunchDesktop(): Promise<void> {
 function installDesktopMenus(): void {
   const m = resolveDesktopMainLocale(app.getLocale()).messages
   const checkForUpdates = (): void => { void updater?.check(true) }
-  const installOrCheck = updateMenuItem(checkForUpdates)
-  const updateChannel = updateChannelMenu()
+  const updateItems = storeManaged
+    ? microsoftStoreUpdateMenu(m)
+    : [updateMenuItem(checkForUpdates), updateChannelMenu()]
   const showAbout = (): void => { void showAboutWindow(mainWindow) }
   const aboutLabel = formatDesktopMessage(m.menuAbout, { name: app.name })
   const showLabel = formatDesktopMessage(m.menuShow, { name: app.name })
@@ -285,8 +288,7 @@ function installDesktopMenus(): void {
       label: app.name,
       submenu: [
         { label: aboutLabel, click: showAbout },
-        installOrCheck,
-        updateChannel,
+        ...updateItems,
         { type: 'separator' },
         { role: 'services' },
         { type: 'separator' },
@@ -305,8 +307,7 @@ function installDesktopMenus(): void {
       label: m.menuFile,
       submenu: [
         { label: showLabel, click: showMainWindow },
-        installOrCheck,
-        updateChannel,
+        ...updateItems,
         { label: aboutLabel, click: showAbout },
         { type: 'separator' },
         { label: m.menuQuit, accelerator: 'CommandOrControl+Q', click: requestQuit },
@@ -327,8 +328,7 @@ function installDesktopMenus(): void {
   }
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: showLabel, click: showMainWindow },
-    installOrCheck,
-    updateChannel,
+    ...updateItems,
     { label: aboutLabel, click: showAbout },
     { type: 'separator' },
     { label: m.menuQuit, click: requestQuit },
@@ -442,7 +442,7 @@ if (!primaryInstance) {
       secrets: new SafeStorageSecretStore(join(userDataPath, 'network-secrets'), safeStorage),
       relaunch: relaunchDesktop,
       diagnosticFetch: async (url, signal) => {
-        const response = await updaterNetworkSession().fetch(url, { method: 'GET', redirect: 'manual', signal })
+        const response = await updaterNetworkSession(storeManaged).fetch(url, { method: 'GET', redirect: 'manual', signal })
         await response.body?.cancel()
         // HTTPS responses are inside CONNECT and can carry origin headers unchanged.
         const networkErrorCode = url.startsWith('http:') ? response.headers.get('x-dsh-network-error') : null
@@ -500,7 +500,7 @@ if (!primaryInstance) {
     await network.startRuntime(networkRuntime)
     electronProxy = new ElectronProxyApplier(app, session.defaultSession)
     const networkState = network.state()
-    if (networkState.effectiveMode !== 'default') await electronProxy.register(updaterNetworkSession(), 'updater')
+    if (networkState.effectiveMode !== 'default') await electronProxy.register(updaterNetworkSession(storeManaged), 'updater')
     await electronProxy.apply(networkState.effectiveMode, networkState.runtime.gateway, network.gatewayForUpdater())
     const basePath = process.env.PATH ?? ''
     const runtimeSession = session.fromPartition('runtime-downloads')
@@ -577,8 +577,9 @@ if (!primaryInstance) {
       }),
     }
     const repository = resolveUpdateRepository(readDesktopManifest(app.getAppPath()))
-    if (repository === undefined) throw new Error('The packaged GitHub update repository is missing.')
-    updater = createUpdater({
+    if (!storeManaged && repository === undefined) throw new Error('The packaged GitHub update repository is missing.')
+    if (repository !== undefined) updater = createUpdater({
+      storeManaged,
       channel: loadUpdateChannel(userDataPath),
       getWindow: () => mainWindow,
       onChannelChanged: (channel) => {
@@ -592,7 +593,7 @@ if (!primaryInstance) {
       useManagedSession: networkState.effectiveMode !== 'default',
     })
     installDesktopMenus()
-    void updater.check(false)
+    void updater?.check(false)
   }).catch(async (error: unknown) => {
     const message = error instanceof Error ? error.message : String(error)
     dialog.showErrorBox(`${app.name} failed to start`, message)

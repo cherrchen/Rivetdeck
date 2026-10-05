@@ -3,7 +3,7 @@ import type {
   MessageBoxOptions,
   MessageBoxReturnValue,
 } from 'electron'
-import { app, dialog, Notification } from 'electron'
+import { app, dialog, Notification, session } from 'electron'
 import electronUpdater from 'electron-updater'
 import {
   formatDesktopMessage,
@@ -12,8 +12,6 @@ import {
 } from './locale.ts'
 import type { UpdateChannel } from './preferences.ts'
 import { resolveUpdateFeed, type UpdateRepository } from './update-feed.ts'
-
-const { autoUpdater } = electronUpdater
 
 /** User-visible updater lifecycle represented in desktop menus. */
 type UpdaterState = 'idle' | 'checking' | 'downloading' | 'downloaded' | 'error'
@@ -28,6 +26,7 @@ export interface UpdaterController {
 }
 
 interface UpdaterOptions {
+  storeManaged?: boolean
   channel: UpdateChannel
   getWindow: () => BrowserWindow | undefined
   onChannelChanged: (channel: UpdateChannel) => void
@@ -38,13 +37,25 @@ interface UpdaterOptions {
   useManagedSession?: boolean
 }
 
-/** The updater's metadata and download requests share this Electron Session. */
-export function updaterNetworkSession(): Electron.Session {
-  return autoUpdater.netSession
+/**
+ * Resolve networking without constructing a GitHub updater for Store artifacts.
+ * @param storeManaged - Whether the application uses Store-managed updates.
+ * @returns Updater Session, or an independent diagnostic Session for Store builds.
+ */
+export function updaterNetworkSession(storeManaged = false): Electron.Session {
+  return storeManaged || process.windowsStore
+    ? session.fromPartition('rivetdeck-network-diagnostics')
+    : electronUpdater.autoUpdater.netSession
 }
 
-/** Configure GitHub release discovery, background downloads, and manual checks. */
-export function createUpdater(options: UpdaterOptions): UpdaterController {
+/**
+ * Configure GitHub release discovery and installation for direct distribution.
+ * @param options - Network, presentation, preferences, and installation callbacks.
+ * @returns Controller, or undefined for Store-managed builds without accessing electron-updater.
+ */
+export function createUpdater(options: UpdaterOptions): UpdaterController | undefined {
+  if (options.storeManaged === true || process.windowsStore) return undefined
+  const { autoUpdater } = electronUpdater
   let channel = options.channel
   let state: UpdaterState = 'idle'
   let progress: number | undefined

@@ -37,7 +37,9 @@
     "start": "pnpm run build && pnpm run prepare:core && pnpm run prepare:network-runtime && env -u ELECTRON_RUN_AS_NODE electron .",
     "test": "pnpm run build:runtime-plugins && vitest run --root ../.. apps/electron/tests",
     "test:ownership": "vitest run --config vitest.ownership.config.ts",
-    "prepare:core": "node ./scripts/toolchains/prepare-core.mjs"
+    "prepare:core": "node ./scripts/toolchains/prepare-core.mjs",
+    "prepare:store": "node ./scripts/prepare-windows-store.mjs",
+    "package:store": "pnpm run prepare:store && pnpm run prepare:core && pnpm run prepare:network-runtime && node ./scripts/write-build-info.mjs && electron-builder --config .electron-build/store/builder.json --win appx --publish never"
   },
   "dependencies": {
     "@deepseek-ai/cordis": "workspace:^",

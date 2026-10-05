@@ -6,6 +6,27 @@ import { describe, expect, it } from 'vitest'
 const root = resolve(import.meta.dirname, '..')
 
 describe('Desktop synchronization and release workflows', () => {
+  it('builds Store-only AppX artifacts on native runners without publishing a GitHub release', () => {
+    const store = loadWorkflow('.github/workflows/desktop-store.yml')
+    expect(store.on).toEqual({ workflow_dispatch: null })
+    expect(store.permissions).toEqual({ contents: 'read' })
+    const job = workflowJob(store, 'package')
+    expect(job.strategy).toMatchObject({ matrix: { include: [
+      { runner: 'windows-latest', arch: 'x64' },
+      { runner: 'windows-11-arm', arch: 'arm64' },
+    ] } })
+    if (!Array.isArray(job.steps)) throw new TypeError('Store packaging must define steps')
+    const steps = job.steps.filter(isRecord)
+    const build = steps.find(step => step.name === 'Build unsigned Store package')
+    expect(build?.run).toContain('--config .electron-build/store/builder.json --win appx --${{ matrix.arch }} --publish never')
+    const verify = steps.findIndex(step => step.name === 'Verify Store package contents')
+    const upload = steps.findIndex(step => step.uses === 'actions/upload-artifact@v4')
+    expect(verify).toBeGreaterThan(steps.indexOf(build!))
+    expect(upload).toBeGreaterThan(verify)
+    expect(steps[upload]).toMatchObject({ with: { path: 'dist/electron-store/*.appx', 'if-no-files-found': 'error' } })
+    expect(steps.map(step => step.run).join('\n')).not.toMatch(/gh release|--win nsis/)
+  })
+
   it('assigns upstream and downstream workflow paths to their repository owners', () => {
     const attributes = readFileSync(resolve(root, '.gitattributes'), 'utf8')
 

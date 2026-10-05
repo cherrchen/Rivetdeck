@@ -1,0 +1,88 @@
+name: Desktop Microsoft Store packages
+run-name: Store submission packages (${{ github.ref_name }})
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-store-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DSH_TELEMETRY_DISABLED: '1'
+  CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+jobs:
+  package:
+    name: Store AppX ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            arch: x64
+          - runner: windows-11-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Fetch pinned upstream audit baseline
+        run: git fetch --depth=1 --no-tags https://github.com/deepseek-ai/deepseek-harness.git refs/tags/dsh-v0.2.0-rc.2:refs/tags/dsh-v0.2.0-rc.2
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare Store identity and assets
+        run: pnpm --filter @dsh-electron/dsh-electron prepare:store
+
+      - name: Build upstream application
+        run: pnpm run build
+
+      - name: Compile Electron application
+        run: pnpm --filter @dsh-electron/dsh-electron build
+
+      - name: Test Store distribution
+        run: pnpm exec vitest run apps/electron/tests/windows-store.spec.ts apps/electron/tests/updater.spec.ts scripts/desktop-workflow.spec.ts
+
+      - name: Prepare Core Host executor
+        env:
+          DSH_ELECTRON_TARGET_ARCH: ${{ matrix.arch }}
+          DSH_ELECTRON_TARGET_PLATFORM: win32
+        run: pnpm --filter @dsh-electron/dsh-electron prepare:core
+
+      - name: Prepare Network Runtime
+        run: pnpm --filter @dsh-electron/dsh-electron prepare:network-runtime
+
+      - name: Write About build identity
+        env:
+          RIVETDECK_BUILD: ${{ github.run_number }}
+          RIVETDECK_COMMIT: ${{ github.sha }}
+        run: node apps/electron/scripts/write-build-info.mjs
+
+      - name: Build unsigned Store package
+        run: pnpm --filter @dsh-electron/dsh-electron exec electron-builder --config .electron-build/store/builder.json --win appx --${{ matrix.arch }} --publish never
+
+      - name: Verify Store package contents
+        shell: pwsh
+        run: |
+          $packages = @(Get-ChildItem "dist/electron-store/*-${{ matrix.arch }}.appx")
+          if ($packages.Count -ne 1) { throw 'Expected exactly one Store package for this architecture.' }
+          ./apps/electron/scripts/verify-windows-store.ps1 -PackagePath $packages[0].FullName -Architecture '${{ matrix.arch }}'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rivetdeck-store-${{ matrix.arch }}
+          path: dist/electron-store/*.appx
+          if-no-files-found: error
+          retention-days: 14
