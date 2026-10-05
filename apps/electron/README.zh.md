@@ -99,11 +99,11 @@ Store 目标使用 [`windows-store.json`](windows-store.json) 中的 Partner Cen
 
 `pnpm --filter @dsh-electron/dsh-electron prepare:store` 校验这些字段，并在 `.electron-build/store` 下生成 AppX manifest、品牌磁贴和 builder 配置。配置保留 Core 和 Network 资源，仅使用 AppX 目标，排除 NSIS 准备和 GitHub 更新元数据，并将 Store 分发标记写入打包后的 manifest。Store 构建不创建 GitHub 更新器；两个原生菜单显示 Store 更新归属，不提供通道选择或重启安装操作。Windows 包检测也会为已安装的 AppX 应用禁用 GitHub 更新。
 
-在原生 Windows 构建机上，按上方开发命令准备好上游与 Electron 构建后，`pnpm --filter @dsh-electron/dsh-electron package:store --x64` 准备运行时资源并构建 x64 提交包；ARM64 runner 使用 `--arm64`。生成的配置也支持 [`desktop-store.yml`](../../.github/workflows/desktop-store.yml) 中的直接 electron-builder 调用。此手动工作流从所选 ref 构建两种架构，校验每个包的身份和必要资源，并分别上传 `rivetdeck-store-x64` 与 `rivetdeck-store-arm64` artifact。输出独立存放于 `dist/electron-store`；工作流不发布 GitHub release，也不提交到 Partner Center。
+在原生 Windows 构建机上，按上方开发命令准备好上游与 Electron 构建后，`pnpm --filter @dsh-electron/dsh-electron package:store --x64` 准备运行时资源并构建 x64 提交包；ARM64 runner 使用 `--arm64`。生成的配置也支持 [`desktop-store.yml`](../../.github/workflows/desktop-store.yml) 中的直接 electron-builder 调用。工作流由手动触发或 `feat/microsoft-store-*` 分支推送触发，构建两种架构，校验每个包的身份和必要资源，并分别上传 `rivetdeck-store-x64` 与 `rivetdeck-store-arm64` artifact。输出独立存放于 `dist/electron-store`；工作流不发布 GitHub release，也不提交到 Partner Center。
 
 下载两个 AppX artifact，上传到 Partner Center 中的 Rivetdeck 产品。[Store 包要求](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/app-package-requirements)允许提交未签名的 AppX，并说明通过认证后的 Store 签名流程。Store 外安装需要合适的签名证书。完整信任应用能力需要 Store 审核。产品页面为 [Microsoft Store 中的 Rivetdeck](https://apps.microsoft.com/detail/9P5FQ7D2PQVQ)。
 
-提交前，AppX 编译、已安装包启动、托管运行时安装、插件操作和 Windows App Certification Kit 检查需要在原生 Windows 上验证。macOS 本地检查覆盖生成配置、manifest 输入、磁贴尺寸和更新隔离；这些检查不能确认 Store 认证或已安装 AppX 的行为。
+Windows 工作流用临时测试证书签名包副本，安装后检查包身份和 Store-only 菜单，执行 Core 插件操作与托管运行时安装，运行 Windows App Certification Kit（WACK），最后卸载。提交 artifact 保持未签名。验证报告单独上传；缺少 WACK 或 runner 位于 Session 0 时，验证明确失败。WACK 属于预检，Partner Center 认证仍需独立审核。macOS 本地检查覆盖配置、manifest 输入、磁贴尺寸和更新隔离。
 
 ## 运行时与安全
 

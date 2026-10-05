@@ -180,7 +180,7 @@ pnpm install --no-frozen-lockfile   # when lockfile must follow manifest changes
 | [`sync-upstream.yml`](.github/workflows/sync-upstream.yml) | Schedule, dispatch | Merge upstream → `develop` when upstream changed; publish Beta tag |
 |[`desktop-ci.yml`](.github/workflows/desktop-ci.yml)|Push/PR to `develop`, push to `main`|Test and compile without packaging, plus the supervised Host startup path on Windows|
 | [`desktop-release.yml`](.github/workflows/desktop-release.yml) | Tag push, dispatch | Package and publish installers for all platforms |
-| [`desktop-store.yml`](.github/workflows/desktop-store.yml) | Dispatch | Build and verify unsigned x64/ARM64 AppX submission artifacts; Partner Center submission is manual |
+| [`desktop-store.yml`](.github/workflows/desktop-store.yml) | Dispatch / Store feature push | Build unsigned x64/ARM64 AppX artifacts; qualify signed copies through installation, runtime smokes, and WACK; Partner Center submission is manual |
 | [`desktop-promote.yml`](.github/workflows/desktop-promote.yml) | Push to `main` | Create RC/Stable tags matching upstream version |
 
 All other workflow files are retained from upstream for clean synchronization but are not part of the downstream CI/CD policy.

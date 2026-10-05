@@ -38,6 +38,25 @@ async function close() {
 async function smoke() {
   let page = await launch()
   const resources = await application.evaluate(() => process.resourcesPath)
+  if (process.argv.includes('--store')) {
+    const store = await application.evaluate(({ Menu }) => {
+      const items = []
+      const collect = menu => {
+        for (const item of menu.items) {
+          items.push({ label: item.label, enabled: item.enabled })
+          if (item.submenu) collect(item.submenu)
+        }
+      }
+      collect(Menu.getApplicationMenu())
+      return { windowsStore: process.windowsStore, items }
+    })
+    assert.equal(store.windowsStore, true, 'Installed AppX must run with Windows package identity')
+    const storeUpdates = store.items.filter(item => /Updates managed by Microsoft Store|更新由 Microsoft Store 管理/.test(item.label))
+    assert.equal(storeUpdates.length, 1)
+    assert.equal(storeUpdates[0].enabled, false)
+    assert.equal(store.items.some(item => /Check for Updates|Update Channel|Restart.*Install|检查更新|更新通道|重启.*安装/.test(item.label)), false)
+    events.push('Installed AppX has Windows package identity and Store-only update menu')
+  }
   const preferences = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences())
   assert.equal(preferences.nodeIntegration, false)
   assert.equal(preferences.contextIsolation, true)

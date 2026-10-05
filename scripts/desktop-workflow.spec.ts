@@ -8,7 +8,7 @@ const root = resolve(import.meta.dirname, '..')
 describe('Desktop synchronization and release workflows', () => {
   it('builds Store-only AppX artifacts on native runners without publishing a GitHub release', () => {
     const store = loadWorkflow('.github/workflows/desktop-store.yml')
-    expect(store.on).toEqual({ workflow_dispatch: null })
+    expect(store.on).toMatchObject({ workflow_dispatch: null, push: { branches: ['feat/microsoft-store-*'] } })
     expect(store.permissions).toEqual({ contents: 'read' })
     const job = workflowJob(store, 'package')
     expect(job.strategy).toMatchObject({ matrix: { include: [
@@ -23,6 +23,10 @@ describe('Desktop synchronization and release workflows', () => {
     const upload = steps.findIndex(step => step.uses === 'actions/upload-artifact@v4')
     expect(verify).toBeGreaterThan(steps.indexOf(build!))
     expect(upload).toBeGreaterThan(verify)
+    const qualification = steps.find(step => step.name === 'Install, launch, and qualify Store package')
+    expect(qualification?.run).toContain('smoke-windows-store.ps1')
+    expect(qualification?.run).toContain('-RunCertificationKit')
+    expect(steps[upload]?.if).toBe("always() && steps.contents.outcome == 'success'")
     expect(steps[upload]).toMatchObject({ with: { path: 'dist/electron-store/*.appx', 'if-no-files-found': 'error' } })
     expect(steps.map(step => step.run).join('\n')).not.toMatch(/gh release|--win nsis/)
   })

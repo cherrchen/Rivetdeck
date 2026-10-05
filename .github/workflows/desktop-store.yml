@@ -3,6 +3,12 @@ run-name: Store submission packages (${{ github.ref_name }})
 
 on:
   workflow_dispatch:
+  push:
+    branches: ['feat/microsoft-store-*']
+    paths:
+      - 'apps/electron/**'
+      - '.github/workflows/desktop-store.yml'
+      - 'scripts/desktop-workflow.spec.ts'
 
 concurrency:
   group: desktop-store-${{ github.ref }}
@@ -27,6 +33,7 @@ jobs:
           - runner: windows-11-arm
             arch: arm64
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v6
 
@@ -74,15 +81,33 @@ jobs:
         run: pnpm --filter @dsh-electron/dsh-electron exec electron-builder --config .electron-build/store/builder.json --win appx --${{ matrix.arch }} --publish never
 
       - name: Verify Store package contents
+        id: contents
         shell: pwsh
         run: |
           $packages = @(Get-ChildItem "dist/electron-store/*-${{ matrix.arch }}.appx")
           if ($packages.Count -ne 1) { throw 'Expected exactly one Store package for this architecture.' }
           ./apps/electron/scripts/verify-windows-store.ps1 -PackagePath $packages[0].FullName -Architecture '${{ matrix.arch }}'
 
+      - name: Install, launch, and qualify Store package
+        timeout-minutes: 30
+        shell: pwsh
+        run: |
+          $package = Get-Item "dist/electron-store/*-${{ matrix.arch }}.appx"
+          ./apps/electron/scripts/smoke-windows-store.ps1 -PackagePath $package.FullName -Architecture '${{ matrix.arch }}' -ReportDirectory "$env:RUNNER_TEMP/store-qualification" -RunCertificationKit
+
       - uses: actions/upload-artifact@v4
+        if: always() && steps.contents.outcome == 'success'
         with:
           name: rivetdeck-store-${{ matrix.arch }}
           path: dist/electron-store/*.appx
           if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Store qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rivetdeck-store-qualification-${{ matrix.arch }}
+          path: ${{ runner.temp }}/store-qualification/
+          if-no-files-found: warn
           retention-days: 14
