@@ -2,7 +2,11 @@
 param([Parameter(Mandatory = $true)][string]$ReportDirectory)
 $ErrorActionPreference = 'Stop'
 $appCert = "${env:ProgramFiles(x86)}/Windows Kits/10/App Certification Kit/appcert.exe"
-if (Test-Path $appCert) { Write-Host 'Windows App Certification Kit is already installed.'; return }
+$minimumVersion = [version]'10.0.26100.9457'
+if ((Test-Path $appCert) -and (Get-Item $appCert).VersionInfo.FileVersionRaw -ge $minimumVersion) {
+  Write-Host 'Windows App Certification Kit meets the selected SDK version.'
+  return
+}
 New-Item -ItemType Directory -Path $ReportDirectory -Force | Out-Null
 $installer = Join-Path $ReportDirectory 'winsdksetup.exe'
 $process = $null
@@ -17,6 +21,7 @@ try {
   if (-not $process.WaitForExit(600000)) { $process.Kill($true); $process.WaitForExit(); throw 'Windows SDK certification-tool installation timed out.' }
   if ($process.ExitCode -notin @(0, 3010)) { throw "Windows SDK installation failed: exit $($process.ExitCode). See sdk-install.log." }
   if (-not (Test-Path $appCert)) { throw 'Windows SDK installation did not provide App Certification Kit.' }
+  @{ version = (Get-Item $appCert).VersionInfo.FileVersion; path = $appCert } | ConvertTo-Json | Set-Content (Join-Path $ReportDirectory 'installed-toolkit.json')
   Write-Host "WACK_INSTALLED $appCert"
 } finally {
   if ($process) { $process.Dispose() }

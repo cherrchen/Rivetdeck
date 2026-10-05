@@ -3,9 +3,12 @@ param(
   [Parameter(Mandatory = $true)][string]$PackagePath,
   [Parameter(Mandatory = $true)][ValidateSet('x64', 'arm64')][string]$Architecture,
   [Parameter(Mandatory = $true)][string]$ReportDirectory,
-  [switch]$RunCertificationKit
+  [switch]$RunCertificationKit,
+  [switch]$CertificationOnly
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'wack-report.ps1')
+if ($CertificationOnly -and -not $RunCertificationKit) { throw 'CertificationOnly requires RunCertificationKit.' }
 # Bound each owned process tree so a stuck application shutdown cannot suppress later checks.
 function Invoke-QualificationNode([string[]]$Arguments, [int]$TimeoutSeconds) {
   $start = [Diagnostics.ProcessStartInfo]::new((Get-Command node).Source)
@@ -48,12 +51,15 @@ $report = [ordered]@{
   sha256 = $originalHash
   os = [Environment]::OSVersion.VersionString
   sessionId = (Get-Process -Id $PID).SessionId
+  purpose = $(if ($CertificationOnly) { 'certification' } else { 'application' })
   installed = $false
-  startup = $false
-  plugins = $false
-  runtimes = $false
   wack = 'not-run'
   uninstalled = $false
+}
+if (-not $CertificationOnly) {
+  $report.startup = $false
+  $report.plugins = $false
+  $report.runtimes = $false
 }
 $certificate = $null
 $trusted = $null
@@ -78,19 +84,21 @@ try {
   $report.packageFullName = $installed.PackageFullName
   $application = Join-Path $installed.InstallLocation 'app/Rivetdeck.exe'
   $failures = [Collections.Generic.List[string]]::new()
-  $code = Invoke-QualificationNode -Arguments @((Join-Path $PSScriptRoot 'smoke-runtime-setup.mjs'), $application, '--offline', '--startup-only', '--store', '--artifacts', (Join-Path $ReportDirectory 'startup')) -TimeoutSeconds 300
-  $report.startupProcess = $code
-  $report.startup = -not $code.timedOut -and $code.exitCode -eq 0
-  if (-not $report.startup) { $failures.Add('Installed AppX startup smoke failed.') }
-  $code = Invoke-QualificationNode -Arguments @((Join-Path $PSScriptRoot 'smoke-core-plugins.mjs'), (Join-Path $installed.InstallLocation 'app/resources/core-runtime/node.exe'), (Join-Path $installed.InstallLocation 'app/resources/app'), '--store-executable', $application) -TimeoutSeconds 300
-  $report.pluginsProcess = $code
-  $report.plugins = -not $code.timedOut -and $code.exitCode -eq 0
-  if (-not $report.plugins) { $failures.Add('Installed AppX Core plugin smoke failed.') }
-  $code = Invoke-QualificationNode -Arguments @((Join-Path $PSScriptRoot 'smoke-runtime-setup.mjs'), $application, '--install', '--store', '--artifacts', (Join-Path $ReportDirectory 'runtimes')) -TimeoutSeconds 1200
-  $report.runtimesProcess = $code
-  $report.runtimes = -not $code.timedOut -and $code.exitCode -eq 0
-  if (-not $report.runtimes) { $failures.Add('Installed AppX managed runtime lifecycle failed.') }
-  if ($failures.Count -eq 0) { Write-Host "STORE_INSTALLATION_VERIFIED $Architecture $($identity.version)" }
+  if (-not $CertificationOnly) {
+    $code = Invoke-QualificationNode -Arguments @((Join-Path $PSScriptRoot 'smoke-runtime-setup.mjs'), $application, '--offline', '--startup-only', '--store', '--artifacts', (Join-Path $ReportDirectory 'startup')) -TimeoutSeconds 300
+    $report.startupProcess = $code
+    $report.startup = -not $code.timedOut -and $code.exitCode -eq 0
+    if (-not $report.startup) { $failures.Add('Installed AppX startup smoke failed.') }
+    $code = Invoke-QualificationNode -Arguments @((Join-Path $PSScriptRoot 'smoke-core-plugins.mjs'), (Join-Path $installed.InstallLocation 'app/resources/core-runtime/node.exe'), (Join-Path $installed.InstallLocation 'app/resources/app'), '--store-executable', $application) -TimeoutSeconds 300
+    $report.pluginsProcess = $code
+    $report.plugins = -not $code.timedOut -and $code.exitCode -eq 0
+    if (-not $report.plugins) { $failures.Add('Installed AppX Core plugin smoke failed.') }
+    $code = Invoke-QualificationNode -Arguments @((Join-Path $PSScriptRoot 'smoke-runtime-setup.mjs'), $application, '--install', '--store', '--artifacts', (Join-Path $ReportDirectory 'runtimes')) -TimeoutSeconds 1200
+    $report.runtimesProcess = $code
+    $report.runtimes = -not $code.timedOut -and $code.exitCode -eq 0
+    if (-not $report.runtimes) { $failures.Add('Installed AppX managed runtime lifecycle failed.') }
+    if ($failures.Count -eq 0) { Write-Host "STORE_INSTALLATION_VERIFIED $Architecture $($identity.version)" }
+  }
   if ($RunCertificationKit) {
     try {
       $appCert = "${env:ProgramFiles(x86)}/Windows Kits/10/App Certification Kit/appcert.exe"
@@ -106,7 +114,10 @@ try {
       if (-not (Test-Path $wackReport)) { throw 'WACK did not produce an XML report.' }
       [xml]$results = Get-Content $wackReport -Raw
       $report.wack = $results.REPORT.OVERALL_RESULT
-      if ($report.wackExitCode -ne 0 -or $report.wack -notmatch '^(PASS|PASSED)$') { throw "WACK failed: $($report.wack), exit $($report.wackExitCode). See wack.xml." }
+      $assessment = Get-StoreWackAssessment $results
+      $report.wackAssessment = $assessment
+      if ($report.wackExitCode -ne 0 -or -not $assessment.requiredPassed) { throw "WACK required checks did not pass: $($report.wack), exit $($report.wackExitCode). See wack.xml." }
+      Write-Host "WACK_REQUIRED_CHECKS_VERIFIED: $($assessment.requiredCount) required checks; $($assessment.advisories.Count) optional advisories; overall $($report.wack)."
     } catch { $failures.Add($_.Exception.Message) }
   }
   if ($failures.Count -gt 0) { throw ($failures -join ' ') }
@@ -126,6 +137,6 @@ try {
     if ($trusted) { Remove-Item "Cert:\LocalMachine\TrustedPeople\$($trusted.Thumbprint)" }
     if ($certificate) { Remove-Item "Cert:\CurrentUser\My\$($certificate.Thumbprint)" -DeleteKey }
     Remove-Item $scratch -Recurse -Force
-    $report | ConvertTo-Json | Set-Content (Join-Path $ReportDirectory 'installation.json')
+    $report | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $ReportDirectory 'installation.json')
   }
 }

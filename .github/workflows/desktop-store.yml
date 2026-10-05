@@ -68,7 +68,11 @@ jobs:
         run: pnpm --filter @dsh-electron/dsh-electron build
 
       - name: Test Store distribution
-        run: pnpm exec vitest run apps/electron/tests/windows-store.spec.ts apps/electron/tests/updater.spec.ts apps/electron/tests/atomic-path.spec.ts apps/electron/tests/runtime-installer.spec.ts scripts/desktop-workflow.spec.ts
+        shell: pwsh
+        run: |
+          pnpm exec vitest run apps/electron/tests/windows-store.spec.ts apps/electron/tests/updater.spec.ts apps/electron/tests/atomic-path.spec.ts apps/electron/tests/runtime-installer.spec.ts scripts/desktop-workflow.spec.ts
+          if ($LASTEXITCODE -ne 0) { throw 'Store distribution tests failed.' }
+          ./apps/electron/scripts/test-wack-report.ps1
 
       - name: Prepare Core Host executor
         if: ${{ !inputs.package_run_id }}
@@ -117,18 +121,34 @@ jobs:
           if ($packages.Count -ne 1) { throw 'Expected exactly one Store package for this architecture.' }
           ./apps/electron/scripts/verify-windows-store.ps1 -PackagePath $packages[0].FullName -Architecture '${{ matrix.arch }}'
 
-      - name: Prepare Windows App Certification Kit
-        continue-on-error: true
-        timeout-minutes: 15
-        shell: pwsh
-        run: ./apps/electron/scripts/prepare-wack.ps1 -ReportDirectory "$env:RUNNER_TEMP/store-qualification/wack-setup"
-
-      - name: Install, launch, and qualify Store package
+      - name: Install, launch, and qualify Store application
         timeout-minutes: 60
         shell: pwsh
         run: |
           $package = Get-Item "dist/electron-store/*-${{ matrix.arch }}.appx"
-          ./apps/electron/scripts/smoke-windows-store.ps1 -PackagePath $package.FullName -Architecture '${{ matrix.arch }}' -ReportDirectory "$env:RUNNER_TEMP/store-qualification" -RunCertificationKit
+          ./apps/electron/scripts/smoke-windows-store.ps1 -PackagePath $package.FullName -Architecture '${{ matrix.arch }}' -ReportDirectory "$env:RUNNER_TEMP/store-qualification"
+
+      - name: Record ARM64 certification-tool limitation
+        if: always() && matrix.arch == 'arm64' && steps.contents.outcome == 'success'
+        shell: pwsh
+        run: |
+          @{ status = 'unsupported-host'; architecture = 'arm64'; reason = 'Windows SDK 10.0.26100.9457 excludes WACK executable components on ARM64 hosts. Native application tests run separately; Partner Center certification remains pending.' } | ConvertTo-Json | Set-Content "$env:RUNNER_TEMP/store-qualification/certification-status.json"
+          Write-Host 'ARM64 WACK not run: selected SDK does not support this host architecture.'
+
+      - name: Prepare Windows App Certification Kit
+        if: always() && matrix.arch == 'x64' && steps.contents.outcome == 'success'
+        id: toolkit
+        timeout-minutes: 15
+        shell: pwsh
+        run: ./apps/electron/scripts/prepare-wack.ps1 -ReportDirectory "$env:RUNNER_TEMP/store-qualification/wack-setup"
+
+      - name: Run Windows App Certification Kit
+        if: always() && matrix.arch == 'x64' && steps.toolkit.outcome == 'success'
+        timeout-minutes: 30
+        shell: pwsh
+        run: |
+          $package = Get-Item "dist/electron-store/*-${{ matrix.arch }}.appx"
+          ./apps/electron/scripts/smoke-windows-store.ps1 -PackagePath $package.FullName -Architecture '${{ matrix.arch }}' -ReportDirectory "$env:RUNNER_TEMP/store-qualification/certification" -RunCertificationKit -CertificationOnly
 
       - uses: actions/upload-artifact@v4
         if: always() && steps.contents.outcome == 'success'
