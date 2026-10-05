@@ -6,6 +6,7 @@ import {
   allowsClipboardWrite,
   contextMenuTemplate,
   desktopWindowChrome,
+  desktopWindowTitle,
   directoryOpenDialogOptions,
   isAllowedExternalUrl,
   NATIVE_CONTROL_ROW_HEIGHT,
@@ -24,6 +25,14 @@ import { prepareHostRuntimeOverlay } from '../src/runtime-overlay.ts'
 import { HttpHarnessTransport } from '../src/harness/transport.ts'
 
 describe('Electron desktop integration', () => {
+  it('rewrites upstream local-build product titles onto the Desktop product name', () => {
+    expect(desktopWindowTitle('DSH 本地构建', 'Rivetdeck')).toBe('Rivetdeck')
+    expect(desktopWindowTitle('DSH Local Build', 'Rivetdeck')).toBe('Rivetdeck')
+    expect(desktopWindowTitle('你好 — DSH 本地构建', 'Rivetdeck')).toBe('你好 — Rivetdeck')
+    expect(desktopWindowTitle('Hello — DSH Local Build', 'Rivetdeck')).toBe('Hello — Rivetdeck')
+    expect(desktopWindowTitle('你好 — Rivetdeck', 'Rivetdeck')).toBe('你好 — Rivetdeck')
+  })
+
   it('keeps macOS traffic lights inside the integrated chrome row', () => {
     expect(desktopWindowChrome('darwin')).toEqual({
       titleBarStyle: 'hidden',

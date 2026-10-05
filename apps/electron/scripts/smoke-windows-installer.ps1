@@ -6,7 +6,7 @@ param(
   [ValidateSet('x64', 'arm64')]
   [string]$Architecture,
 
-  [string]$ShortcutName = 'DeepSeek Harness'
+  [string]$ShortcutName = 'Rivetdeck'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -15,7 +15,7 @@ $installer = (Resolve-Path -LiteralPath $InstallerPath -ErrorAction Stop).Path
 $installDirectory = Join-Path $env:RUNNER_TEMP "dsh-installer-smoke-$Architecture"
 # Exercise package members beyond MAX_PATH while keeping the launcher path short enough for NSIS.
 $installDirectory = Join-Path $installDirectory ('deep-installation-directory-' * 3)
-$installDirectory = Join-Path $installDirectory 'DeepSeek Harness'
+$installDirectory = Join-Path $installDirectory 'Rivetdeck'
 if (Test-Path -LiteralPath $installDirectory) {
   throw "Installer smoke directory already exists: $installDirectory"
 }
@@ -29,9 +29,9 @@ if ($install.ExitCode -ne 0) {
   throw "Installer exited with code $($install.ExitCode)."
 }
 
-$application = Join-Path $installDirectory 'DeepSeek Harness.exe'
+$application = Join-Path $installDirectory 'Rivetdeck.exe'
 $manifest = Join-Path $installDirectory 'resources\app\package.json'
-$uninstaller = Join-Path $installDirectory 'Uninstall DeepSeek Harness.exe'
+$uninstaller = Join-Path $installDirectory 'Uninstall Rivetdeck.exe'
 try {
   $requiredFiles = @(
     $application,
@@ -60,8 +60,8 @@ try {
   }
 
   $packagedManifest = Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json
-  if ($packagedManifest.name -ne 'deepseek-harness-desktop') {
-    throw "Packaged application name is '$($packagedManifest.name)', expected 'deepseek-harness-desktop'."
+  if ($packagedManifest.name -ne 'rivetdeck') {
+    throw "Packaged application name is '$($packagedManifest.name)', expected 'rivetdeck'."
   }
 
   $desktopShortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) "$ShortcutName.lnk"

@@ -63,7 +63,7 @@ interface AboutDocumentOptions {
 /** Build the self-contained about document loaded into its sandboxed window. */
 export function aboutDocument(options: AboutDocumentOptions): string {
   const icon = options.iconDataUrl === undefined
-    ? '<div class="icon iconFallback" aria-hidden="true">DS</div>'
+    ? '<div class="icon iconFallback" aria-hidden="true">R</div>'
     : `<img class="icon" src="${escapeAttribute(options.iconDataUrl)}" alt="">`
   const project = options.projectUrl === undefined
     ? ''
@@ -85,7 +85,7 @@ h1 { margin: 0; font-size: 25px; line-height: 1.2; letter-spacing: -0.025em; }
 p { max-width: 300px; margin: 0; color: light-dark(#555d6c, #b9bfca); font-size: 13px; line-height: 1.65; }
 a { margin-top: 20px; color: light-dark(#2455e6, #86a3ff); font-size: 13px; text-underline-offset: 3px; -webkit-app-region: no-drag; }
 a:focus-visible { outline: 2px solid #3964fe; outline-offset: 4px; border-radius: 2px; }
-</style></head><body><div class="titlebar">About</div><main>${icon}<h1>${escapeHtml(options.applicationName)}</h1><div class="version">Version ${escapeHtml(options.version)}</div><div class="rule"></div><p>Desktop application for running DeepSeek Harness with its local Web interface.</p>${project}</main></body></html>`
+</style></head><body><div class="titlebar">About</div><main>${icon}<h1>${escapeHtml(options.applicationName)}</h1><div class="version">Version ${escapeHtml(options.version)}</div><div class="rule"></div><p>Desktop application built on DeepSeek Harness with its local Web interface.</p>${project}</main></body></html>`
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
 }
 

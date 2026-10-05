@@ -2,16 +2,16 @@
 # section, a hash of its English and Chinese blocks outside code blocks and generated regions.
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/electron/architecture.md
-/deepseek-harness-desktop-architecture-and-development-guide:
-  en: dc214dbce7722a8b
-  zh: c7db3738e4fad0d2
-/deepseek-harness-desktop-architecture-and-development-guide/1-purpose:
-  en: d473b100db109360
-  zh: 41946883aa9f4c43
-/deepseek-harness-desktop-architecture-and-development-guide/2-normative-language:
+/rivetdeck-architecture-and-development-guide:
+  en: 38fd989591997427
+  zh: 8b274dfdc7f029d5
+/rivetdeck-architecture-and-development-guide/1-purpose:
+  en: db2ae5da2e9e6930
+  zh: ffb69793969b7e1f
+/rivetdeck-architecture-and-development-guide/2-normative-language:
   en: dee1fcd5596e74ff
   zh: 70db1d54e33ae397
-/deepseek-harness-desktop-architecture-and-development-guide/3-repository-ownership-boundary:
+/rivetdeck-architecture-and-development-guide/3-repository-ownership-boundary:
   en: 1235d925487c976c
   zh: 1fa1d090bae201fc
 /part-i-current-architecture:

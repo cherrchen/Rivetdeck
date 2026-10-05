@@ -1,7 +1,7 @@
 {
   "name": "@dsh-electron/dsh-electron",
-  "productName": "DeepSeek Harness",
-  "description": "Electron desktop shell for DeepSeek Harness",
+  "productName": "Rivetdeck",
+  "description": "Electron desktop shell built on DeepSeek Harness",
   "version": "0.2.0-beta.1",
   "private": true,
   "homepage": "https://github.com/cherrchen/deepseek-harness-electron",
@@ -194,12 +194,12 @@
     "vitest": "^4.1.8"
   },
   "build": {
-    "appId": "ai.deepseek.harness.desktop",
+    "appId": "app.rivetdeck.desktop",
     "asar": false,
     "extraMetadata": {
-      "name": "deepseek-harness-desktop"
+      "name": "rivetdeck"
     },
-    "artifactName": "DeepSeek-Harness-${version}-${os}-${arch}.${ext}",
+    "artifactName": "Rivetdeck-${version}-${os}-${arch}.${ext}",
     "directories": {
       "output": "../../dist/electron"
     },
@@ -261,7 +261,7 @@
     },
     "linux": {
       "category": "Development",
-      "executableName": "deepseek-harness",
+      "executableName": "rivetdeck",
       "icon": "build/icons",
       "maintainer": "cherrchen <cherrchen@users.noreply.github.com>",
       "target": [

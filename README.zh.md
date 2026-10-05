@@ -1,8 +1,8 @@
-# DeepSeek Harness Desktop
+# Rivetdeck
 
 [English](README.md) | 中文
 
-DeepSeek Harness Desktop 将 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 打包为适用于 macOS、Windows 和 Linux 的原生桌面应用。它保留上游 Web 应用、智能体运行时、profile 和工作区流程，并提供操作系统窗口与桌面安装包。
+Rivetdeck 将 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 打包为适用于 macOS、Windows 和 Linux 的原生桌面应用。它保留上游 Web 应用、智能体运行时、profile 和工作区流程，并提供操作系统窗口与桌面安装包。
 
 <a id="status"></a>
 
@@ -48,7 +48,7 @@ Harness profile 和状态存储在对应平台的应用数据目录。智能体 
 
 ## 内置插件
 
-DeepSeek Harness Desktop 预装两个由独立仓库发布的可移植 DSH 生态 bundle。它们都显示在 web profile 的 Installed 插件中，用户可在此启用或禁用。
+Rivetdeck 预装两个由独立仓库发布的可移植 DSH 生态 bundle。它们都显示在 web profile 的 Installed 插件中，用户可在此启用或禁用。
 
 | 插件 | 桌面角色 | 简介 |
 |---|---|---|

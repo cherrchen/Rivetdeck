@@ -1,7 +1,7 @@
 /** Typed English and Chinese copy owned by the Electron Main process. */
 
 export const en = {
-  recoveryTitle: 'DeepSeek Harness could not start',
+  recoveryTitle: 'Rivetdeck could not start',
   recoveryPending: 'Desktop found an interrupted plugin change and could not repair it automatically.',
   recoveryLock: 'Another Desktop plugin change is still running. Wait for it to finish, or repair plugin state.',
   recoveryProfile: 'The web profile plugin list could not be read.',
@@ -36,7 +36,7 @@ export const en = {
 export type DesktopMainMessages = { readonly [Key in keyof typeof en]: string }
 
 export const zh = {
-  recoveryTitle: 'DeepSeek Harness 无法启动',
+  recoveryTitle: 'Rivetdeck 无法启动',
   recoveryPending: 'Desktop 发现一次中断的插件变更，且无法自动对账。',
   recoveryLock: '另一次 Desktop 插件变更仍在进行。请等待其结束，或修复插件状态。',
   recoveryProfile: '无法读取 web profile 的插件列表。',

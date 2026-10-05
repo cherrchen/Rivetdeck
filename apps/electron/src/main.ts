@@ -26,6 +26,7 @@ import {
   allowsClipboardWrite,
   contextMenuTemplate,
   desktopWindowChrome,
+  desktopWindowTitle,
   isAllowedExternalUrl,
 } from './desktop/index.ts'
 import { DesktopServices } from './desktop/services.ts'
@@ -136,7 +137,7 @@ async function startHarness(
       if (scan.settled) return
       scan.settled = true
       scan.output = ''
-      const timeoutError = new Error(`DeepSeek Harness did not become ready within ${String(HARNESS_START_TIMEOUT_MS / 1000)} seconds.`)
+      const timeoutError = new Error(`Rivetdeck did not become ready within ${String(HARNESS_START_TIMEOUT_MS / 1000)} seconds.`)
       void stopHarness(child).then(() => {
         reject(timeoutError)
       }, (cleanupError: unknown) => {
@@ -154,7 +155,7 @@ async function startHarness(
 
     child.once('error', fail)
     child.once('exit', (code, signal) => {
-      fail(new Error(`DeepSeek Harness exited before startup (code ${String(code)}, signal ${String(signal)}).`))
+      fail(new Error(`Rivetdeck exited before startup (code ${String(code)}, signal ${String(signal)}).`))
     })
     child.stdout.on('data', (chunk: Buffer) => {
       const text = chunk.toString('utf8')
@@ -181,6 +182,7 @@ async function createWindow(): Promise<BrowserWindow> {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#f8f9fb',
+    title: app.name,
     webPreferences: {
       preload,
       contextIsolation: true,
@@ -191,6 +193,13 @@ async function createWindow(): Promise<BrowserWindow> {
   mainWindow = window
   window.webContents.on('preload-error', (_event, preloadPath, error) => {
     console.error(`desktop preload failed (${preloadPath}):`, error)
+  })
+  // AppFrame falls back to upstream `brand.localBuild` ("DSH 本地构建") when
+  // client packages were built without DSH_CLIENT_TITLE; keep the Dock / frame
+  // product segment on the Desktop productName instead.
+  window.webContents.on('page-title-updated', (event, title) => {
+    event.preventDefault()
+    window.setTitle(desktopWindowTitle(title, app.name))
   })
   window.on('close', (event) => {
     if (quitting) return

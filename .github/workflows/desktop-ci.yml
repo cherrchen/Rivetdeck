@@ -267,13 +267,13 @@ jobs:
       - name: Smoke-test runtime lifecycle and Core plugins (Windows)
         if: runner.os == 'Windows'
         run: |
-          node apps/electron/scripts/smoke-runtime-setup.mjs "dist/electron/win-unpacked/DeepSeek Harness.exe" --offline
-          node apps/electron/scripts/smoke-runtime-setup.mjs "dist/electron/win-unpacked/DeepSeek Harness.exe" --install
+          node apps/electron/scripts/smoke-runtime-setup.mjs "dist/electron/win-unpacked/Rivetdeck.exe" --offline
+          node apps/electron/scripts/smoke-runtime-setup.mjs "dist/electron/win-unpacked/Rivetdeck.exe" --install
           node apps/electron/scripts/smoke-core-plugins.mjs "dist/electron/win-unpacked/resources/core-runtime/node.exe" "dist/electron/win-unpacked/resources/app"
       - name: Smoke-test runtime lifecycle and Core plugins (macOS)
         if: runner.os == 'macOS'
         run: |
-          binary="$(find dist/electron -path '*/Contents/MacOS/DeepSeek Harness' -type f -print -quit)"
+          binary="$(find dist/electron -path '*/Contents/MacOS/Rivetdeck' -type f -print -quit)"
           node apps/electron/scripts/smoke-runtime-setup.mjs "$binary" --offline
           node apps/electron/scripts/smoke-runtime-setup.mjs "$binary" --install
           node apps/electron/scripts/smoke-core-plugins.mjs "$binary" "${binary%/MacOS/*}/Resources/app"

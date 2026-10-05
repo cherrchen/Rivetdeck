@@ -1,4 +1,4 @@
-# DeepSeek Harness Desktop 架构与开发指南
+# Rivetdeck 架构与开发指南
 
 [English](architecture.md) | 中文
 
@@ -12,7 +12,7 @@
 
 ## 1. 目的
 
-DeepSeek Harness Desktop 是构建于上游 `deepseek-ai/deepseek-harness` 仓库之上的下游 Electron 桌面应用。
+Rivetdeck 是构建于上游 `deepseek-ai/deepseek-harness` 仓库之上的下游 Electron 桌面应用。
 
 本项目同时追求两个目标：
 

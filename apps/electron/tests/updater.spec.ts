@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => {
     netSession: { fetch: vi.fn() },
   }
   return {
-    app: { isPackaged: true, name: 'DeepSeek Harness', getVersion: () => '1.0.0' },
+    app: { isPackaged: true, name: 'Rivetdeck', getVersion: () => '1.0.0' },
     autoUpdater,
     dialog: {
       showMessageBox: vi.fn<(options: unknown) => Promise<{ response: number }>>()
@@ -69,7 +69,7 @@ describe('Electron updater controller', () => {
     await check
     expect(controller.state).toBe('idle')
     expect(mocks.dialog.showMessageBox).toHaveBeenCalledWith(expect.objectContaining({
-      message: 'DeepSeek Harness is up to date',
+      message: 'Rivetdeck is up to date',
     }))
   })
 

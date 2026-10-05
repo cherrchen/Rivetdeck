@@ -212,7 +212,7 @@ jobs:
 
       - name: Smoke-test packaged zero-runtime Desktop (macOS)
         if: runner.os == 'macOS'
-        run: node apps/electron/scripts/smoke-runtime-setup.mjs "$(find dist/electron -path '*/Contents/MacOS/DeepSeek Harness' -type f -print -quit)"
+        run: node apps/electron/scripts/smoke-runtime-setup.mjs "$(find dist/electron -path '*/Contents/MacOS/Rivetdeck' -type f -print -quit)"
 
       - name: Smoke-test packaged zero-runtime Desktop (Linux)
         if: runner.os == 'Linux'
@@ -266,7 +266,7 @@ jobs:
           sha256sum * > SHA256SUMS.txt
           cd ../..
           cat > "$RUNNER_TEMP/release-notes.md" <<EOF
-          Desktop installers for DeepSeek Harness ${VERSION} (${RELEASE_TAG}).
+          Desktop installers for Rivetdeck ${VERSION} (${RELEASE_TAG}).
 
           These CI artifacts are unsigned. Verify the downloaded file with \`SHA256SUMS.txt\` before installation.
           EOF
@@ -286,6 +286,6 @@ jobs:
           if [ "$PRERELEASE" = "true" ]; then prerelease_flag+=(--prerelease); fi
           gh release create "$RELEASE_TAG" dist/release/* \
             --verify-tag \
-            --title "DeepSeek Harness Desktop ${VERSION}" \
+            --title "Rivetdeck ${VERSION}" \
             --notes-file "$RUNNER_TEMP/release-notes.md" \
             "${prerelease_flag[@]}"

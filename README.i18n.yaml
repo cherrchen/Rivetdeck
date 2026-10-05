@@ -2,36 +2,36 @@
 # section, a hash of its English and Chinese blocks outside code blocks and generated regions.
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write README.md
-/deepseek-harness-desktop:
-  en: ecbfe9e67042ee37
-  zh: 68464c846ae3edc7
-/deepseek-harness-desktop/status:
+/rivetdeck:
+  en: d93cdb8349aba393
+  zh: 069cff5dc31f557e
+/rivetdeck/status:
   en: 5c1da8593a34d32b
   zh: c92dedeb861312f2
-/deepseek-harness-desktop/status/maintenance-outlook:
+/rivetdeck/status/maintenance-outlook:
   en: c2d47a0208e1ba64
   zh: 785faf3ce7cd9546
-/deepseek-harness-desktop/install:
+/rivetdeck/install:
   en: 92a328a78378eb0d
   zh: 81f39cf5e9e23ee3
-/deepseek-harness-desktop/run-from-source:
+/rivetdeck/run-from-source:
   en: 36319ec559979e4d
   zh: 146b2eef3bfefa3c
-/deepseek-harness-desktop/runtime-and-data:
+/rivetdeck/runtime-and-data:
   en: 3e8192a493376d80
   zh: e1765305f735967f
-/deepseek-harness-desktop/bundled-plugins:
-  en: f97c70ec6ed76e78
-  zh: 051f7170ab599195
-/deepseek-harness-desktop/related-plugin:
+/rivetdeck/bundled-plugins:
+  en: 4dfbc84fd3c514ea
+  zh: 0edcfd374b388764
+/rivetdeck/related-plugin:
   en: e10dc3afa247ee81
   zh: 5a57f2518033e263
-/deepseek-harness-desktop/development:
+/rivetdeck/development:
   en: e54f1a8d723e43ec
   zh: 4fa98c201d97fcee
-/deepseek-harness-desktop/contributing:
+/rivetdeck/contributing:
   en: 991821508d78b07f
   zh: 4755c30ef9a9729d
-/deepseek-harness-desktop/license:
+/rivetdeck/license:
   en: 7a781d13b901c0e0
   zh: 459e990a06693799
