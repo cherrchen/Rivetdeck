@@ -49,7 +49,9 @@ it('runs Git status, staging, diffs, commits, history, and branches from the pub
   onTestFinished(async () => { await ctx.fiber.dispose() })
   await ctx.plugin(LocalSubprocessRuntime).await()
   const service = new GitService(ctx.subprocess, { executable: 'git', maxOutputBytes: 1048576, graceMs: 1000 })
-  expect(await service.discover(repository)).toBe(repository)
+  const discovered = await service.discover(repository)
+  // Native realpath resolves Windows short names and Git's forward slashes to the same directory.
+  expect(discovered === null ? null : realpathSync.native(discovered)).toBe(realpathSync.native(repository))
   writeFileSync(join(repository, 'example.txt'), 'first\n')
   expect((await service.status(repository)).untracked).toContain('example.txt')
   expect((await service.stage(repository)).staged.map(change => change.path)).toContain('example.txt')

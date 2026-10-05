@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { chmod, copyFile, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { copyFile, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { create as tar } from 'tar'
@@ -11,7 +11,9 @@ import { loadManifest } from '../scripts/toolchains/manifest.mjs'
 import { readPendingRuntimeInstallation, readRuntimeReceipt, receiptLocation } from '../src/toolchains/resolver.ts'
 
 const roots: string[] = []
-afterEach(async () => { await Promise.all(roots.splice(0).map(async (root) => { await rm(root, { recursive: true, force: true }) })) })
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map(async (root) => { await rm(root, { recursive: true, force: true }) }))
+}, 30_000)
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'dsh-runtime-install-'))
   roots.push(root)
@@ -79,12 +81,13 @@ describe('Main runtime installer', () => {
     const npm = join(nodeRoot, process.platform === 'win32' ? 'node_modules/npm/bin' : 'lib/node_modules/npm/bin')
     await mkdir(npm, { recursive: true })
     await mkdir(dirname(executable), { recursive: true })
-    await copyFile(process.execPath, executable)
-    await chmod(executable, 0o755)
+    // POSIX links run the installed binary; Windows file symlinks require privileges.
+    if (process.platform === 'win32') await copyFile(process.execPath, executable)
+    else await symlink(process.execPath, executable)
     await writeFile(join(npm, 'npm-cli.js'), '')
     await writeFile(join(npm, 'npx-cli.js'), '')
     await expect(verifyRuntime('node', nodeRoot, '1.0.0', process.platform)).rejects.toThrow(/verification/u)
-  })
+  }, 30_000) // Await the verifier's child exit, including its 15-second deadline, before fixture cleanup.
 })
 
 describe('Main runtime manager independence', () => {
