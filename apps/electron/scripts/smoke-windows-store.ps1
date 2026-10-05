@@ -11,8 +11,12 @@ function Invoke-QualificationNode([string[]]$Arguments, [int]$TimeoutSeconds) {
   $start = [Diagnostics.ProcessStartInfo]::new((Get-Command node).Source)
   $start.UseShellExecute = $false
   $start.CreateNoWindow = $true
+  $start.RedirectStandardOutput = $true
+  $start.RedirectStandardError = $true
   foreach ($argument in $Arguments) { $start.ArgumentList.Add($argument) }
   $child = [Diagnostics.Process]::Start($start)
+  $stdout = $child.StandardOutput.ReadToEndAsync()
+  $stderr = $child.StandardError.ReadToEndAsync()
   try {
     $timedOut = -not $child.WaitForExit($TimeoutSeconds * 1000)
     if ($timedOut) {
@@ -21,6 +25,13 @@ function Invoke-QualificationNode([string[]]$Arguments, [int]$TimeoutSeconds) {
       $child.WaitForExit()
       Write-Host "Store qualification command timed out after $TimeoutSeconds seconds: $($Arguments[0])"
     }
+    $logName = [IO.Path]::GetFileNameWithoutExtension($Arguments[0]) + $(if ($Arguments -contains '--startup-only') { '-startup' } else { '' })
+    $output = $stdout.GetAwaiter().GetResult()
+    $errors = $stderr.GetAwaiter().GetResult()
+    Set-Content (Join-Path $ReportDirectory "$logName.stdout.log") $output
+    Set-Content (Join-Path $ReportDirectory "$logName.stderr.log") $errors
+    Write-Host $output
+    Write-Host $errors
     return [pscustomobject]@{ exitCode = $child.ExitCode; timedOut = $timedOut }
   } finally { $child.Dispose() }
 }

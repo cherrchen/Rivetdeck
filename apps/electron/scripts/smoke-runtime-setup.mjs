@@ -23,6 +23,7 @@ if (process.argv.includes('--offline')) {
 }
 let application
 const events = []
+const diagnostics = []
 async function launch() {
   application = await _electron.launch({ executablePath, args: [`--user-data-dir=${userData}`], env, timeout: 120_000 })
   application.process().stderr.on('data', bytes => process.stderr.write(bytes))
@@ -30,6 +31,15 @@ async function launch() {
   const page = await application.firstWindow({ timeout: 120_000 })
   if (process.argv.includes('--store')) await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(1440, 900))
   page.on('pageerror', error => console.error('renderer error:', error))
+  page.on('console', message => {
+    if (message.type() === 'error') console.error('renderer console:', message.text())
+  })
+  page.on('response', response => {
+    if (new URL(response.url()).pathname !== '/api/settings/mutate') return
+    diagnostics.push(response.text().then(body => {
+      console.error('Settings mutation response:', body)
+    }).catch(error => { console.error('Settings response could not be read:', error) }))
+  })
   await page.waitForFunction(() => window.deepseekDesktop !== undefined)
   await page.getByRole('button', { name: /Settings|设置/, exact: true }).waitFor({ timeout: 120_000 })
   return page
@@ -150,6 +160,7 @@ try {
   console.error('smoke artifacts:', scratch)
   throw error
 } finally {
+  await Promise.all(diagnostics)
   try { await close() } finally {
     try {
       if (artifacts !== undefined) {
