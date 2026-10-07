@@ -351,7 +351,7 @@ The Desktop Capabilities package (`@dsh-electron/dsh-electron-desktop-capabiliti
 
 The directory-picker feature fills workspace directory-flow slots and calls `ctx.desktop.dialog.pickDirectory()`.
 
-The brand feature always fills `sidebar.brand.mark`, `sidebar.brand.name`, and `conversation.hero.brand.mark` with DeepSeek Harness artwork, so Desktop does not depend on the upstream `DSH_CLIENT_BUILD_PROFILE=official` client build for product branding.
+The brand feature fills `sidebar.brand.name` with the Rivetdeck wordmark and retains the DeepSeek Harness whale in `sidebar.brand.mark` and `conversation.hero.brand.mark`, so Desktop does not depend on the upstream `DSH_CLIENT_BUILD_PROFILE=official` client build for product branding.
 
 The upstream Web bundle provides the Plugins UI and agent tool. Electron’s `DesktopPluginManager` reports the effective mixed runtime inventory: Electron-owned packages use bundled implementation, patches, and versions; ordinary user plugins use the shared web profile implementation. `DesktopRuntime` serializes external CLI changes and UI operations on the HMR queue, then waits for Loader settlement. Package persistence stays with upstream operations on the shared web profile; the private projection is disposable. See [plugin lifecycle](plugin-lifecycle.md).
 

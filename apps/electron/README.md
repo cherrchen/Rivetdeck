@@ -75,7 +75,7 @@ The tray uses a monochrome DeepSeek glyph rasterized from the tracked `assets/tr
 
 The About window uses the operating-system window frame and a Ghostty-like layout for the packaged icon, application name, description, version metadata, and GitHub / Homepage actions from this package manifest. Colors follow system UI tokens. Release installers stamp `build-info.json` with the desktop-release workflow run number as Build and the short commit SHA as Commit. Its renderer is sandboxed and its Content Security Policy admits only its embedded styles and icon.
 
-Main rewrites the BrowserWindow / Dock title when the shared AppFrame falls back to the upstream `brand.localBuild` label (`DSH Local Build` / `DSH 本地构建`), replacing that product segment with the Desktop `productName` (`Rivetdeck`) while keeping any session title prefix.
+The sidebar displays the Rivetdeck name with the existing DeepSeek Harness whale icon. Main rewrites the BrowserWindow / Dock title when the shared AppFrame falls back to the upstream `brand.localBuild` label (`DSH Local Build` / `DSH 本地构建`), replacing that product segment with the Desktop `productName` (`Rivetdeck`) while keeping any session title prefix.
 
 Main-owned product copy (menus, tray, About, updater dialogs, recovery, and network prompts) is locale-owned in `src/locale.ts` and selected from `app.getLocale()` as English or Chinese.
 
@@ -95,7 +95,7 @@ Desktop releases use `v{a.b.c}-beta.{x}` on `develop`, `v{a.b.c}-rc.{x}` on `mai
 
 ### Microsoft Store (Store-only Windows)
 
-The Store target uses the Partner Center identity and independent four-part package version in [`windows-store.json`](windows-store.json). Its initial version is `1.0.0.0`; the desktop semver and release tags retain their existing rules. Package versions require a nonzero first component, components no greater than 65535, and a final zero. Increment the Store version before a new submission; keep the assigned identity unchanged.
+The Store target uses the Partner Center identity and independent four-part package version in [`windows-store.json`](windows-store.json). Its current version is `1.0.1.0`; the desktop semver and release tags retain their existing rules. Package versions require a nonzero first component, components no greater than 65535, and a final zero. Increment the Store version before a new submission; keep the assigned identity unchanged.
 
 `pnpm --filter @dsh-electron/dsh-electron prepare:store` validates these fields and generates the AppX manifest, branded tiles, and builder configuration under `.electron-build/store`. The configuration retains Core and Network resources, uses only the AppX target, excludes NSIS preparation and GitHub update metadata, and stamps Store distribution into the packaged manifest. Store builds do not construct the GitHub updater; both native menus display Store ownership without channel selection or restart-to-install actions. Windows package detection also disables GitHub updating for installed AppX applications.
 

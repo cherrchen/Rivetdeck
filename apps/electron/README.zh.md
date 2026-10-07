@@ -75,7 +75,7 @@ Electron 应用是私有安装程序，不作为 npm 发布成员。依赖同步
 
 “关于”窗口使用操作系统原生窗口边框，并以接近 Ghostty 的布局展示打包图标、应用名称、说明文案、版本元数据，以及来自此包 manifest 的“GitHub / 主页”操作按钮。配色跟随系统 UI token。正式安装包会写入 `build-info.json`：Build 为 desktop-release workflow 的运行次数，Commit 为短提交 SHA。其渲染进程在沙箱中运行，Content Security Policy 只允许内嵌样式和图标。
 
-当共享 AppFrame 回退到上游 `brand.localBuild` 标签（`DSH Local Build` / `DSH 本地构建`）时，Main 会改写 BrowserWindow / Dock 标题，将该产品名段替换为 Desktop `productName`（`Rivetdeck`），并保留会话标题前缀。
+侧栏显示 Rivetdeck 名称，并保留现有的 DeepSeek Harness 鲸鱼图标。当共享 AppFrame 回退到上游 `brand.localBuild` 标签（`DSH Local Build` / `DSH 本地构建`）时，Main 会改写 BrowserWindow / Dock 标题，将该产品名段替换为 Desktop `productName`（`Rivetdeck`），并保留会话标题前缀。
 
 Main 自有的产品文案（菜单、托盘、关于窗口、更新对话框、恢复与网络提示）由 `src/locale.ts` 持有，并按 `app.getLocale()` 在英文与中文之间选择。
 
@@ -95,7 +95,7 @@ Main 自有的产品文案（菜单、托盘、关于窗口、更新对话框、
 
 ### Microsoft Store（Store-only Windows）
 
-Store 目标使用 [`windows-store.json`](windows-store.json) 中的 Partner Center 身份和独立四段包版本。初始版本为 `1.0.0.0`；桌面语义版本和 release tag 保留现有规则。包版本的首段必须非零，每段不得超过 65535，末段必须为零。每次新提交前递增 Store 版本，保持已分配的身份不变。
+Store 目标使用 [`windows-store.json`](windows-store.json) 中的 Partner Center 身份和独立四段包版本。当前版本为 `1.0.1.0`；桌面语义版本和 release tag 保留现有规则。包版本的首段必须非零，每段不得超过 65535，末段必须为零。每次新提交前递增 Store 版本，保持已分配的身份不变。
 
 `pnpm --filter @dsh-electron/dsh-electron prepare:store` 校验这些字段，并在 `.electron-build/store` 下生成 AppX manifest、品牌磁贴和 builder 配置。配置保留 Core 和 Network 资源，仅使用 AppX 目标，排除 NSIS 准备和 GitHub 更新元数据，并将 Store 分发标记写入打包后的 manifest。Store 构建不创建 GitHub 更新器；两个原生菜单显示 Store 更新归属，不提供通道选择或重启安装操作。Windows 包检测也会为已安装的 AppX 应用禁用 GitHub 更新。
 

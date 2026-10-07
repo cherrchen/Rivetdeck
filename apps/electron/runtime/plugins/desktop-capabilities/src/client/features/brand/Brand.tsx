@@ -1,4 +1,4 @@
-import { BrandWordmark, FishLogo } from '@deepseek-ai/dsh-client-ui-primitives'
+import { FishLogo } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { HeroBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SidebarBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
 
@@ -14,9 +14,22 @@ export function DesktopBrandMark({ size, className }: DesktopBrandMarkProps) {
 }
 
 /**
- * Render the DeepSeek Harness name artwork without its independently slotted mark.
+ * Render the Rivetdeck name without its independently slotted whale mark.
  * @returns the name wordmark.
  */
 export function DesktopBrandName() {
-  return <BrandWordmark includeMark={false} />
+  return (
+    <svg width={112} height={24} viewBox="0 0 112 24" fill="currentColor" aria-hidden="true">
+      <text
+        x={0}
+        y={18}
+        fontSize={18}
+        fontWeight={500}
+        letterSpacing={0}
+        style={{ fontFamily: 'var(--dsw-font-family-brand)' }}
+      >
+        Rivetdeck
+      </text>
+    </svg>
+  )
 }
