@@ -95,7 +95,7 @@ Main 自有的产品文案（菜单、托盘、关于窗口、更新对话框、
 
 ### Microsoft Store（Store-only Windows）
 
-Store 目标使用 [`windows-store.json`](windows-store.json) 中的 Partner Center 身份和独立四段包版本。当前版本为 `1.0.1.0`；桌面语义版本和 release tag 保留现有规则。包版本的首段必须非零，每段不得超过 65535，末段必须为零。每次新提交前递增 Store 版本，保持已分配的身份不变。
+Store 目标使用 [`windows-store.json`](windows-store.json) 中的 Partner Center 身份和独立四段包版本。初始版本为 `1.0.0.0`；桌面语义版本和 release tag 保留现有规则。包版本的首段必须非零，每段不得超过 65535，末段必须为零。更新已发布的包时递增 Store 版本，保持已分配的身份不变。
 
 `pnpm --filter @dsh-electron/dsh-electron prepare:store` 校验这些字段，并在 `.electron-build/store` 下生成 AppX manifest、品牌磁贴和 builder 配置。配置保留 Core 和 Network 资源，仅使用 AppX 目标，排除 NSIS 准备和 GitHub 更新元数据，并将 Store 分发标记写入打包后的 manifest。Store 构建不创建 GitHub 更新器；两个原生菜单显示 Store 更新归属，不提供通道选择或重启安装操作。Windows 包检测也会为已安装的 AppX 应用禁用 GitHub 更新。
 
