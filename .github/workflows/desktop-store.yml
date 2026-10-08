@@ -2,6 +2,16 @@ name: Desktop Microsoft Store packages
 run-name: Store submission packages (${{ github.ref_name }})
 
 on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Validated Desktop release tag
+        type: string
+        required: true
+      release_run_number:
+        description: Desktop release run number used for the Store package version
+        type: string
+        required: true
   workflow_dispatch:
     inputs:
       package_run_id:
@@ -42,6 +52,8 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Fetch pinned upstream audit baseline
         run: git fetch --depth=1 --no-tags https://github.com/deepseek-ai/deepseek-harness.git refs/tags/dsh-v0.2.0-rc.2:refs/tags/dsh-v0.2.0-rc.2
@@ -55,6 +67,12 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Set Store release package version
+        if: inputs.release_run_number
+        env:
+          RELEASE_RUN_NUMBER: ${{ inputs.release_run_number }}
+        run: node apps/electron/scripts/store-release-version.mjs "$env:RELEASE_RUN_NUMBER" --write
 
       - name: Prepare Store identity and assets
         run: pnpm --filter @dsh-electron/dsh-electron prepare:store
@@ -70,7 +88,7 @@ jobs:
       - name: Test Store distribution
         shell: pwsh
         run: |
-          pnpm exec vitest run apps/electron/tests/windows-store.spec.ts apps/electron/tests/updater.spec.ts apps/electron/tests/atomic-path.spec.ts apps/electron/tests/runtime-installer.spec.ts apps/electron/tests/profile-writer-diagnostics.spec.ts scripts/desktop-workflow.spec.ts
+          pnpm exec vitest run apps/electron/tests/store-release.spec.ts apps/electron/tests/windows-store.spec.ts apps/electron/tests/updater.spec.ts apps/electron/tests/atomic-path.spec.ts apps/electron/tests/runtime-installer.spec.ts apps/electron/tests/profile-writer-diagnostics.spec.ts scripts/desktop-workflow.spec.ts
           if ($LASTEXITCODE -ne 0) { throw 'Store distribution tests failed.' }
           ./apps/electron/scripts/test-wack-report.ps1
 

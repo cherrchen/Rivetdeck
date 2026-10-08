@@ -29,6 +29,7 @@ concurrency:
 
 permissions:
   contents: write
+  actions: read
 
 env:
   DSH_TELEMETRY_DISABLED: '1'
@@ -42,6 +43,7 @@ jobs:
       tag: ${{ steps.context.outputs.tag }}
       version: ${{ steps.context.outputs.version }}
       prerelease: ${{ steps.context.outputs.prerelease }}
+      store_version: ${{ steps.store-version.outputs.version }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -91,9 +93,44 @@ jobs:
             exit 1
           fi
 
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          {
+            echo "tag=$tag"
+            echo "version=$version"
+            echo "prerelease=$prerelease"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Resolve Store package version
+        id: store-version
+        env:
+          RELEASE_RUN_NUMBER: ${{ github.run_number }}
+        run: echo "version=$(node apps/electron/scripts/store-release-version.mjs "$RELEASE_RUN_NUMBER")" >> "$GITHUB_OUTPUT"
+
+  store-credentials:
+    name: Validate Partner Center credentials
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require Partner Center credentials
+        env:
+          PARTNER_CENTER_TENANT_ID: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
+          PARTNER_CENTER_SELLER_ID: ${{ secrets.PARTNER_CENTER_SELLER_ID }}
+          PARTNER_CENTER_CLIENT_ID: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
+          PARTNER_CENTER_CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
+        run: |
+          for name in PARTNER_CENTER_TENANT_ID PARTNER_CENTER_SELLER_ID PARTNER_CENTER_CLIENT_ID PARTNER_CENTER_CLIENT_SECRET; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Configure GitHub Actions secret $name for Microsoft Store publishing. See apps/electron/README.md."
+              exit 1
+            fi
+          done
+
+  store-package:
+    name: Qualify Microsoft Store packages
+    needs: [validate, store-credentials]
+    uses: ./.github/workflows/desktop-store.yml
+    with:
+      tag: ${{ needs.validate.outputs.tag }}
+      release_run_number: ${{ github.run_number }}
 
   package:
     name: Package ${{ matrix.name }}
@@ -269,7 +306,7 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           cd dist/release
-          sha256sum * > SHA256SUMS.txt
+          sha256sum -- * > SHA256SUMS.txt
           cd ../..
           cat > "$RUNNER_TEMP/release-notes.md" <<EOF
           Desktop installers for Rivetdeck ${VERSION} (${RELEASE_TAG}).
@@ -295,3 +332,73 @@ jobs:
             --title "Rivetdeck ${VERSION}" \
             --notes-file "$RUNNER_TEMP/release-notes.md" \
             "${prerelease_flag[@]}"
+
+  store-publish:
+    name: Submit Microsoft Store release
+    needs: [validate, publish, store-package]
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      actions: read
+    timeout-minutes: 30
+    concurrency:
+      group: desktop-store-publish
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Set Store release package version
+        shell: pwsh
+        env:
+          RELEASE_RUN_NUMBER: ${{ github.run_number }}
+        run: node apps/electron/scripts/store-release-version.mjs "$env:RELEASE_RUN_NUMBER" --write
+
+      - name: Download qualified x64 package
+        uses: actions/download-artifact@v4
+        with:
+          name: rivetdeck-store-x64
+          path: dist/electron-store
+
+      - name: Download qualified ARM64 package
+        uses: actions/download-artifact@v4
+        with:
+          name: rivetdeck-store-arm64
+          path: dist/electron-store
+
+      - name: Verify qualified unsigned packages
+        shell: pwsh
+        env:
+          STORE_VERSION: ${{ needs.validate.outputs.store_version }}
+        run: |
+          foreach ($arch in @('x64', 'arm64')) {
+            $package = "dist/electron-store/Rivetdeck-store-$env:STORE_VERSION-$arch.appx"
+            ./apps/electron/scripts/verify-windows-store.ps1 -PackagePath $package -Architecture $arch
+          }
+
+      - name: Install Microsoft Store Developer CLI
+        uses: microsoft/microsoft-store-apppublisher@cc9910a8d59f2eb55cbb83df0a3800cf3b5300e0 # v1.4
+        with:
+          version: v0.4.3
+
+      - name: Configure Partner Center authentication
+        shell: pwsh
+        env:
+          PARTNER_CENTER_TENANT_ID: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
+          PARTNER_CENTER_SELLER_ID: ${{ secrets.PARTNER_CENTER_SELLER_ID }}
+          PARTNER_CENTER_CLIENT_ID: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
+          PARTNER_CENTER_CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
+        run: |
+          msstore reconfigure --tenantId $env:PARTNER_CENTER_TENANT_ID --sellerId $env:PARTNER_CENTER_SELLER_ID --clientId $env:PARTNER_CENTER_CLIENT_ID --clientSecret $env:PARTNER_CENTER_CLIENT_SECRET
+          if ($LASTEXITCODE -ne 0) { throw 'Partner Center authentication configuration failed.' }
+
+      - name: Upload both architectures and submit for automatic publication
+        shell: pwsh
+        env:
+          STORE_VERSION: ${{ needs.validate.outputs.store_version }}
+        run: node apps/electron/scripts/publish-windows-store.mjs

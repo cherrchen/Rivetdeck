@@ -49,6 +49,61 @@ describe('Desktop synchronization and release workflows', () => {
     expect(steps.map(step => step.run).join('\n')).not.toMatch(/gh release|--win nsis/)
   })
 
+  it('qualifies Store packages at the validated release tag before submitting after GitHub publication', () => {
+    const release = loadWorkflow('.github/workflows/desktop-release.yml')
+    const store = loadWorkflow('.github/workflows/desktop-store.yml')
+    const validate = workflowJob(release, 'validate')
+    const credentials = workflowJob(release, 'store-credentials')
+    const packages = workflowJob(release, 'store-package')
+    const submit = workflowJob(release, 'store-publish')
+    expect(release.permissions).toMatchObject({ actions: 'read' })
+    expect(packages).toMatchObject({
+      needs: ['validate', 'store-credentials'],
+      uses: './.github/workflows/desktop-store.yml',
+      with: { tag: '${{ needs.validate.outputs.tag }}', release_run_number: '${{ github.run_number }}' },
+    })
+    expect(workflowJob(release, 'publish').needs).toEqual(['validate', 'package'])
+    expect(packages).not.toHaveProperty('if')
+    expect(store.on).toMatchObject({ workflow_call: { inputs: {
+      tag: { type: 'string', required: true }, release_run_number: { type: 'string', required: true },
+    } } })
+    expect(submit).toMatchObject({
+      needs: ['validate', 'publish', 'store-package'], 'runs-on': 'windows-latest',
+      concurrency: { group: 'desktop-store-publish', 'cancel-in-progress': false },
+    })
+    if (!Array.isArray(submit.steps) || !Array.isArray(credentials.steps) || !Array.isArray(validate.steps)) {
+      throw new TypeError('Store release must validate credentials and submit qualified packages')
+    }
+    const credentialStep = credentials.steps.filter(isRecord).find(step => step.name === 'Require Partner Center credentials')
+    expect(credentialStep?.env).toEqual({
+      PARTNER_CENTER_TENANT_ID: '${{ secrets.PARTNER_CENTER_TENANT_ID }}',
+      PARTNER_CENTER_SELLER_ID: '${{ secrets.PARTNER_CENTER_SELLER_ID }}',
+      PARTNER_CENTER_CLIENT_ID: '${{ secrets.PARTNER_CENTER_CLIENT_ID }}',
+      PARTNER_CENTER_CLIENT_SECRET: '${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}',
+    })
+    expect(credentialStep?.run).toContain('exit 1')
+    const steps = submit.steps.filter(isRecord)
+    expect(steps.find(step => step.uses === 'actions/checkout@v6')?.with).toMatchObject({ ref: '${{ needs.validate.outputs.tag }}' })
+    expect(steps.find(step => step.name === 'Install Microsoft Store Developer CLI')?.with).toEqual({ version: 'v0.4.3' })
+    const verify = steps.findIndex(step => step.name === 'Verify qualified unsigned packages')
+    const publish = steps.findIndex(step => step.name === 'Upload both architectures and submit for automatic publication')
+    expect(verify).toBeGreaterThan(-1)
+    expect(publish).toBeGreaterThan(verify)
+    expect(steps[verify]?.run).toContain("foreach ($arch in @('x64', 'arm64'))")
+    expect(steps[verify]?.run).toContain('verify-windows-store.ps1')
+    expect(steps[publish]?.run).toBe('node apps/electron/scripts/publish-windows-store.mjs')
+    expect(steps[publish]?.env).toMatchObject({ STORE_VERSION: '${{ needs.validate.outputs.store_version }}' })
+    expect(validate.steps.filter(isRecord).find(step => step.name === 'Resolve Store package version')?.run).toContain('store-release-version.mjs')
+    const storeJob = workflowJob(store, 'package')
+    if (!Array.isArray(storeJob.steps)) throw new TypeError('Store qualification must define steps')
+    const storeSteps = storeJob.steps.filter(isRecord)
+    expect(storeSteps.find(step => step.uses === 'actions/checkout@v6')?.with).toMatchObject({ ref: '${{ inputs.tag || github.ref }}' })
+    const version = storeSteps.findIndex(step => step.name === 'Set Store release package version')
+    expect(version).toBeLessThan(storeSteps.findIndex(step => step.name === 'Prepare Store identity and assets'))
+    expect(storeSteps[version]?.run).toContain('store-release-version.mjs')
+    expect(storeSteps[version]?.env).toMatchObject({ RELEASE_RUN_NUMBER: '${{ inputs.release_run_number }}' })
+  })
+
   it('assigns upstream and downstream workflow paths to their repository owners', () => {
     const attributes = readFileSync(resolve(root, '.gitattributes'), 'utf8')
 

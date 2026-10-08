@@ -95,15 +95,33 @@ Main 自有的产品文案（菜单、托盘、关于窗口、更新对话框、
 
 ### Microsoft Store（Store-only Windows）
 
-Store 目标使用 [`windows-store.json`](windows-store.json) 中的 Partner Center 身份和独立四段包版本。初始版本为 `1.0.0.0`；桌面语义版本和 release tag 保留现有规则。包版本的首段必须非零，每段不得超过 65535，末段必须为零。更新已发布的包时递增 Store 版本，保持已分配的身份不变。
+Store 目标使用 [`windows-store.json`](windows-store.json) 中的 Partner Center 身份和独立四段包版本。初始版本为 `1.0.0.0`；桌面语义版本和 release tag 保留现有规则。包版本的首段必须非零，每段不得超过 65535，末段必须为零。自动发版从 Desktop release 工作流运行序号派生 `1.high.low.0`（`high = floor(run_number / 65536)`，`low = run_number % 65536`）；两种架构和重跑使用相同版本。工作流仅修改自身 checkout 中的 `windows-store.json`。保持已分配的身份不变；独立上传的包不得超前于自动版本序列。
 
 `pnpm --filter @dsh-electron/dsh-electron prepare:store` 校验这些字段，并在 `.electron-build/store` 下生成 AppX manifest、品牌磁贴和 builder 配置。配置保留 Core 和 Network 资源，仅使用 AppX 目标，排除 NSIS 准备和 GitHub 更新元数据，并将 Store 分发标记写入打包后的 manifest。Store 构建不创建 GitHub 更新器；两个原生菜单显示 Store 更新归属，不提供通道选择或重启安装操作。Windows 包检测也会为已安装的 AppX 应用禁用 GitHub 更新。
 
-在原生 Windows 构建机上，按上方开发命令准备好上游与 Electron 构建后，`pnpm --filter @dsh-electron/dsh-electron package:store --x64` 准备运行时资源并构建 x64 提交包；ARM64 runner 使用 `--arm64`。生成的配置也支持 [`desktop-store.yml`](../../.github/workflows/desktop-store.yml) 中的直接 electron-builder 调用。工作流由手动触发或 `feat/microsoft-store-*` 分支推送触发，构建两种架构，校验每个包的身份和必要资源，并分别上传 `rivetdeck-store-x64` 与 `rivetdeck-store-arm64` artifact。输出独立存放于 `dist/electron-store`；工作流不发布 GitHub release，也不提交到 Partner Center。
+在原生 Windows 构建机上，按上方开发命令准备好上游与 Electron 构建后，`pnpm --filter @dsh-electron/dsh-electron package:store --x64` 准备运行时资源并构建 x64 提交包；ARM64 runner 使用 `--arm64`。生成的配置也支持 [`desktop-store.yml`](../../.github/workflows/desktop-store.yml) 中的直接 electron-builder 调用。工作流支持 release 工作流调用、手动触发和 `feat/microsoft-store-*` 分支推送。被调用时 checkout 已验证的 release tag，构建两种架构，校验每个包的身份和必要资源，并分别上传 `rivetdeck-store-x64` 与 `rivetdeck-store-arm64` artifact。输出独立存放于 `dist/electron-store`；验证与提交分开执行。
 
-下载两个 AppX artifact，上传到 Partner Center 中的 Rivetdeck 产品。[Store 包要求](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/app-package-requirements)允许提交未签名的 AppX，并说明通过认证后的 Store 签名流程。Store 外安装需要合适的签名证书。完整信任应用能力需要 Store 审核。产品页面为 [Microsoft Store 中的 Rivetdeck](https://apps.microsoft.com/detail/9P5FQ7D2PQVQ)。
+[`desktop-release.yml`](../../.github/workflows/desktop-release.yml) 在 GitHub 发布成功且 Store 验证通过后，将 Beta、RC 和 Stable 构建提交到同一个公开 Rivetdeck 产品页面。所有 Store 用户都会收到这些版本；GitHub prerelease 标记不会创建 Store 通道。固定版本的 Microsoft Store Developer CLI 在同一个草稿中上传两个未签名包，保留已发布的产品介绍和定价，删除前代包，并在提交前将 `TargetPublishMode` 设为 `Immediate`。提交任务跨 release tag 串行执行，拒绝待处理提交和旧版本，两种架构已发布相同版本时直接完成。提交任务成功表示初始接收完成，不代表认证完成；Partner Center 负责后续审核及自动发布。首次使用凭据的提交和 Windows release 运行需要在线验证。[Store 包要求](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/app-package-requirements)允许提交未签名的 AppX，并说明通过认证后的 Store 签名流程。Store 外安装需要合适的签名证书。完整信任应用能力需要 Store 审核。产品页面为 [Microsoft Store 中的 Rivetdeck](https://apps.microsoft.com/detail/9P5FQ7D2PQVQ)。
 
 Windows 工作流用临时测试证书签名包副本，在两种原生架构上安装后检查包身份和 Store-only 菜单，执行 Core 插件操作、托管运行时安装与卸载。独立的 x64 步骤通过微软签名的指定 Windows SDK 准备 WACK，卸载临时应用后通过 `-appxpackagepath` 传入签名副本，并保留可执行文件 manifest 和完整报告。必需测试的警告或失败阻止验证通过；可选测试根据 [Desktop Bridge 测试规则](https://learn.microsoft.com/en-us/windows/uwp/debug-test-perf/windows-desktop-bridge-app-tests#required-versus-optional-tests)保留为提示。该 SDK 在 ARM64 主机上排除 WACK 可执行组件；对应 runner 记录 `unsupported-host`，不会记录认证通过。提交 artifact 保持未签名。验证报告、应用截图和每个已安装应用验证步骤的 stdout/stderr 日志及配置写锁 PID 观察记录单独上传；诊断不包含配置内容和进程参数。可选工作流参数 `package_run_id` 复用先前运行的未签名包，并记录来源运行。WACK 要求活跃用户会话，属于预检；Partner Center 认证仍需独立审核。macOS 本地检查覆盖配置、manifest 输入、磁贴尺寸和更新隔离。
+
+
+#### 自动提交配置
+
+首次自动更新前，在 Partner Center 发布已获审核通过的初始提交；若发布模式为 Manual，需点击 `Publish now`。将 Microsoft Entra 目录关联到 Partner Center 账户，在 Account settings → Users 中添加 Entra 应用并赋予 Manager 角色，然后取得 tenant ID、client ID 和新建密钥的值。微软文档说明了这些[提交 API 前置条件](https://learn.microsoft.com/en-us/windows/uwp/monetize/create-and-manage-submissions-using-windows-store-services#how-to-associate-an-azure-ad-application-with-your-partner-center-account)。从 Partner Center 的 Account settings → Organization profile → Legal info 复制账户 Seller ID。
+
+在 [Rivetdeck 设置](https://github.com/cherrchen/rivetdeck/settings/secrets/actions)中添加以下仓库 Actions secrets；使用 client secret 的值而非密钥 ID，并在到期前轮换：
+
+| Secret | 值 |
+|--------|-------|
+| `PARTNER_CENTER_TENANT_ID` | Microsoft Entra 目录 tenant ID |
+| `PARTNER_CENTER_SELLER_ID` | Partner Center Seller ID |
+| `PARTNER_CENTER_CLIENT_ID` | 已关联 Entra 应用的 client ID |
+| `PARTNER_CENTER_CLIENT_SECRET` | 已关联应用的密钥值 |
+
+缺少凭据时，Store release 任务失败并指出缺少的 secret 名称；直接分发安装包的发布独立执行。Store 验证仍可在没有凭据时手动触发。配置完成后，对有效 tag 运行 Desktop release，检查 `Submit Microsoft Store release`、任务摘要中的提交 ID 和对应 Partner Center 认证结果。Release tag 和包版本仍须满足现有分支检查。
+
+若上传后提交失败，先检查对应草稿再重跑。先完成或删除该待处理提交；CI 不覆盖它。自动化拥有 API 创建的草稿期间，不要在 Partner Center UI 中编辑它。新的工作流运行使用新的包版本；同一次运行重跑保持版本，除非两种架构已发布该版本，否则必须高于最新已发布的包。更新 Store 产品介绍或截图时，需要先单独完成一次提交，再执行自动包更新。
 
 ## 运行时与安全
 
