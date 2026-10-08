@@ -2,17 +2,17 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { execFileSync } from 'node:child_process'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { rm, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { createSmokeScratch } from './smoke-scratch.mjs'
 
 const executable = resolve(process.argv[2])
 const appPath = resolve(process.argv[3])
 const storeIndex = process.argv.indexOf('--store-executable')
 assert.ok(storeIndex === -1 || process.argv[storeIndex + 1], '--store-executable requires the installed application path')
 const storeExecutable = storeIndex === -1 ? undefined : resolve(process.argv[storeIndex + 1])
-const scratch = await mkdtemp(join(tmpdir(), 'dsh-core-plugins-'))
+const scratch = await createSmokeScratch('dsh-core-plugins-', storeExecutable !== undefined)
 const moduleUrl = relative => pathToFileURL(join(appPath, relative)).href
 const code = `
 import assert from 'node:assert/strict'

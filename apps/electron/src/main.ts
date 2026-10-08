@@ -574,7 +574,7 @@ if (!primaryInstance) {
         if (!ecosystemAbort.signal.aborted) {
           console.error('desktop ecosystem profile setup failed; bundled plugins remain available', error)
         }
-      }),
+      }).finally(() => { console.info('desktop ecosystem profile setup settled') }),
     }
     const repository = resolveUpdateRepository(readDesktopManifest(app.getAppPath()))
     if (!storeManaged && repository === undefined) throw new Error('The packaged GitHub update repository is missing.')

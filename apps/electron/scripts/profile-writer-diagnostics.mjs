@@ -7,18 +7,37 @@ const require = createRequire(new URL('../../web/package.json', import.meta.url)
 const { expect } = require('playwright/test')
 
 /**
- * Wait for first-launch ecosystem installation and release of its profile writers.
+ * Observe Main's completion signal across stdout chunks, including failed installation attempts.
+ * @returns {{ write: (chunk: string) => void, isSettled: () => boolean }} Per-launch setup observer.
+ */
+export function createProfileSetupObserver() {
+  const signal = 'desktop ecosystem profile setup settled'
+  let tail = ''
+  let settled = false
+  return {
+    write(chunk) {
+      const text = tail + chunk
+      settled ||= text.includes(signal)
+      tail = text.slice(-(signal.length - 1))
+    },
+    isSettled: () => settled,
+  }
+}
+
+/**
+ * Wait for first-launch ecosystem setup to settle and release its profile writers.
  * @param {string} home Probe-owned Harness home.
+ * @param {() => boolean} isSettled Whether Main finished the current launch's installation attempt.
  * @param {(state: Awaited<ReturnType<typeof readProfileWriterState>>) => Promise<void>} observe Record each readiness observation.
  * @returns {Promise<void>} Resolves when preview acknowledgement can write the shared profile.
  */
-export async function waitForProfileSetup(home, observe) {
+export async function waitForProfileSetup(home, isSettled, observe) {
   await expect.poll(async () => {
     const state = await readProfileWriterState(home)
     await observe(state)
-    return state
-  }, { timeout: 120_000, message: 'Desktop ecosystem installation must finish before preview acknowledgement' })
-    .toEqual({ holderPid: null, packagePid: null, ecosystemCompleted: true })
+    return { holderPid: state.holderPid, packagePid: state.packagePid, setupSettled: isSettled() }
+  }, { timeout: 120_000, message: 'Desktop ecosystem setup must settle and release profile writers before preview acknowledgement' })
+    .toEqual({ holderPid: null, packagePid: null, setupSettled: true })
 }
 
 /**

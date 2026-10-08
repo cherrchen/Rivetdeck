@@ -1,11 +1,11 @@
 /** Real packaged Desktop smoke; --startup-only checks Core boot without advancing onboarding. */
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { execFileSync } from 'node:child_process'
-import { readProfileWriterState, waitForProfileSetup } from './profile-writer-diagnostics.mjs'
+import { createProfileSetupObserver, readProfileWriterState, waitForProfileSetup } from './profile-writer-diagnostics.mjs'
+import { createSmokeScratch } from './smoke-scratch.mjs'
 const root = resolve(import.meta.dirname, '../../..')
 const require = createRequire(join(root, 'apps/web/package.json'))
 const { _electron } = require('playwright')
@@ -13,7 +13,7 @@ const executablePath = resolve(process.argv[2])
 const artifactsIndex = process.argv.indexOf('--artifacts')
 assert.ok(artifactsIndex === -1 || (process.argv[artifactsIndex + 1] && !process.argv[artifactsIndex + 1].startsWith('--')), '--artifacts requires an output directory')
 const artifacts = artifactsIndex === -1 ? undefined : resolve(process.argv[artifactsIndex + 1])
-const scratch = await mkdtemp(join(tmpdir(), 'dsh-runtime-smoke-'))
+const scratch = await createSmokeScratch('dsh-runtime-smoke-', process.argv.includes('--store'))
 const userData = join(scratch, 'userData')
 const env = { ...process.env, DSH_HOME: join(scratch, 'harness'), DSH_TELEMETRY_DISABLED: '1' }
 delete env.ELECTRON_RUN_AS_NODE
@@ -39,10 +39,16 @@ async function recordProfileLock(stage, state) {
   profileLocks.push({ time: new Date().toISOString(), stage, mainPid: application?.process().pid, ...state })
 }
 let lockPoll
+let profileSetup
 async function launch() {
+  const setup = createProfileSetupObserver()
+  profileSetup = setup
   application = await _electron.launch({ executablePath, args: [`--user-data-dir=${userData}`], env, timeout: 120_000 })
   application.process().stderr.on('data', bytes => process.stderr.write(bytes))
-  application.process().stdout.on('data', bytes => process.stdout.write(bytes))
+  application.process().stdout.on('data', bytes => {
+    setup.write(bytes.toString())
+    process.stdout.write(bytes)
+  })
   const page = await application.firstWindow({ timeout: 120_000 })
   if (lockPoll === undefined) lockPoll = setInterval(() => {
     const sample = recordProfileLock('poll').catch(error => { console.error('Profile lock diagnostic failed:', error) })
@@ -90,6 +96,19 @@ async function smoke() {
     assert.equal(storeUpdates[0].enabled, false)
     assert.equal(store.items.some(item => /Check for Updates|Update Channel|Restart.*Install|检查更新|更新通道|重启.*安装/.test(item.label)), false)
     events.push('Installed AppX has Windows package identity and Store-only update menu')
+    const shared = join(scratch, 'external-state')
+    await writeFile(shared, 'external\n', { flag: 'wx' })
+    const mainState = await application.evaluate((_, request) => {
+      const fs = process.getBuiltinModule('fs')
+      const path = process.getBuiltinModule('path')
+      if (fs.readFileSync(request.shared, 'utf8') !== 'external\n') throw new Error('Store Main cannot read probe-owned state')
+      const directory = fs.mkdtempSync(path.join(request.scratch, 'main-state-'))
+      const file = path.join(directory, 'owner')
+      fs.writeFileSync(file, 'main\n', { flag: 'wx' })
+      return file
+    }, { scratch, shared })
+    assert.equal(await readFile(mainState, 'utf8'), 'main\n', 'External Node must observe new Store Main files without AppX redirection')
+    events.push('Packaged Main and external Node share newly created probe files')
   }
   const preferences = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences())
   assert.equal(preferences.nodeIntegration, false)
@@ -112,7 +131,7 @@ async function smoke() {
   assert.equal((await page.evaluate(() => window.deepseekDesktop.runtimes.getState())).onboardingCompleted, true)
   events.push('Skip persisted without installation')
   const preview = page.getByRole('dialog', { name: /Preview Notice|预览版说明/ })
-  await waitForProfileSetup(env.DSH_HOME, state => recordProfileLock('preview-readiness', state))
+  await waitForProfileSetup(env.DSH_HOME, profileSetup.isSettled, state => recordProfileLock('preview-readiness', state))
   await recordProfileLock('before-preview-confirmation')
   const [response] = await Promise.all([
     page.waitForResponse(response => new URL(response.url()).pathname === '/api/settings/mutate', { timeout: 30_000 }),
