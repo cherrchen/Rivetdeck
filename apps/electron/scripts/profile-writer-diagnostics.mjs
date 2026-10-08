@@ -1,6 +1,25 @@
 /** Read profile writer ownership without copying configuration or package-run arguments. */
 import { readFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { join } from 'node:path'
+
+const require = createRequire(new URL('../../web/package.json', import.meta.url))
+const { expect } = require('playwright/test')
+
+/**
+ * Wait for first-launch ecosystem installation and release of its profile writers.
+ * @param {string} home Probe-owned Harness home.
+ * @param {(state: Awaited<ReturnType<typeof readProfileWriterState>>) => Promise<void>} observe Record each readiness observation.
+ * @returns {Promise<void>} Resolves when preview acknowledgement can write the shared profile.
+ */
+export async function waitForProfileSetup(home, observe) {
+  await expect.poll(async () => {
+    const state = await readProfileWriterState(home)
+    await observe(state)
+    return state
+  }, { timeout: 120_000, message: 'Desktop ecosystem installation must finish before preview acknowledgement' })
+    .toEqual({ holderPid: null, packagePid: null, ecosystemCompleted: true })
+}
 
 /**
  * Sample the writer PID, package-run PID, and completed ecosystem installation marker.

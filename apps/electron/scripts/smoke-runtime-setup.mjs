@@ -5,7 +5,7 @@ import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { execFileSync } from 'node:child_process'
-import { readProfileWriterState } from './profile-writer-diagnostics.mjs'
+import { readProfileWriterState, waitForProfileSetup } from './profile-writer-diagnostics.mjs'
 const root = resolve(import.meta.dirname, '../../..')
 const require = createRequire(join(root, 'apps/web/package.json'))
 const { _electron } = require('playwright')
@@ -27,9 +27,8 @@ const events = []
 const diagnostics = []
 const profileLocks = []
 let lastLockState
-async function recordProfileLock(stage) {
-  let state
-  try { state = await readProfileWriterState(env.DSH_HOME) }
+async function recordProfileLock(stage, state) {
+  try { state ??= await readProfileWriterState(env.DSH_HOME) }
   catch (error) {
     // Exclusive-create writers can publish an empty record before their PID write completes.
     console.error('Profile writer observation unavailable:', stage, error)
@@ -113,8 +112,14 @@ async function smoke() {
   assert.equal((await page.evaluate(() => window.deepseekDesktop.runtimes.getState())).onboardingCompleted, true)
   events.push('Skip persisted without installation')
   const preview = page.getByRole('dialog', { name: /Preview Notice|预览版说明/ })
+  await waitForProfileSetup(env.DSH_HOME, state => recordProfileLock('preview-readiness', state))
   await recordProfileLock('before-preview-confirmation')
-  await preview.getByRole('button', { name: /Continue|继续/, exact: true }).click({ timeout: 30_000 })
+  const [response] = await Promise.all([
+    page.waitForResponse(response => new URL(response.url()).pathname === '/api/settings/mutate', { timeout: 30_000 }),
+    preview.getByRole('button', { name: /Continue|继续/, exact: true }).click({ timeout: 30_000 }),
+  ])
+  const result = await response.json()
+  assert.ok(response.ok() && result.result?.ok === true, `Preview acknowledgement failed: ${JSON.stringify(result)}`)
   await preview.waitFor({ state: 'hidden', timeout: 180_000 })
   await close()
   page = await launch()
