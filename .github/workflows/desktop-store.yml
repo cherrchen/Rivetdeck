@@ -74,6 +74,21 @@ jobs:
           RELEASE_RUN_NUMBER: ${{ inputs.release_run_number }}
         run: node apps/electron/scripts/store-release-version.mjs "$env:RELEASE_RUN_NUMBER" --write
 
+      - name: Download existing Store package
+        if: ${{ inputs.package_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: rivetdeck-store-${{ matrix.arch }}
+          path: dist/electron-store
+          run-id: ${{ inputs.package_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Restore reused Store package version
+        if: ${{ inputs.package_run_id != '' }}
+        env:
+          STORE_ARCHITECTURE: ${{ matrix.arch }}
+        run: node apps/electron/scripts/restore-windows-store-version.mjs dist/electron-store "$env:STORE_ARCHITECTURE"
+
       - name: Prepare Store identity and assets
         run: pnpm --filter @dsh-electron/dsh-electron prepare:store
 
@@ -113,15 +128,6 @@ jobs:
       - name: Build unsigned Store package
         if: ${{ !inputs.package_run_id }}
         run: pnpm --filter @dsh-electron/dsh-electron exec electron-builder --config .electron-build/store/builder.json --win appx --${{ matrix.arch }} --publish never
-
-      - name: Download existing Store package
-        if: ${{ inputs.package_run_id != '' }}
-        uses: actions/download-artifact@v4
-        with:
-          name: rivetdeck-store-${{ matrix.arch }}
-          path: dist/electron-store
-          run-id: ${{ inputs.package_run_id }}
-          github-token: ${{ github.token }}
 
       - name: Record package source
         shell: pwsh

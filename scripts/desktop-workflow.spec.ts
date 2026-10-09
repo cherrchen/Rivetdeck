@@ -26,6 +26,15 @@ describe('Desktop synchronization and release workflows', () => {
     expect(build?.if).toBe('${{ !inputs.package_run_id }}')
     const reuse = steps.find(step => step.name === 'Download existing Store package')
     expect(reuse).toMatchObject({ if: "${{ inputs.package_run_id != '' }}", uses: 'actions/download-artifact@v4', with: { 'run-id': '${{ inputs.package_run_id }}' } })
+    const restore = steps.find(step => step.name === 'Restore reused Store package version')
+    expect(restore).toMatchObject({
+      if: "${{ inputs.package_run_id != '' }}",
+      env: { STORE_ARCHITECTURE: '${{ matrix.arch }}' },
+      run: 'node apps/electron/scripts/restore-windows-store-version.mjs dist/electron-store "$env:STORE_ARCHITECTURE"',
+    })
+    const prepare = steps.findIndex(step => step.name === 'Prepare Store identity and assets')
+    expect(steps.indexOf(restore!)).toBeGreaterThan(steps.indexOf(reuse!))
+    expect(prepare).toBeGreaterThan(steps.indexOf(restore!))
     const verify = steps.findIndex(step => step.name === 'Verify Store package contents')
     const upload = steps.findIndex(step => step.uses === 'actions/upload-artifact@v4')
     expect(verify).toBeGreaterThan(steps.indexOf(build!))

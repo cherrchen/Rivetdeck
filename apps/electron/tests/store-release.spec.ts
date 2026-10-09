@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { publishWindowsStore } from '../scripts/publish-windows-store.mjs'
 import { storeReleaseVersion } from '../scripts/store-release-version.mjs'
+import { restoreWindowsStoreVersion } from '../scripts/restore-windows-store-version.mjs'
 
 const identity = {
   productId: '9P5FQ7D2PQVQ',
@@ -67,8 +68,54 @@ describe('Desktop release Store versions', () => {
   })
 })
 
+describe('Reused Microsoft Store package versions', () => {
+  const configuration = { ...identity, publisherDisplayName: 'Cherrchen Software', version: '1.0.0.0' }
+
+  async function withArtifact(names: string[], action: (project: string, directory: string) => Promise<void>) {
+    const project = await mkdtemp(join(tmpdir(), 'rivetdeck-store-reuse-'))
+    try {
+      const directory = join(project, 'packages')
+      await mkdir(directory)
+      await writeFile(join(project, 'windows-store.json'), `${JSON.stringify(configuration)}\n`)
+      for (const name of names) await writeFile(join(directory, name), '')
+      await action(project, directory)
+    } finally {
+      await rm(project, { recursive: true, force: true })
+    }
+  }
+
+  it.each([
+    ['x64', version], ['arm64', version], ['x64', '1.1.0.0'], ['arm64', '1.0.0.0'],
+  ])('restores %s artifact version %s while retaining Partner Center identity', async (architecture, sourceVersion) => {
+    await withArtifact([`Rivetdeck-store-${sourceVersion}-${architecture}.appx`], async (project, directory) => {
+      await expect(restoreWindowsStoreVersion(project, directory, architecture)).resolves.toBe(sourceVersion)
+      expect(JSON.parse(await readFile(join(project, 'windows-store.json'), 'utf8'))).toEqual({
+        ...configuration, version: sourceVersion,
+      })
+    })
+  })
+
+  it.each([
+    [[], 'x64', 'exactly one'],
+    [[`Rivetdeck-store-${version}-x64.appx`, 'extra.appx'], 'x64', 'exactly one'],
+    [[`Rivetdeck-store-${version}-arm64.appx`], 'x64', 'artifact name'],
+    [['another-product-1.0.123.0-x64.appx'], 'x64', 'artifact name'],
+    [['Rivetdeck-store-1.0.123.1-x64.appx'], 'x64', 'Store version'],
+    [['Rivetdeck-store-1.65536.0.0-x64.appx'], 'x64', 'Store version'],
+    [['Rivetdeck-store-01.0.123.0-x64.appx'], 'x64', 'Store version'],
+    [[`Rivetdeck-store-${version}-x64.appx`], 'ia32', 'x64 or arm64'],
+  ])('refuses invalid artifact set %j for %s without changing configuration', async (names, architecture, message) => {
+    await withArtifact(names, async (project, directory) => {
+      const path = join(project, 'windows-store.json')
+      const before = await readFile(path, 'utf8')
+      await expect(restoreWindowsStoreVersion(project, directory, architecture)).rejects.toThrow(message)
+      expect(await readFile(path, 'utf8')).toBe(before)
+    })
+  })
+})
+
 describe('Microsoft Store release submission', () => {
-  it('submits both architectures together, retires all predecessors, and preserves listing metadata', async () => {
+  it('returns after committing both architectures, retires predecessors, and preserves listing metadata', async () => {
     await withPackages(async (directory, payload) => {
       const run = vi.fn(async (args: string[]): Promise<string> => {
         switch (run.mock.calls.length) {
@@ -79,7 +126,7 @@ describe('Microsoft Store release submission', () => {
           case 6: return JSON.stringify(draft)
           case 7: return ''
           case 8: return readFile(payload, 'utf8')
-          case 9: case 10: return ''
+          case 9: return ''
           default: throw new Error(`Unexpected command ${args[0]}`)
         }
       })
@@ -94,9 +141,8 @@ describe('Microsoft Store release submission', () => {
         ],
       })
       expect(run.mock.calls[3]?.[0]).toEqual(['publish', expect.any(String), '--appId', identity.productId, '--inputDirectory', directory, '--noCommit'])
-      expect(run.mock.calls.slice(-2).map(call => call[0])).toEqual([
-        ['submission', 'publish', identity.productId], ['submission', 'poll', identity.productId],
-      ])
+      expect(run).toHaveBeenCalledTimes(9)
+      expect(run.mock.calls.at(-1)?.[0]).toEqual(['submission', 'publish', identity.productId])
     })
   })
 

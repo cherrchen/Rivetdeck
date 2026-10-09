@@ -10,6 +10,7 @@ const project = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 /**
  * Upload both architectures, retain listing metadata, and commit an Immediate submission.
+ * Return after commit acceptance; Partner Center continues ingestion, certification, and publication.
  * Existing pending submissions and older package versions fail before any remote writes.
  * @param {{ productId: string, identityName: string, publisher: string }} identity Expected Partner Center application.
  * @param {string} version Qualified Store package version.
@@ -79,7 +80,6 @@ export async function publishWindowsStore(identity, version, packageDirectory, p
     throw new Error('Store submission must contain both uploaded architectures before commit')
   }
   await run(['submission', 'publish', identity.productId])
-  await run(['submission', 'poll', identity.productId])
   return { status: 'submitted', submissionId: pendingId }
 }
 
