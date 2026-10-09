@@ -78,7 +78,7 @@ describe('Desktop synchronization and release workflows', () => {
     } } })
     expect(submit).toMatchObject({
       needs: ['validate', 'publish', 'store-package'], 'runs-on': 'windows-latest',
-      concurrency: { group: 'desktop-store-publish', 'cancel-in-progress': false },
+      concurrency: { group: 'desktop-store-publish', 'cancel-in-progress': false, queue: 'max' },
     })
     if (!Array.isArray(submit.steps) || !Array.isArray(credentials.steps) || !Array.isArray(validate.steps)) {
       throw new TypeError('Store release must validate credentials and submit qualified packages')
