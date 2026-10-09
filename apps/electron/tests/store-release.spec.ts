@@ -175,6 +175,19 @@ describe('Microsoft Store release submission', () => {
     })
   })
 
+  it('requires a higher version than retired packages in the published submission', async () => {
+    await withPackages(async (directory, payload) => {
+      const run = commands([app, {
+        ...published, ApplicationPackages: [
+          ...published.ApplicationPackages,
+          { FileName: 'retired-x86.appx', Version: '1.0.124.0', Architecture: 'X86', FileStatus: 'PendingDelete' },
+        ],
+      }])
+      await expect(publishWindowsStore(identity, version, directory, payload, run)).rejects.toThrow('must exceed')
+      expect(run).toHaveBeenCalledTimes(2)
+    })
+  })
+
   it('omits malformed CLI output from errors because it may contain an upload SAS', async () => {
     await withPackages(async (directory, payload) => {
       const run = vi.fn(async () => 'https://upload.invalid/?sig=private-upload-token')

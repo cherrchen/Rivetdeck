@@ -36,8 +36,9 @@ export async function publishWindowsStore(identity, version, packageDirectory, p
   const publishedId = submissionId(app.LastPublishedApplicationSubmission)
   const published = parseRecord(await run(['submission', 'get', identity.productId]))
   if (published.Id !== publishedId) throw new Error('Partner Center published submission changed during release validation')
-  const publishedPackages = packageRecords(published).filter(item => item.FileStatus !== 'PendingDelete')
-  if (publishedPackages.length === 2 && ['x64', 'arm64'].every(arch => publishedPackages.some(item => typeof item.Architecture === 'string'
+  const publishedPackages = packageRecords(published)
+  const activePackages = publishedPackages.filter(item => item.FileStatus !== 'PendingDelete')
+  if (activePackages.length === 2 && ['x64', 'arm64'].every(arch => activePackages.some(item => typeof item.Architecture === 'string'
     && item.Architecture.toLowerCase() === arch && item.Version === version && item.FileStatus === 'Uploaded'))) {
     return { status: 'already-published', submissionId: publishedId }
   }
