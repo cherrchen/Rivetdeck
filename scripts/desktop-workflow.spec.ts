@@ -105,7 +105,7 @@ describe('Desktop synchronization and release workflows', () => {
     const storeJob = workflowJob(store, 'package')
     if (!Array.isArray(storeJob.steps)) throw new TypeError('Store qualification must define steps')
     const storeSteps = storeJob.steps.filter(isRecord)
-    expect(storeSteps.find(step => step.uses === 'actions/checkout@v6')?.with).toMatchObject({ ref: '${{ inputs.commit || github.ref }}' })
+    expect(storeSteps.find(step => step.uses === 'actions/checkout@v6')?.with).toMatchObject({ ref: '${{ inputs.commit || github.sha }}' })
     const version = storeSteps.findIndex(step => step.name === 'Set Store release package version')
     expect(version).toBeLessThan(storeSteps.findIndex(step => step.name === 'Prepare Store identity and assets'))
     expect(storeSteps[version]?.run).toContain('store-release-version.mjs')

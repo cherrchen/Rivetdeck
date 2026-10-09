@@ -58,7 +58,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.commit || github.ref }}
+          ref: ${{ inputs.commit || github.sha }}
 
       - name: Resolve checked-out source commit
         id: source
