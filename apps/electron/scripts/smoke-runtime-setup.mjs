@@ -1,15 +1,19 @@
 /** Real packaged Desktop smoke; --startup-only checks Core boot without advancing onboarding. */
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { execFileSync } from 'node:child_process'
+import { createProfileSetupObserver, readProfileWriterState, waitForProfileSetup } from './profile-writer-diagnostics.mjs'
+import { createSmokeScratch } from './smoke-scratch.mjs'
 const root = resolve(import.meta.dirname, '../../..')
 const require = createRequire(join(root, 'apps/web/package.json'))
 const { _electron } = require('playwright')
 const executablePath = resolve(process.argv[2])
-const scratch = await mkdtemp(join(tmpdir(), 'dsh-runtime-smoke-'))
+const artifactsIndex = process.argv.indexOf('--artifacts')
+assert.ok(artifactsIndex === -1 || (process.argv[artifactsIndex + 1] && !process.argv[artifactsIndex + 1].startsWith('--')), '--artifacts requires an output directory')
+const artifacts = artifactsIndex === -1 ? undefined : resolve(process.argv[artifactsIndex + 1])
+const scratch = await createSmokeScratch('dsh-runtime-smoke-', process.argv.includes('--store'))
 const userData = join(scratch, 'userData')
 const env = { ...process.env, DSH_HOME: join(scratch, 'harness'), DSH_TELEMETRY_DISABLED: '1' }
 delete env.ELECTRON_RUN_AS_NODE
@@ -20,12 +24,48 @@ if (process.argv.includes('--offline')) {
 }
 let application
 const events = []
+const diagnostics = []
+const profileLocks = []
+let lastLockState
+async function recordProfileLock(stage, state) {
+  try { state ??= await readProfileWriterState(env.DSH_HOME) }
+  catch (error) {
+    // Exclusive-create writers can publish an empty record before their PID write completes.
+    console.error('Profile writer observation unavailable:', stage, error)
+    return
+  }
+  if (JSON.stringify(state) === lastLockState && stage === 'poll') return
+  lastLockState = JSON.stringify(state)
+  profileLocks.push({ time: new Date().toISOString(), stage, mainPid: application?.process().pid, ...state })
+}
+let lockPoll
+let profileSetup
 async function launch() {
+  const setup = createProfileSetupObserver()
+  profileSetup = setup
   application = await _electron.launch({ executablePath, args: [`--user-data-dir=${userData}`], env, timeout: 120_000 })
   application.process().stderr.on('data', bytes => process.stderr.write(bytes))
-  application.process().stdout.on('data', bytes => process.stdout.write(bytes))
+  application.process().stdout.on('data', bytes => {
+    setup.write(bytes.toString())
+    process.stdout.write(bytes)
+  })
   const page = await application.firstWindow({ timeout: 120_000 })
+  if (lockPoll === undefined) lockPoll = setInterval(() => {
+    const sample = recordProfileLock('poll').catch(error => { console.error('Profile lock diagnostic failed:', error) })
+    diagnostics.push(sample)
+  }, 1000)
+  if (process.argv.includes('--store')) await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(1440, 900))
   page.on('pageerror', error => console.error('renderer error:', error))
+  page.on('console', message => {
+    if (message.type() === 'error') console.error('renderer console:', message.text())
+  })
+  page.on('response', response => {
+    if (new URL(response.url()).pathname !== '/api/settings/mutate') return
+    diagnostics.push(response.text().then(body => {
+      console.error('Settings mutation response:', body)
+      return recordProfileLock('settings-response')
+    }).catch(error => { console.error('Settings response could not be read:', error) }))
+  })
   await page.waitForFunction(() => window.deepseekDesktop !== undefined)
   await page.getByRole('button', { name: /Settings|设置/, exact: true }).waitFor({ timeout: 120_000 })
   return page
@@ -38,6 +78,38 @@ async function close() {
 async function smoke() {
   let page = await launch()
   const resources = await application.evaluate(() => process.resourcesPath)
+  if (process.argv.includes('--store')) {
+    const store = await application.evaluate(({ Menu }) => {
+      const items = []
+      const collect = menu => {
+        for (const item of menu.items) {
+          items.push({ label: item.label, enabled: item.enabled })
+          if (item.submenu) collect(item.submenu)
+        }
+      }
+      collect(Menu.getApplicationMenu())
+      return { windowsStore: process.windowsStore, items }
+    })
+    assert.equal(store.windowsStore, true, 'Installed AppX must run with Windows package identity')
+    const storeUpdates = store.items.filter(item => /Updates managed by Microsoft Store|更新由 Microsoft Store 管理/.test(item.label))
+    assert.equal(storeUpdates.length, 1)
+    assert.equal(storeUpdates[0].enabled, false)
+    assert.equal(store.items.some(item => /Check for Updates|Update Channel|Restart.*Install|检查更新|更新通道|重启.*安装/.test(item.label)), false)
+    events.push('Installed AppX has Windows package identity and Store-only update menu')
+    const shared = join(scratch, 'external-state')
+    await writeFile(shared, 'external\n', { flag: 'wx' })
+    const mainState = await application.evaluate((_, request) => {
+      const fs = process.getBuiltinModule('fs')
+      const path = process.getBuiltinModule('path')
+      if (fs.readFileSync(request.shared, 'utf8') !== 'external\n') throw new Error('Store Main cannot read probe-owned state')
+      const directory = fs.mkdtempSync(path.join(request.scratch, 'main-state-'))
+      const file = path.join(directory, 'owner')
+      fs.writeFileSync(file, 'main\n', { flag: 'wx' })
+      return file
+    }, { scratch, shared })
+    assert.equal(await readFile(mainState, 'utf8'), 'main\n', 'External Node must observe new Store Main files without AppX redirection')
+    events.push('Packaged Main and external Node share newly created probe files')
+  }
   const preferences = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences())
   assert.equal(preferences.nodeIntegration, false)
   assert.equal(preferences.contextIsolation, true)
@@ -59,12 +131,20 @@ async function smoke() {
   assert.equal((await page.evaluate(() => window.deepseekDesktop.runtimes.getState())).onboardingCompleted, true)
   events.push('Skip persisted without installation')
   const preview = page.getByRole('dialog', { name: /Preview Notice|预览版说明/ })
-  await preview.getByRole('button', { name: /Continue|继续/, exact: true }).click({ timeout: 30_000 })
+  await waitForProfileSetup(env.DSH_HOME, profileSetup.isSettled, state => recordProfileLock('preview-readiness', state))
+  await recordProfileLock('before-preview-confirmation')
+  const [response] = await Promise.all([
+    page.waitForResponse(response => new URL(response.url()).pathname === '/api/settings/mutate', { timeout: 30_000 }),
+    preview.getByRole('button', { name: /Continue|继续/, exact: true }).click({ timeout: 30_000 }),
+  ])
+  const result = await response.json()
+  assert.ok(response.ok() && result.result?.ok === true, `Preview acknowledgement failed: ${JSON.stringify(result)}`)
   await preview.waitFor({ state: 'hidden', timeout: 180_000 })
   await close()
   page = await launch()
   assert.equal((await page.evaluate(() => window.deepseekDesktop.runtimes.getState())).onboardingCompleted, true)
   await page.getByRole('button', { name: /Close|关闭|Configure later|稍后配置/, exact: true }).click({ timeout: 60_000 })
+  await page.screenshot({ path: join(scratch, 'home.png') })
   await page.getByRole('button', { name: /Settings|设置/, exact: true }).click()
   await page.getByText(/Network & Runtimes|网络与运行环境/, { exact: true }).first().click()
   await page.getByRole('heading', { name: /Network & Runtimes|网络与运行环境/, exact: true }).waitFor()
@@ -126,6 +206,30 @@ try {
   console.error('smoke artifacts:', scratch)
   throw error
 } finally {
-  await close()
-  if (!process.argv.includes('--keep')) await rm(scratch, { recursive: true, force: true })
+  clearInterval(lockPoll)
+  await Promise.all(diagnostics)
+  try { await recordProfileLock('probe-finished') }
+  catch (error) { console.error('Final profile lock diagnostic failed:', error) }
+  console.error('Profile writer lock observations:', JSON.stringify(profileLocks))
+  if (process.platform === 'win32' && profileLocks.some(row => row.holderPid !== null)) {
+    try {
+      const pids = [...new Set(profileLocks.flatMap(row => [row.mainPid, row.holderPid, row.packagePid]).filter(pid => Number.isSafeInteger(pid) && pid > 0))]
+      const command = `$ids = @(${pids.join(',')}); $rows = Get-CimInstance Win32_Process; do { $before = $ids.Count; $ids = @($ids + @($rows | Where-Object { $_.ParentProcessId -in $ids } | ForEach-Object ProcessId) | Sort-Object -Unique) } while ($ids.Count -gt $before); $rows | Where-Object { $_.ProcessId -in $ids } | Select-Object ProcessId,ParentProcessId,Name | ConvertTo-Json -Compress`
+      console.error('Probe process inventory:', execFileSync('pwsh', ['-NoLogo', '-NoProfile', '-Command', command], { encoding: 'utf8', timeout: 15_000, windowsHide: true }))
+    } catch (error) { console.error('Process inventory could not be read:', error.message) }
+  }
+  try { await close() } finally {
+    try {
+      if (artifacts !== undefined) {
+        await mkdir(artifacts, { recursive: true })
+        for (const file of await readdir(scratch)) {
+          if (file.endsWith('.png')) await copyFile(join(scratch, file), join(artifacts, file))
+        }
+        await writeFile(join(artifacts, 'events.json'), `${JSON.stringify({ platform: process.platform, arch: process.arch, events }, null, 2)}\n`)
+        await writeFile(join(artifacts, 'profile-locks.json'), `${JSON.stringify(profileLocks, null, 2)}\n`)
+      }
+    } finally {
+      if (!process.argv.includes('--keep')) await rm(scratch, { recursive: true, force: true })
+    }
+  }
 }

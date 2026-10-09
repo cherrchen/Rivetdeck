@@ -4,9 +4,20 @@ import type { UpdateRepository } from './update-feed.ts'
 
 /** Package metadata consumed by desktop-owned integrations. */
 export interface DesktopManifest {
+  distribution?: unknown
   build?: unknown
   homepage?: unknown
   repository?: unknown
+}
+
+/**
+ * Resolve Store-managed updates from stamped artifacts or Windows package identity.
+ * @param manifest - Packaged application metadata.
+ * @param windowsStore - Electron's installed Windows package detection.
+ * @returns Whether GitHub updating must be disabled, including unpacked Store artifacts.
+ */
+export function usesStoreUpdates(manifest: DesktopManifest, windowsStore: boolean): boolean {
+  return windowsStore || manifest.distribution === 'microsoft-store'
 }
 
 /**

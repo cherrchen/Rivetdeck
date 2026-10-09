@@ -1,0 +1,205 @@
+name: Desktop Microsoft Store packages
+run-name: Store submission packages (${{ github.ref_name }})
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Validated Desktop release tag
+        type: string
+        required: true
+      commit:
+        description: Validated release tag commit
+        type: string
+        required: true
+      release_run_number:
+        description: Desktop release run number used for the Store package version
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      package_run_id:
+        description: 'Optional source run ID: qualify its existing unsigned artifacts without rebuilding'
+        type: string
+        required: false
+  push:
+    branches: ['feat/microsoft-store-*']
+    paths:
+      - 'apps/electron/**'
+      - '.github/workflows/desktop-store.yml'
+      - 'scripts/desktop-workflow.spec.ts'
+
+concurrency:
+  group: desktop-store-${{ github.ref }}
+  cancel-in-progress: false
+  queue: max
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  DSH_TELEMETRY_DISABLED: '1'
+  CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+jobs:
+  package:
+    name: Store AppX ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            arch: x64
+          - runner: windows-11-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+
+      - name: Resolve checked-out source commit
+        id: source
+        shell: pwsh
+        run: |
+          $commit = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve checked-out Store source commit.' }
+          "commit=$commit" >> $env:GITHUB_OUTPUT
+
+      - name: Fetch pinned upstream audit baseline
+        run: git fetch --depth=1 --no-tags https://github.com/deepseek-ai/deepseek-harness.git refs/tags/dsh-v0.2.0-rc.2:refs/tags/dsh-v0.2.0-rc.2
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Set Store release package version
+        if: inputs.release_run_number
+        env:
+          RELEASE_RUN_NUMBER: ${{ inputs.release_run_number }}
+        run: node apps/electron/scripts/store-release-version.mjs "$env:RELEASE_RUN_NUMBER" --write
+
+      - name: Download existing Store package
+        if: ${{ inputs.package_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: rivetdeck-store-${{ matrix.arch }}
+          path: dist/electron-store
+          run-id: ${{ inputs.package_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Restore reused Store package version
+        if: ${{ inputs.package_run_id != '' }}
+        env:
+          STORE_ARCHITECTURE: ${{ matrix.arch }}
+        run: node apps/electron/scripts/restore-windows-store-version.mjs dist/electron-store "$env:STORE_ARCHITECTURE"
+
+      - name: Prepare Store identity and assets
+        run: pnpm --filter @dsh-electron/dsh-electron prepare:store
+
+      - name: Build upstream application
+        if: ${{ !inputs.package_run_id }}
+        run: pnpm run build
+
+      - name: Compile Electron application
+        if: ${{ !inputs.package_run_id }}
+        run: pnpm --filter @dsh-electron/dsh-electron build
+
+      - name: Test Store distribution
+        shell: pwsh
+        run: |
+          pnpm exec vitest run apps/electron/tests/store-release.spec.ts apps/electron/tests/store-release-queue.spec.ts apps/electron/tests/windows-store.spec.ts apps/electron/tests/updater.spec.ts apps/electron/tests/atomic-path.spec.ts apps/electron/tests/runtime-installer.spec.ts apps/electron/tests/profile-writer-diagnostics.spec.ts scripts/desktop-workflow.spec.ts
+          if ($LASTEXITCODE -ne 0) { throw 'Store distribution tests failed.' }
+          ./apps/electron/scripts/test-wack-report.ps1
+
+      - name: Prepare Core Host executor
+        if: ${{ !inputs.package_run_id }}
+        env:
+          DSH_ELECTRON_TARGET_ARCH: ${{ matrix.arch }}
+          DSH_ELECTRON_TARGET_PLATFORM: win32
+        run: pnpm --filter @dsh-electron/dsh-electron prepare:core
+
+      - name: Prepare Network Runtime
+        if: ${{ !inputs.package_run_id }}
+        run: pnpm --filter @dsh-electron/dsh-electron prepare:network-runtime
+
+      - name: Write About build identity
+        if: ${{ !inputs.package_run_id }}
+        env:
+          RIVETDECK_BUILD: ${{ github.run_number }}
+          RIVETDECK_COMMIT: ${{ steps.source.outputs.commit }}
+        run: node apps/electron/scripts/write-build-info.mjs
+
+      - name: Build unsigned Store package
+        if: ${{ !inputs.package_run_id }}
+        run: pnpm --filter @dsh-electron/dsh-electron exec electron-builder --config .electron-build/store/builder.json --win appx --${{ matrix.arch }} --publish never
+
+      - name: Record package source
+        shell: pwsh
+        env:
+          SOURCE_RUN_ID: ${{ inputs.package_run_id || github.run_id }}
+        run: |
+          New-Item -ItemType Directory -Path "$env:RUNNER_TEMP/store-qualification" -Force | Out-Null
+          @{ packageRunId = $env:SOURCE_RUN_ID; qualificationCommit = '${{ steps.source.outputs.commit }}' } | ConvertTo-Json | Set-Content "$env:RUNNER_TEMP/store-qualification/source.json"
+
+      - name: Verify Store package contents
+        id: contents
+        shell: pwsh
+        run: |
+          $packages = @(Get-ChildItem "dist/electron-store/*-${{ matrix.arch }}.appx")
+          if ($packages.Count -ne 1) { throw 'Expected exactly one Store package for this architecture.' }
+          ./apps/electron/scripts/verify-windows-store.ps1 -PackagePath $packages[0].FullName -Architecture '${{ matrix.arch }}'
+
+      - name: Install, launch, and qualify Store application
+        timeout-minutes: 60
+        shell: pwsh
+        run: |
+          $package = Get-Item "dist/electron-store/*-${{ matrix.arch }}.appx"
+          ./apps/electron/scripts/smoke-windows-store.ps1 -PackagePath $package.FullName -Architecture '${{ matrix.arch }}' -ReportDirectory "$env:RUNNER_TEMP/store-qualification"
+
+      - name: Record ARM64 certification-tool limitation
+        if: always() && matrix.arch == 'arm64' && steps.contents.outcome == 'success'
+        shell: pwsh
+        run: |
+          @{ status = 'unsupported-host'; architecture = 'arm64'; reason = 'Windows SDK 10.0.26100.9457 excludes WACK executable components on ARM64 hosts. Native application tests run separately; Partner Center certification remains pending.' } | ConvertTo-Json | Set-Content "$env:RUNNER_TEMP/store-qualification/certification-status.json"
+          Write-Host 'ARM64 WACK not run: selected SDK does not support this host architecture.'
+
+      - name: Prepare Windows App Certification Kit
+        if: always() && matrix.arch == 'x64' && steps.contents.outcome == 'success'
+        id: toolkit
+        timeout-minutes: 15
+        shell: pwsh
+        run: ./apps/electron/scripts/prepare-wack.ps1 -ReportDirectory "$env:RUNNER_TEMP/store-qualification/wack-setup"
+
+      - name: Run Windows App Certification Kit
+        if: always() && matrix.arch == 'x64' && steps.toolkit.outcome == 'success'
+        timeout-minutes: 30
+        shell: pwsh
+        run: |
+          $package = Get-Item "dist/electron-store/*-${{ matrix.arch }}.appx"
+          ./apps/electron/scripts/smoke-windows-store.ps1 -PackagePath $package.FullName -Architecture '${{ matrix.arch }}' -ReportDirectory "$env:RUNNER_TEMP/store-qualification/certification" -RunCertificationKit -CertificationOnly
+
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.contents.outcome == 'success'
+        with:
+          name: rivetdeck-store-${{ matrix.arch }}
+          path: dist/electron-store/*.appx
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Store qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rivetdeck-store-qualification-${{ matrix.arch }}
+          path: ${{ runner.temp }}/store-qualification/
+          if-no-files-found: warn
+          retention-days: 14

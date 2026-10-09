@@ -2,10 +2,11 @@
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { createReadStream, createWriteStream, existsSync } from 'node:fs'
-import { mkdir, rename, rm } from 'node:fs/promises'
+import { mkdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { unpackRuntime } from '../../scripts/toolchains/common.mjs'
+import { renameDesktopPath } from '../atomic-file.ts'
 import { runtimePaths } from './paths.ts'
 import type { RuntimeError, RuntimeName } from './domain.ts'
 
@@ -142,7 +143,7 @@ export async function installRuntime(options: {
     await (options.verify ?? verifyRuntime)(options.name, extracted, options.version, options.platform)
     signal.throwIfAborted()
     await mkdir(join(options.destination, '..'), { recursive: true, mode: 0o700 })
-    await rename(extracted, options.destination)
+    await renameDesktopPath(extracted, options.destination, { platform: options.platform, signal })
   } catch (error) {
     const code = error !== null && typeof error === 'object' && 'code' in error ? error.code : undefined
     throw new RuntimeInstallError(signal.aborted ? 'interrupted' : code === 'ENOSPC' ? 'disk' : stage, error)

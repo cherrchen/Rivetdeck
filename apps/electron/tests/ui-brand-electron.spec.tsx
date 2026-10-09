@@ -56,9 +56,9 @@ describe('Electron desktop brand plugin', () => {
     for (const hole of HOLES) expect(after.slots.entries(hole)).toHaveLength(1)
   })
 
-  it('renders the DeepSeek Harness name independently from both requested mark sizes', () => {
+  it('renders the Rivetdeck name independently from both requested mark sizes', () => {
     const name = render(<DesktopBrandName />)
-    expect(name.container.querySelector('svg')?.getAttribute('viewBox')).toBe('26 0 156 24')
+    expect(name.container.querySelector('text')?.textContent?.trim()).toBe('Rivetdeck')
     name.unmount()
 
     const mark = render(<DesktopBrandMark size={34} className="hero-mark" />)

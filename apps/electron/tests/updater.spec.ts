@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => {
   const handlers = new Map<string, Array<(...args: unknown[]) => void>>()
@@ -26,12 +26,15 @@ const mocks = vi.hoisted(() => {
         .mockResolvedValue({ response: 1 }),
     },
     handlers,
+    updaterAccess: vi.fn(),
+    diagnosticSession: { fetch: vi.fn() },
   }
 })
 
 vi.mock('electron', () => ({
   app: mocks.app,
   dialog: mocks.dialog,
+  session: { fromPartition: vi.fn(() => mocks.diagnosticSession) },
   Notification: class {
     static isSupported = () => false
     on = vi.fn()
@@ -39,9 +42,9 @@ vi.mock('electron', () => ({
   },
 }))
 
-vi.mock('electron-updater', () => ({ default: { autoUpdater: mocks.autoUpdater } }))
+vi.mock('electron-updater', () => ({ default: { get autoUpdater() { mocks.updaterAccess(); return mocks.autoUpdater } } }))
 
-import { createUpdater } from '../src/updater.ts'
+import { createUpdater, updaterNetworkSession } from '../src/updater.ts'
 
 describe('Electron updater controller', () => {
   beforeEach(() => {
@@ -53,6 +56,24 @@ describe('Electron updater controller', () => {
     mocks.autoUpdater.netSession.fetch.mockReset()
     mocks.dialog.showMessageBox.mockClear()
     mocks.handlers.clear()
+    mocks.updaterAccess.mockClear()
+  })
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  it.each(['stamped artifact', 'installed AppX'])('leaves %s updates to Microsoft Store without constructing a GitHub updater', (kind) => {
+    if (kind === 'installed AppX') vi.stubGlobal('process', { ...process, windowsStore: true })
+    const controller = createUpdater({
+      storeManaged: kind === 'stamped artifact',
+      channel: 'prerelease', getWindow: () => undefined,
+      onChannelChanged: vi.fn(), onStateChanged: vi.fn(), prepareToInstall: vi.fn(),
+      repository: { owner: 'owner', repo: 'desktop' },
+    })
+    expect(controller).toBeUndefined()
+    expect(updaterNetworkSession(kind === 'stamped artifact')).toBe(mocks.diagnosticSession)
+    expect(mocks.updaterAccess).not.toHaveBeenCalled()
+    expect(mocks.handlers.size).toBe(0)
+    expect(mocks.autoUpdater.checkForUpdates).not.toHaveBeenCalled()
+    expect(mocks.autoUpdater.quitAndInstall).not.toHaveBeenCalled()
   })
 
   it('shows checking and no-update states during a manual check', async () => {
@@ -114,6 +135,7 @@ describe('Electron updater controller', () => {
       prepareToInstall: vi.fn().mockResolvedValue(undefined), repository: { owner: 'owner', repo: 'desktop' },
       useManagedSession: true,
     })
+    if (controller === undefined) throw new Error('Direct-distribution updater must exist')
     await controller.check(false)
     expect(mocks.autoUpdater.netSession.fetch).toHaveBeenCalledWith(
       'https://api.github.com/repos/owner/desktop/releases?per_page=20',
@@ -145,7 +167,7 @@ function createController(overrides: {
   channel?: 'prerelease' | 'stable'
   resolveFeed?: () => Promise<string | undefined>
 } = {}) {
-  return createUpdater({
+  const controller = createUpdater({
     channel: overrides.channel ?? 'prerelease',
     getWindow: () => undefined,
     onChannelChanged: vi.fn(),
@@ -154,4 +176,6 @@ function createController(overrides: {
     repository: { owner: 'owner', repo: 'desktop' },
     resolveFeed: overrides.resolveFeed ?? vi.fn().mockResolvedValue('https://example.test/release'),
   })
+  if (controller === undefined) throw new Error('Direct-distribution updater must exist')
+  return controller
 }

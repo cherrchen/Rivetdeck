@@ -127,9 +127,9 @@ Standing rules (do not duplicate the full architecture doc here):
 - All desktop release work targets `apps/electron/`
 - Build the upstream runtime before starting Electron locally (`pnpm run build` then `pnpm --filter @dsh-electron/dsh-electron start`)
 - Desktop-owned registry dependencies (including exact bundled plugin pins declared in `dshElectron.runtimePlugins` and `dshElectron.ecosystemPlugins`) and declared desktop entry dependencies are retained across upstream dependency sync; other workspace dependencies are regenerated from the upstream CLI graph. A leftover `workspace:` specifier whose package is absent after the merge is dropped; it is not retained as a registry dependency ([rationale](.agents/notes/implemented/bug-fix/2026-08-20-drop-stale-electron-workspace-specifiers.md))
-- Packaged builds use `electron-builder` with NSIS (Windows), DMG/ZIP (macOS), and AppImage/DEB (Linux) on native x64 and ARM64 runners
+- Packaged builds use `electron-builder` with NSIS (direct Windows), Store-only AppX (Microsoft Store), DMG/ZIP (macOS), and AppImage/DEB (Linux) on native x64 and ARM64 runners; Store identity and package version belong to `apps/electron/windows-store.json`
 - Release artifacts are unsigned unless platform signing credentials are configured
-- The updater reads GitHub Release metadata; tag names follow `v{a.b.c}[-beta.x|-rc.x]` — not the legacy `electron-dsh-v*` format
+- Direct-distribution updates read GitHub Release metadata; tag names follow `v{a.b.c}[-beta.x|-rc.x]` — not the legacy `electron-dsh-v*` format. Microsoft Store owns Store-build updates; never enable GitHub installation in those artifacts
 
 ## Release and version rules
 
@@ -179,7 +179,9 @@ pnpm install --no-frozen-lockfile   # when lockfile must follow manifest changes
 |----------|---------|------|
 | [`sync-upstream.yml`](.github/workflows/sync-upstream.yml) | Schedule, dispatch | Merge upstream → `develop` when upstream changed; publish Beta tag |
 |[`desktop-ci.yml`](.github/workflows/desktop-ci.yml)|Push/PR to `develop`, push to `main`|Test and compile without packaging, plus the supervised Host startup path on Windows|
-| [`desktop-release.yml`](.github/workflows/desktop-release.yml) | Tag push, dispatch | Package and publish installers for all platforms |
+| [`desktop-release.yml`](.github/workflows/desktop-release.yml) | Tag push, dispatch | Package and publish installers; queue qualified x64/ARM64 Store packages for Beta, RC, and Stable |
+| [`desktop-store.yml`](.github/workflows/desktop-store.yml) | Workflow call / dispatch / Store feature push | Reusable release qualification or manual dispatch: build unsigned x64/ARM64 AppX artifacts and qualify signed copies through installation, runtime smokes, and WACK |
+| [`desktop-store-queue.yml`](.github/workflows/desktop-store-queue.yml) | Release completion, schedule, dispatch | Submit durable Store requests in release order; resume after Partner Center publication |
 | [`desktop-promote.yml`](.github/workflows/desktop-promote.yml) | Push to `main` | Create RC/Stable tags matching upstream version |
 
 All other workflow files are retained from upstream for clean synchronization but are not part of the downstream CI/CD policy.

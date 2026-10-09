@@ -1,6 +1,5 @@
 /** Desktop profile writes retain configuration transactions while package writers hold the lock. */
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
-import { setImmediate } from 'node:timers/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, it, onTestFinished, vi } from 'vitest'
@@ -63,16 +62,27 @@ it('waits beyond the upstream deadline and reads the package writer’s committe
   const { ctx, profile } = await fixture()
   const writer = await hold(profile)
   vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+  let retryScheduled = Promise.withResolvers<undefined>()
+  const schedule = globalThis.setTimeout
+  const timerSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation((callback, delay, ...args) => {
+    const timer = schedule(callback, delay, ...args)
+    retryScheduled.resolve(undefined)
+    return timer
+  })
   let outcome: 'saved' | 'failed' | undefined
   const edit = ctx.settings.update('probe', { count: 7 }).then(() => { outcome = 'saved' }, () => { outcome = 'failed' })
   try {
-    // Real filesystem completion publishes the contention timer; only the deadline clock is advanced.
-    for (let attempt = 0; vi.getTimerCount() === 0 && attempt < 1000; attempt++) await setImmediate()
+    // The lock retry timer signals completed filesystem contention checks before the clock advances.
+    await retryScheduled.promise
     expect(vi.getTimerCount()).toBeGreaterThan(0)
-    await vi.advanceTimersByTimeAsync(2500)
+    retryScheduled = Promise.withResolvers<undefined>()
+    vi.setSystemTime(Date.now() + 2500)
+    await vi.advanceTimersToNextTimerAsync()
+    await Promise.race([retryScheduled.promise, edit])
     expect(outcome).toBeUndefined()
     writeFileSync(profile.patchPath, '- id: probe\n  config:\n    count: 3\n    title: installed\n')
   } finally {
+    timerSpy.mockRestore()
     writer.release()
     await writer.done
     await vi.runOnlyPendingTimersAsync()

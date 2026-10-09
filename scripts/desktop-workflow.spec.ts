@@ -6,6 +6,136 @@ import { describe, expect, it } from 'vitest'
 const root = resolve(import.meta.dirname, '..')
 
 describe('Desktop synchronization and release workflows', () => {
+  it('builds Store-only AppX artifacts on native runners without publishing a GitHub release', () => {
+    const store = loadWorkflow('.github/workflows/desktop-store.yml')
+    expect(store.on).toMatchObject({ workflow_dispatch: { inputs: { package_run_id: { type: 'string', required: false } } }, push: { branches: ['feat/microsoft-store-*'] } })
+    expect(store.permissions).toEqual({ contents: 'read', actions: 'read' })
+    const job = workflowJob(store, 'package')
+    expect(job.strategy).toMatchObject({ matrix: { include: [
+      { runner: 'windows-latest', arch: 'x64' },
+      { runner: 'windows-11-arm', arch: 'arm64' },
+    ] } })
+    if (!Array.isArray(job.steps)) throw new TypeError('Store packaging must define steps')
+    const steps = job.steps.filter(isRecord)
+    const tests = steps.find(step => step.name === 'Test Store distribution')
+    expect(tests?.shell).toBe('pwsh')
+    expect(tests?.run).toContain("if ($LASTEXITCODE -ne 0) { throw 'Store distribution tests failed.' }")
+    expect(tests?.run).toContain('./apps/electron/scripts/test-wack-report.ps1')
+    const build = steps.find(step => step.name === 'Build unsigned Store package')
+    expect(build?.run).toContain('--config .electron-build/store/builder.json --win appx --${{ matrix.arch }} --publish never')
+    expect(build?.if).toBe('${{ !inputs.package_run_id }}')
+    const reuse = steps.find(step => step.name === 'Download existing Store package')
+    expect(reuse).toMatchObject({ if: "${{ inputs.package_run_id != '' }}", uses: 'actions/download-artifact@v4', with: { 'run-id': '${{ inputs.package_run_id }}' } })
+    const restore = steps.find(step => step.name === 'Restore reused Store package version')
+    expect(restore).toMatchObject({
+      if: "${{ inputs.package_run_id != '' }}",
+      env: { STORE_ARCHITECTURE: '${{ matrix.arch }}' },
+      run: 'node apps/electron/scripts/restore-windows-store-version.mjs dist/electron-store "$env:STORE_ARCHITECTURE"',
+    })
+    const prepare = steps.findIndex(step => step.name === 'Prepare Store identity and assets')
+    expect(steps.indexOf(restore!)).toBeGreaterThan(steps.indexOf(reuse!))
+    expect(prepare).toBeGreaterThan(steps.indexOf(restore!))
+    const verify = steps.findIndex(step => step.name === 'Verify Store package contents')
+    const upload = steps.findIndex(step => step.uses === 'actions/upload-artifact@v4')
+    expect(verify).toBeGreaterThan(steps.indexOf(build!))
+    expect(upload).toBeGreaterThan(verify)
+    const toolkit = steps.findIndex(step => step.name === 'Prepare Windows App Certification Kit')
+    expect(toolkit).toBeGreaterThan(verify)
+    expect(steps[toolkit]?.run).toContain('prepare-wack.ps1')
+    expect(steps[toolkit]?.if).toBe("always() && matrix.arch == 'x64' && steps.contents.outcome == 'success'")
+    const qualification = steps.find(step => step.name === 'Install, launch, and qualify Store application')
+    expect(qualification?.run).toContain('smoke-windows-store.ps1')
+    expect(qualification?.run).not.toContain('-RunCertificationKit')
+    expect(steps.indexOf(qualification!)).toBeLessThan(toolkit)
+    const certification = steps.find(step => step.name === 'Run Windows App Certification Kit')
+    expect(certification?.if).toBe("always() && matrix.arch == 'x64' && steps.toolkit.outcome == 'success'")
+    expect(certification?.run).toContain('-RunCertificationKit -CertificationOnly')
+    const armCertification = steps.find(step => step.name === 'Record ARM64 certification-tool limitation')
+    expect(armCertification?.if).toBe("always() && matrix.arch == 'arm64' && steps.contents.outcome == 'success'")
+    expect(armCertification?.run).toContain("status = 'unsupported-host'")
+    expect(steps[upload]?.if).toBe("always() && steps.contents.outcome == 'success'")
+    expect(steps[upload]).toMatchObject({ with: { path: 'dist/electron-store/*.appx', 'if-no-files-found': 'error' } })
+    expect(steps.map(step => step.run).join('\n')).not.toMatch(/gh release|--win nsis/)
+  })
+
+  it('qualifies Store packages at the validated release tag before submitting after GitHub publication', () => {
+    const release = loadWorkflow('.github/workflows/desktop-release.yml')
+    const store = loadWorkflow('.github/workflows/desktop-store.yml')
+    const validate = workflowJob(release, 'validate')
+    const credentials = workflowJob(release, 'store-credentials')
+    const packages = workflowJob(release, 'store-package')
+    const submit = workflowJob(release, 'store-enqueue')
+    expect(release.permissions).toMatchObject({ actions: 'read' })
+    expect(packages).toMatchObject({
+      needs: ['validate', 'store-credentials'],
+      uses: './.github/workflows/desktop-store.yml',
+      with: { tag: '${{ needs.validate.outputs.tag }}', commit: '${{ needs.validate.outputs.commit }}', release_run_number: '${{ github.run_number }}' },
+    })
+    expect(workflowJob(release, 'publish').needs).toEqual(['validate', 'package'])
+    expect(packages).not.toHaveProperty('if')
+    expect(store.on).toMatchObject({ workflow_call: { inputs: {
+      tag: { type: 'string', required: true }, commit: { type: 'string', required: true }, release_run_number: { type: 'string', required: true },
+    } } })
+    expect(submit).toMatchObject({
+      needs: ['validate', 'publish', 'store-package'], 'runs-on': 'windows-latest',
+      permissions: { contents: 'write', actions: 'read' },
+    })
+    if (!Array.isArray(submit.steps) || !Array.isArray(credentials.steps) || !Array.isArray(validate.steps)) {
+      throw new TypeError('Store release must validate credentials and submit qualified packages')
+    }
+    const credentialStep = credentials.steps.filter(isRecord).find(step => step.name === 'Require Partner Center credentials')
+    expect(credentialStep?.env).toEqual({
+      PARTNER_CENTER_TENANT_ID: '${{ secrets.PARTNER_CENTER_TENANT_ID }}',
+      PARTNER_CENTER_SELLER_ID: '${{ secrets.PARTNER_CENTER_SELLER_ID }}',
+      PARTNER_CENTER_CLIENT_ID: '${{ secrets.PARTNER_CENTER_CLIENT_ID }}',
+      PARTNER_CENTER_CLIENT_SECRET: '${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}',
+    })
+    expect(credentialStep?.run).toContain('exit 1')
+    const steps = submit.steps.filter(isRecord)
+    expect(steps.find(step => step.uses === 'actions/checkout@v6')?.with).toMatchObject({ ref: '${{ needs.validate.outputs.commit }}' })
+    const verify = steps.findIndex(step => step.name === 'Verify qualified unsigned packages')
+    const publish = steps.findIndex(step => step.name === 'Persist qualified Store release request')
+    expect(verify).toBeGreaterThan(-1)
+    expect(publish).toBeGreaterThan(verify)
+    expect(steps[verify]?.run).toContain("foreach ($arch in @('x64', 'arm64'))")
+    expect(steps[verify]?.run).toContain('verify-windows-store.ps1')
+    expect(steps[publish]?.run).toBe('node apps/electron/scripts/store-release-queue.mjs enqueue')
+    expect(steps[publish]?.env).toMatchObject({ STORE_VERSION: '${{ needs.validate.outputs.store_version }}' })
+    expect(validate.steps.filter(isRecord).find(step => step.name === 'Resolve Store package version')?.run).toContain('store-release-version.mjs')
+    const storeJob = workflowJob(store, 'package')
+    if (!Array.isArray(storeJob.steps)) throw new TypeError('Store qualification must define steps')
+    const storeSteps = storeJob.steps.filter(isRecord)
+    expect(storeSteps.find(step => step.uses === 'actions/checkout@v6')?.with).toMatchObject({ ref: '${{ inputs.commit || github.sha }}' })
+    const version = storeSteps.findIndex(step => step.name === 'Set Store release package version')
+    expect(version).toBeLessThan(storeSteps.findIndex(step => step.name === 'Prepare Store identity and assets'))
+    expect(storeSteps[version]?.run).toContain('store-release-version.mjs')
+    expect(storeSteps[version]?.env).toMatchObject({ RELEASE_RUN_NUMBER: '${{ inputs.release_run_number }}' })
+  })
+
+  it('resumes the durable Store queue after release completion and during certification', () => {
+    const queue = loadWorkflow('.github/workflows/desktop-store-queue.yml')
+    expect(queue.on).toMatchObject({ workflow_run: { workflows: ['Desktop release'], types: ['completed'] }, schedule: [{ cron: '17,47 * * * *' }], workflow_dispatch: null })
+    expect(queue.concurrency).toEqual({ group: 'desktop-store-publish', 'cancel-in-progress': false, queue: 'max' })
+    expect(queue.permissions).toEqual({ contents: 'write', actions: 'read' })
+    const job = workflowJob(queue, 'dispatch')
+    expect(job['runs-on']).toBe('windows-latest')
+    if (!Array.isArray(job.steps)) throw new TypeError('Store dispatcher must define steps')
+    const steps = job.steps.filter(isRecord)
+    expect(steps.find(step => step.name === 'Install Microsoft Store Developer CLI')?.with).toEqual({ version: 'v0.4.3' })
+    expect(steps.at(-1)?.run).toBe('node apps/electron/scripts/store-release-queue.mjs dispatch')
+    expect(steps.find(step => step.uses === 'actions/checkout@v6')?.with).toEqual({ ref: '${{ github.event.repository.default_branch }}' })
+  })
+
+  it('records the checked-out commit in Store build identity and qualification evidence', () => {
+    const store = workflowJob(loadWorkflow('.github/workflows/desktop-store.yml'), 'package')
+    if (!Array.isArray(store.steps)) throw new TypeError('Store packages must define steps')
+    const steps = store.steps.filter(isRecord)
+    expect(steps.find(step => step.name === 'Resolve checked-out source commit')?.run).toContain('git rev-parse HEAD')
+    expect(steps.find(step => step.name === 'Write About build identity')?.env).toMatchObject({ RIVETDECK_COMMIT: '${{ steps.source.outputs.commit }}' })
+    expect(steps.find(step => step.name === 'Record package source')?.run).toContain("qualificationCommit = '${{ steps.source.outputs.commit }}'")
+    expect(steps.map(step => step.run).join('\n')).not.toContain('${{ github.sha }}')
+  })
+
   it('assigns upstream and downstream workflow paths to their repository owners', () => {
     const attributes = readFileSync(resolve(root, '.gitattributes'), 'utf8')
 
@@ -224,8 +354,9 @@ describe('Desktop synchronization and release workflows', () => {
       },
     })
     expect(context.run).toContain('version="${tag#v}"')
-    expect(context.run).toContain('Requested version ${{ inputs.version }} does not match tag version $version.')
-    expect(context.run).toContain('Requested prerelease value ${{ inputs.prerelease }} does not match tag $tag.')
+    expect(context.run).toContain('git rev-parse "refs/tags/$tag^{commit}"')
+    expect(context.run).toContain('Requested version $REQUESTED_VERSION does not match tag version $version.')
+    expect(context.run).toContain('Requested prerelease value $REQUESTED_PRERELEASE does not match tag $tag.')
     expect(context.run).toContain('git merge-base --is-ancestor HEAD "origin/$expected_branch"')
     expect(context.run).toContain("require('./apps/electron/package.json').version")
     expect(notes?.run).not.toContain('deepseek-ai/deepseek-harness/commit')
@@ -239,7 +370,7 @@ describe('Desktop synchronization and release workflows', () => {
     const identity = packageJob.steps.filter(isRecord).find(step => step.name === 'Write About build identity')
     expect(identity?.env).toMatchObject({
       RIVETDECK_BUILD: '${{ github.run_number }}',
-      RIVETDECK_COMMIT: '${{ github.sha }}',
+      RIVETDECK_COMMIT: '${{ needs.validate.outputs.commit }}',
     })
     expect(identity?.run).toContain('write-build-info.mjs')
     const smoke = packageJob.steps.filter(isRecord).find(step => step.name === 'Smoke-test Windows installer')

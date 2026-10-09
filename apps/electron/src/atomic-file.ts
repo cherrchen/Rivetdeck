@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { mkdir, open, rename, rm } from 'node:fs/promises'
 import { dirname } from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
 
 const writeQueues = new Map<string, Promise<void>>()
 const WINDOWS_RENAME_RETRY_ERRORS = new Set(['EACCES', 'EBUSY', 'EPERM'])
@@ -47,7 +48,7 @@ export async function writeDesktopFileAtomic(path: string, content: string): Pro
     await handle.sync()
     await handle.close()
     handle = undefined
-    await renameWithWindowsRetry(temporary, path)
+    await renameDesktopPath(temporary, path)
     if (process.platform !== 'win32') {
       const directoryHandle = await open(directory, 'r')
       try { await directoryHandle.sync() } finally { await directoryHandle.close() }
@@ -59,9 +60,20 @@ export async function writeDesktopFileAtomic(path: string, content: string): Pro
   }
 }
 
-async function renameWithWindowsRetry(source: string, destination: string): Promise<void> {
-  let delay = 20
+/** Atomically rename a Desktop file or directory, with bounded Windows file-lock retries.
+ * @param source Existing file or directory.
+ * @param destination Final path; filesystem replacement rules apply.
+ * @param options Target platform and optional cancellation during retries.
+ * @returns Resolves after rename succeeds; permanent errors and cancellation reject.
+ */
+export async function renameDesktopPath(
+  source: string, destination: string,
+  options: { platform?: NodeJS.Platform; signal?: AbortSignal } = {},
+): Promise<void> {
+  const platform = options.platform ?? process.platform
+  let delayMs = 20
   for (let attempts = 0;; attempts += 1) {
+    options.signal?.throwIfAborted()
     try {
       await rename(source, destination)
       return
@@ -69,11 +81,11 @@ async function renameWithWindowsRetry(source: string, destination: string): Prom
       const code = typeof error === 'object' && error !== null && 'code' in error
         ? String(error.code)
         : ''
-      if (process.platform !== 'win32'
+      if (platform !== 'win32'
         || !WINDOWS_RENAME_RETRY_ERRORS.has(code)
         || attempts >= WINDOWS_RENAME_RETRY_LIMIT) throw error
     }
-    await new Promise(resolve => setTimeout(resolve, delay))
-    delay = Math.min(delay * 2, 200)
+    await delay(delayMs, undefined, { signal: options.signal })
+    delayMs = Math.min(delayMs * 2, 200)
   }
 }

@@ -351,7 +351,7 @@ Desktop Capabilities 包（`@dsh-electron/dsh-electron-desktop-capabilities`）�
 
 目录选择 feature 填充 workspace directory-flow slot，并调用 `ctx.desktop.dialog.pickDirectory()`。
 
-品牌 feature 始终用 DeepSeek Harness 视觉填充 `sidebar.brand.mark`、`sidebar.brand.name` 与 `conversation.hero.brand.mark`，因此 Desktop 产品品牌不依赖上游 `DSH_CLIENT_BUILD_PROFILE=official` client 构建。
+品牌 feature 用 Rivetdeck 字标填充 `sidebar.brand.name`，并在 `sidebar.brand.mark` 与 `conversation.hero.brand.mark` 中保留 DeepSeek Harness 鲸鱼图标，因此 Desktop 产品品牌不依赖上游 `DSH_CLIENT_BUILD_PROFILE=official` client 构建。
 
 上游 Web bundle 提供 Plugins UI 与 agent tool。Electron 的 `DesktopPluginManager` 报告有效混合运行时清单：Electron-owned 包使用随包 implementation、patch 与版本；普通用户插件使用共享 web profile implementation。`DesktopRuntime` 在 HMR 队列上串行协调外部 CLI 变更与 UI 操作，并等待 Loader 稳定。包持久化仍由共享 web profile 上的上游操作负责；私有投影可丢弃。参见[插件生命周期](plugin-lifecycle.zh.md)。
 
