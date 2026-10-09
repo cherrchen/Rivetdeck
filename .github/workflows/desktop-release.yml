@@ -318,7 +318,7 @@ jobs:
       - name: Install release metadata dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           pattern: deepseek-harness-*
           path: dist/release-artifacts
@@ -384,13 +384,13 @@ jobs:
         run: node apps/electron/scripts/store-release-version.mjs "$env:RELEASE_RUN_NUMBER" --write
 
       - name: Download qualified x64 package
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: rivetdeck-store-x64
           path: dist/electron-store
 
       - name: Download qualified ARM64 package
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: rivetdeck-store-arm64
           path: dist/electron-store
