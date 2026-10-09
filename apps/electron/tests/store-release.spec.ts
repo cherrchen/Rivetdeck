@@ -34,6 +34,25 @@ const draft = {
     ...['x64', 'arm64'].map(arch => ({ FileName: `Rivetdeck-store-${version}-${arch}.appx`, FileStatus: 'PendingUpload' })),
   ],
 }
+const updatedDraft = {
+  ...draft,
+  TargetPublishMode: 'Immediate',
+  ApplicationPackages: draft.ApplicationPackages.map(item => ({
+    ...item, FileStatus: item.FileName.startsWith('previous-') ? 'PendingDelete' : 'PendingUpload',
+  })),
+}
+const accepted = {
+  ...updatedDraft,
+  Status: 'PreProcessing',
+  StatusDetails: { Errors: [] },
+  ApplicationPackages: ['x64', 'arm64'].map(arch => ({
+    FileName: `Rivetdeck-store-${version}-${arch}.appx`, FileStatus: 'Uploaded', Version: version, Architecture: arch.toUpperCase(),
+  })),
+}
+
+function commitCommands(confirmation: object) {
+  return commands([app, published, app, {}, { ...app, PendingApplicationSubmission: { Id: 'draft' } }, draft, {}, updatedDraft, {}, {}, confirmation])
+}
 
 async function withPackages(action: (directory: string, payload: string) => Promise<void>) {
   const temporary = await mkdtemp(join(tmpdir(), 'rivetdeck-store-release-test-'))
@@ -115,7 +134,7 @@ describe('Reused Microsoft Store package versions', () => {
 })
 
 describe('Microsoft Store release submission', () => {
-  it('returns after committing both architectures, retires predecessors, and preserves listing metadata', async () => {
+  it('confirms commit processing and both accepted architectures while preserving listing metadata', async () => {
     await withPackages(async (directory, payload) => {
       const run = vi.fn(async (args: string[]): Promise<string> => {
         switch (run.mock.calls.length) {
@@ -126,7 +145,8 @@ describe('Microsoft Store release submission', () => {
           case 6: return JSON.stringify(draft)
           case 7: return ''
           case 8: return readFile(payload, 'utf8')
-          case 9: return ''
+          case 9: case 10: return ''
+          case 11: return JSON.stringify(accepted)
           default: throw new Error(`Unexpected command ${args[0]}`)
         }
       })
@@ -147,8 +167,66 @@ describe('Microsoft Store release submission', () => {
         name: 'rivetdeck-store-submission', private: true, version: '1.0.0',
         build: { appx: { identityName: identity.identityName, publisher: identity.publisher, applicationId: 'Rivetdeck' } },
       })
-      expect(run).toHaveBeenCalledTimes(9)
-      expect(run.mock.calls.at(-1)?.[0]).toEqual(['submission', 'publish', identity.productId])
+      expect(run).toHaveBeenCalledTimes(11)
+      expect(run.mock.calls.slice(-3).map(call => call[0])).toEqual([
+        ['submission', 'publish', identity.productId],
+        ['submission', 'poll', identity.productId],
+        ['submission', 'get', identity.productId],
+      ])
+    })
+  })
+
+  it.each(['PreProcessing', 'Certification', 'PendingPublication', 'Publishing', 'Release', 'Published'])('confirms submission after commit processing reaches %s', async (status) => {
+    await withPackages(async (directory, payload) => {
+      const run = commitCommands({ ...accepted, Status: status })
+      await expect(publishWindowsStore(identity, version, directory, payload, run)).resolves.toEqual({ status: 'submitted', submissionId: 'draft' })
+    })
+  })
+
+  it.each(['None', 'PendingCommit', 'CommitStarted', 'CommitFailed', 'PreProcessingFailed', 'CertificationFailed', 'ReleaseFailed', 'PublishFailed', 'Canceled'])('rejects CLI success when Partner Center remains %s', async (status) => {
+    await withPackages(async (directory, payload) => {
+      const run = commitCommands({ ...accepted, Status: status })
+      await expect(publishWindowsStore(identity, version, directory, payload, run)).rejects.toThrow(`is ${status} after commit processing`)
+      expect(run).toHaveBeenCalledTimes(11)
+    })
+  })
+
+  it.each([
+    [{ ...accepted, Id: 'another-submission' }, 'changed during commit processing'],
+    [{ ...accepted, TargetPublishMode: 'Manual' }, 'changed during commit processing'],
+    [{ ...accepted, Status: 'unknown' }, 'unknown submission status'],
+    [{ ...accepted, ApplicationPackages: accepted.ApplicationPackages.slice(0, 1) }, 'not accepted both'],
+    [{ ...accepted, ApplicationPackages: draft.ApplicationPackages.slice(2) }, 'not accepted both'],
+    [{ ...accepted, ApplicationPackages: accepted.ApplicationPackages.map(item => ({ ...item, Version: '1.0.124.0' })) }, 'not accepted both'],
+    [{ ...accepted, ApplicationPackages: accepted.ApplicationPackages.map(item => ({ ...item, Architecture: 'X86' })) }, 'not accepted both'],
+    [{ ...accepted, ApplicationPackages: [...accepted.ApplicationPackages, published.ApplicationPackages[0]] }, 'not accepted both'],
+  ])('rejects a changed or incomplete commit result without reporting submitted', async (confirmation, message) => {
+    await withPackages(async (directory, payload) => {
+      await expect(publishWindowsStore(identity, version, directory, payload, commitCommands(confirmation))).rejects.toThrow(message)
+    })
+  })
+
+  it.each([
+    [{ Code: 'InvalidState', Details: 'https://upload.invalid/?sig=private-upload-token' }],
+    'private-upload-token',
+  ])('reports commit validation errors without exposing upload credentials', async (errors) => {
+    await withPackages(async (directory, payload) => {
+      const run = commitCommands({ ...accepted, StatusDetails: { Errors: errors } })
+      await expect(publishWindowsStore(identity, version, directory, payload, run)).rejects.toEqual(
+        new Error('Partner Center reported submission errors after commit processing; inspect the submission before retrying'),
+      )
+    })
+  })
+
+  it('propagates commit polling failures without reporting submission success', async () => {
+    await withPackages(async (directory, payload) => {
+      const responses = commitCommands(accepted)
+      const run = vi.fn(async (args: string[]) => {
+        if (args[0] === 'submission' && args[1] === 'poll') throw new Error('commit processing failed')
+        return responses(args)
+      })
+      await expect(publishWindowsStore(identity, version, directory, payload, run)).rejects.toThrow('commit processing failed')
+      expect(run.mock.calls.at(-1)?.[0]).toEqual(['submission', 'poll', identity.productId])
     })
   })
 

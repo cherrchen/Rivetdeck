@@ -10,7 +10,7 @@ const project = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 /**
  * Upload both architectures, retain listing metadata, and commit an Immediate submission.
- * Return after commit acceptance; Partner Center continues ingestion, certification, and publication.
+ * Wait for commit processing and verify both accepted packages; certification and publication continue in Partner Center.
  * In-flight submissions defer this release; drafts and failed certification require intervention.
  * @param {{ productId: string, identityName: string, publisher: string }} identity Expected Partner Center application.
  * @param {string} version Qualified Store package version.
@@ -90,6 +90,34 @@ export async function publishWindowsStore(identity, version, packageDirectory, p
     throw new Error('Store submission must contain both uploaded architectures before commit')
   }
   await run(['submission', 'publish', identity.productId])
+  // The CLI publish command accepts any non-null commit status, including failures.
+  await run(['submission', 'poll', identity.productId])
+  const committed = parseRecord(await run(['submission', 'get', identity.productId]))
+  if (committed.Id !== pendingId || committed.TargetPublishMode !== 'Immediate') {
+    throw new Error('Store submission ID or automatic publication setting changed during commit processing')
+  }
+  switch (committed.Status) {
+    case 'PreProcessing': case 'Certification': case 'PendingPublication':
+    case 'Publishing': case 'Release': case 'Published':
+      break
+    case 'None': case 'PendingCommit': case 'CommitStarted': case 'CommitFailed':
+    case 'PreProcessingFailed': case 'CertificationFailed': case 'ReleaseFailed':
+    case 'PublishFailed': case 'Canceled':
+      throw new Error(`Partner Center submission ${pendingId} is ${committed.Status} after commit processing; inspect the submission before retrying`)
+    default:
+      throw new Error('Partner Center returned an unknown submission status after commit processing')
+  }
+  if (committed.StatusDetails?.Errors !== undefined
+    && (!Array.isArray(committed.StatusDetails.Errors) || committed.StatusDetails.Errors.length !== 0)) {
+    // StatusDetails can include upload URLs; keep their contents out of Actions logs.
+    throw new Error('Partner Center reported submission errors after commit processing; inspect the submission before retrying')
+  }
+  const acceptedPackages = packageRecords(committed).filter(item => item.FileStatus !== 'PendingDelete')
+  if (acceptedPackages.length !== 2 || ['x64', 'arm64'].some(arch => !acceptedPackages.some(item =>
+    item.FileName === `Rivetdeck-store-${version}-${arch}.appx` && item.FileStatus === 'Uploaded'
+    && item.Version === version && typeof item.Architecture === 'string' && item.Architecture.toLowerCase() === arch))) {
+    throw new Error('Partner Center has not accepted both qualified Store packages after commit processing; inspect Packages before retrying')
+  }
   return { status: 'submitted', submissionId: pendingId }
 }
 
