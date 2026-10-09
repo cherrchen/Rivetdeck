@@ -123,7 +123,7 @@ Windows 工作流用临时测试证书签名包副本，在两种原生架构上
 
 缺少凭据时，Store release 任务失败并指出缺少的 secret 名称；直接分发安装包的发布独立执行。Store 验证仍可在没有凭据时手动触发。配置完成后，对有效 tag 运行 Desktop release，检查 `Queue Microsoft Store release`，再检查 `Advance Microsoft Store queue`、任务摘要中的提交 ID 和对应 Partner Center 认证结果。Release tag 和包版本仍须满足现有分支检查。
 
-若上传后提交失败或认证失败，先检查待处理提交，完成或删除后再手动运行 Desktop Store queue。CI 保留请求和包，且不会覆盖已有待处理提交。自动化拥有 API 创建的草稿期间，不要在 Partner Center UI 中编辑它。删除失败草稿后，可重新提交队列中的同一版本。任务中断后若缺少发布记录，调度器检查当前已发布版本以恢复记录。验证或入队失败时需重跑 release 工作流；若较新的 Store 版本已发布，需新建 release 运行以取得更高的包版本。较早运行的延迟重试会失败，不会让 Store 用户降级。发布前保留队列 assets 和 release tag。更新 Store 产品介绍或截图时，需要先单独完成一次提交，再执行自动包更新。
+若上传后提交失败或认证失败，先检查待处理提交，完成或删除后再手动运行 Desktop Store queue。CI 保留请求和包；调度器发现待处理提交时会阻止新上传。人工创建 Partner Center 提交或修改产品介绍前，先禁用 Desktop Store queue，并等待正在运行的调度任务结束。CLI 会重建草稿，因此上传前检查要求每次调度运行期间独占提交写入。自动化拥有 API 创建的草稿期间，不要在 Partner Center UI 中编辑它。删除失败草稿后，可重新提交队列中的同一版本。任务中断后若缺少发布记录，调度器检查当前已发布版本以恢复记录。验证或入队失败时需重跑 release 工作流；若较新的 Store 版本已发布，需新建 release 运行以取得更高的包版本。较早运行的延迟重试会失败，不会让 Store 用户降级。发布前保留队列 assets 和 release tag。更新 Store 产品介绍或截图时，需要先单独完成一次提交，再执行自动包更新。
 
 ## 运行时与安全
 
