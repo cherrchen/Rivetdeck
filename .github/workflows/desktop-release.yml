@@ -26,6 +26,7 @@ on:
 concurrency:
   group: desktop-release-${{ github.event.inputs.tag || github.ref_name }}
   cancel-in-progress: false
+  queue: max
 
 permissions:
   contents: write
@@ -44,6 +45,7 @@ jobs:
       version: ${{ steps.context.outputs.version }}
       prerelease: ${{ steps.context.outputs.prerelease }}
       store_version: ${{ steps.store-version.outputs.version }}
+      commit: ${{ steps.context.outputs.commit }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -52,11 +54,20 @@ jobs:
 
       - name: Resolve release context
         id: context
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+          REQUESTED_PRERELEASE: ${{ inputs.prerelease }}
         run: |
-          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          tag="$RELEASE_TAG"
 
           if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+|-rc\.[0-9]+)?$ ]]; then
             echo "::error::Tag $tag does not match the supported desktop release format."
+            exit 1
+          fi
+
+          if [ "$(git rev-parse "refs/tags/$tag^{commit}")" != "$(git rev-parse HEAD)" ]; then
+            echo "::error::Release checkout must match the exact tag commit."
             exit 1
           fi
 
@@ -65,12 +76,12 @@ jobs:
           if [[ "$tag" == *-beta.* || "$tag" == *-rc.* ]]; then prerelease=true; fi
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            if [ "${{ inputs.version }}" != "$version" ]; then
-              echo "::error::Requested version ${{ inputs.version }} does not match tag version $version."
+            if [ "$REQUESTED_VERSION" != "$version" ]; then
+              echo "::error::Requested version $REQUESTED_VERSION does not match tag version $version."
               exit 1
             fi
-            if [ "${{ inputs.prerelease }}" != "$prerelease" ]; then
-              echo "::error::Requested prerelease value ${{ inputs.prerelease }} does not match tag $tag."
+            if [ "$REQUESTED_PRERELEASE" != "$prerelease" ]; then
+              echo "::error::Requested prerelease value $REQUESTED_PRERELEASE does not match tag $tag."
               exit 1
             fi
           fi
@@ -94,6 +105,7 @@ jobs:
           fi
 
           {
+            echo "commit=$(git rev-parse HEAD)"
             echo "tag=$tag"
             echo "version=$version"
             echo "prerelease=$prerelease"
@@ -124,12 +136,27 @@ jobs:
             fi
           done
 
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Require deployed Store dispatcher
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: node apps/electron/scripts/store-release-queue.mjs check
+
   store-package:
     name: Qualify Microsoft Store packages
     needs: [validate, store-credentials]
     uses: ./.github/workflows/desktop-store.yml
     with:
       tag: ${{ needs.validate.outputs.tag }}
+      commit: ${{ needs.validate.outputs.commit }}
       release_run_number: ${{ github.run_number }}
 
   package:
@@ -199,7 +226,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ needs.validate.outputs.tag }}
+          ref: ${{ needs.validate.outputs.commit }}
           fetch-depth: 1
 
       - name: Fetch pinned upstream audit baseline
@@ -240,7 +267,7 @@ jobs:
       - name: Write About build identity
         env:
           RIVETDECK_BUILD: ${{ github.run_number }}
-          RIVETDECK_COMMIT: ${{ github.sha }}
+          RIVETDECK_COMMIT: ${{ needs.validate.outputs.commit }}
         run: node apps/electron/scripts/write-build-info.mjs
 
       - name: Build installer
@@ -279,7 +306,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ needs.validate.outputs.tag }}
+          ref: ${{ needs.validate.outputs.commit }}
 
       - uses: pnpm/action-setup@v4
 
@@ -333,22 +360,18 @@ jobs:
             --notes-file "$RUNNER_TEMP/release-notes.md" \
             "${prerelease_flag[@]}"
 
-  store-publish:
-    name: Submit Microsoft Store release
+  store-enqueue:
+    name: Queue Microsoft Store release
     needs: [validate, publish, store-package]
     runs-on: windows-latest
     permissions:
-      contents: read
+      contents: write
       actions: read
     timeout-minutes: 30
-    concurrency:
-      group: desktop-store-publish
-      cancel-in-progress: false
-      queue: max
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ needs.validate.outputs.tag }}
+          ref: ${{ needs.validate.outputs.commit }}
 
       - uses: actions/setup-node@v6
         with:
@@ -382,24 +405,12 @@ jobs:
             ./apps/electron/scripts/verify-windows-store.ps1 -PackagePath $package -Architecture $arch
           }
 
-      - name: Install Microsoft Store Developer CLI
-        uses: microsoft/microsoft-store-apppublisher@cc9910a8d59f2eb55cbb83df0a3800cf3b5300e0 # v1.4
-        with:
-          version: v0.4.3
-
-      - name: Configure Partner Center authentication
+      - name: Persist qualified Store release request
         shell: pwsh
         env:
-          PARTNER_CENTER_TENANT_ID: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
-          PARTNER_CENTER_SELLER_ID: ${{ secrets.PARTNER_CENTER_SELLER_ID }}
-          PARTNER_CENTER_CLIENT_ID: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
-          PARTNER_CENTER_CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
-        run: |
-          msstore reconfigure --tenantId $env:PARTNER_CENTER_TENANT_ID --sellerId $env:PARTNER_CENTER_SELLER_ID --clientId $env:PARTNER_CENTER_CLIENT_ID --clientSecret $env:PARTNER_CENTER_CLIENT_SECRET
-          if ($LASTEXITCODE -ne 0) { throw 'Partner Center authentication configuration failed.' }
-
-      - name: Upload both architectures and submit for automatic publication
-        shell: pwsh
-        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           STORE_VERSION: ${{ needs.validate.outputs.store_version }}
-        run: node apps/electron/scripts/publish-windows-store.mjs
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          RELEASE_COMMIT: ${{ needs.validate.outputs.commit }}
+        run: node apps/electron/scripts/store-release-queue.mjs enqueue

@@ -179,8 +179,9 @@ pnpm install --no-frozen-lockfile   # when lockfile must follow manifest changes
 |----------|---------|------|
 | [`sync-upstream.yml`](.github/workflows/sync-upstream.yml) | Schedule, dispatch | Merge upstream → `develop` when upstream changed; publish Beta tag |
 |[`desktop-ci.yml`](.github/workflows/desktop-ci.yml)|Push/PR to `develop`, push to `main`|Test and compile without packaging, plus the supervised Host startup path on Windows|
-| [`desktop-release.yml`](.github/workflows/desktop-release.yml) | Tag push, dispatch | Package and publish installers; submit qualified x64/ARM64 Store packages for Beta, RC, and Stable |
+| [`desktop-release.yml`](.github/workflows/desktop-release.yml) | Tag push, dispatch | Package and publish installers; queue qualified x64/ARM64 Store packages for Beta, RC, and Stable |
 | [`desktop-store.yml`](.github/workflows/desktop-store.yml) | Workflow call / dispatch / Store feature push | Reusable release qualification or manual dispatch: build unsigned x64/ARM64 AppX artifacts and qualify signed copies through installation, runtime smokes, and WACK |
+| [`desktop-store-queue.yml`](.github/workflows/desktop-store-queue.yml) | Release completion, schedule, dispatch | Submit durable Store requests in release order; resume after Partner Center publication |
 | [`desktop-promote.yml`](.github/workflows/desktop-promote.yml) | Push to `main` | Create RC/Stable tags matching upstream version |
 
 All other workflow files are retained from upstream for clean synchronization but are not part of the downstream CI/CD policy.

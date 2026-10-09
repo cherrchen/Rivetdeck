@@ -1,6 +1,6 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { publishWindowsStore } from '../scripts/publish-windows-store.mjs'
 import { storeReleaseVersion } from '../scripts/store-release-version.mjs'
@@ -141,6 +141,12 @@ describe('Microsoft Store release submission', () => {
         ],
       })
       expect(run.mock.calls[3]?.[0]).toEqual(['publish', expect.any(String), '--appId', identity.productId, '--inputDirectory', directory, '--noCommit'])
+      const cliProject = join(dirname(payload), 'project')
+      expect(run.mock.calls[3]?.[0][1]).toBe(cliProject)
+      expect(JSON.parse(await readFile(join(cliProject, 'package.json'), 'utf8'))).toEqual({
+        name: 'rivetdeck-store-submission', private: true, version: '1.0.0',
+        build: { appx: { identityName: identity.identityName, publisher: identity.publisher, applicationId: 'Rivetdeck' } },
+      })
       expect(run).toHaveBeenCalledTimes(9)
       expect(run.mock.calls.at(-1)?.[0]).toEqual(['submission', 'publish', identity.productId])
     })
@@ -156,8 +162,27 @@ describe('Microsoft Store release submission', () => {
     })
   })
 
+  it('does not treat deleted packages as the currently published release', async () => {
+    await withPackages(async (directory, payload) => {
+      const run = commands([app, {
+        ...published, ApplicationPackages: [
+          ...published.ApplicationPackages.map(item => ({ ...item, Version: version, FileStatus: 'PendingDelete' })),
+          ...published.ApplicationPackages.map(item => ({ ...item, Version: '1.0.124.0' })),
+        ],
+      }])
+      await expect(publishWindowsStore(identity, version, directory, payload, run)).rejects.toThrow('must exceed')
+      expect(run).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  it('omits malformed CLI output from errors because it may contain an upload SAS', async () => {
+    await withPackages(async (directory, payload) => {
+      const run = vi.fn(async () => 'https://upload.invalid/?sig=private-upload-token')
+      await expect(publishWindowsStore(identity, version, directory, payload, run)).rejects.toThrow('Invalid Microsoft Store CLI JSON')
+    })
+  })
+
   it.each([
-    [{ ...app, PendingApplicationSubmission: { Id: 'manual-draft' } }, 'pending submission'],
     [{ ...app, LastPublishedApplicationSubmission: null }, 'initial published submission'],
     [{ ...app, PackageIdentityName: 'another-product' }, 'identity differs'],
   ])('refuses unavailable or different applications before writing remotely', async (application, message) => {
@@ -178,11 +203,44 @@ describe('Microsoft Store release submission', () => {
     })
   })
 
-  it('stops when a pending submission appears before upload', async () => {
+  it('defers when a pending submission appears before upload', async () => {
     await withPackages(async (directory, payload) => {
-      const run = commands([app, published, { ...app, PendingApplicationSubmission: { Id: 'other-run' } }])
-      await expect(publishWindowsStore(identity, version, directory, payload, run)).rejects.toThrow('changed before upload')
-      expect(run).toHaveBeenCalledTimes(3)
+      const run = commands([app, published, { ...app, PendingApplicationSubmission: { Id: 'other-run' } }, { Id: 'other-run', Status: 'Certification' }])
+      await expect(publishWindowsStore(identity, version, directory, payload, run)).resolves.toEqual({ status: 'deferred', submissionId: 'other-run' })
+      expect(run).toHaveBeenCalledTimes(4)
+    })
+  })
+
+  it.each(['CommitStarted', 'PreProcessing', 'Certification', 'PendingPublication', 'Publishing', 'Release', 'Published'])('keeps releases queued while Partner Center is %s', async (status) => {
+    await withPackages(async (directory, payload) => {
+      const run = commands([{ ...app, PendingApplicationSubmission: { Id: 'in-flight' } }, { Id: 'in-flight', Status: status }])
+      await expect(publishWindowsStore(identity, version, directory, payload, run)).resolves.toEqual({ status: 'deferred', submissionId: 'in-flight' })
+      expect(run.mock.calls.map(call => call[0])).toEqual([['apps', 'get', identity.productId], ['submission', 'get', identity.productId]])
+    })
+  })
+
+  it.each(['PendingCommit', 'CommitFailed', 'PreProcessingFailed', 'CertificationFailed', 'ReleaseFailed', 'PublishFailed', 'Canceled', 'None', 'Unrecognized'])('reports %s for intervention without overwriting a submission', async (status) => {
+    await withPackages(async (directory, payload) => {
+      const run = commands([{ ...app, PendingApplicationSubmission: { Id: 'blocked' } }, { Id: 'blocked', Status: status }])
+      await expect(publishWindowsStore(identity, version, directory, payload, run)).rejects.toThrow(`is ${status}`)
+      expect(run).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  it('refuses a changed pending submission during status lookup', async () => {
+    await withPackages(async (directory, payload) => {
+      const run = commands([{ ...app, PendingApplicationSubmission: { Id: 'in-flight' } }, { Id: 'different', Status: 'Published' }])
+      await expect(publishWindowsStore(identity, version, directory, payload, run)).rejects.toThrow('changed during status check')
+    })
+  })
+
+  it('reports a submission waiting for Publish now instead of silently deferring forever', async () => {
+    await withPackages(async (directory, payload) => {
+      const run = commands([{ ...app, PendingApplicationSubmission: { Id: 'manual' } }, {
+        Id: 'manual', Status: 'PendingPublication', TargetPublishMode: 'Manual',
+      }])
+      await expect(publishWindowsStore(identity, version, directory, payload, run)).rejects.toThrow('requires Publish now')
+      expect(run).toHaveBeenCalledTimes(2)
     })
   })
 

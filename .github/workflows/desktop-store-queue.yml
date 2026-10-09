@@ -1,0 +1,68 @@
+name: Desktop Store queue
+run-name: Dispatch queued Microsoft Store releases
+
+on:
+  workflow_run:
+    workflows: ['Desktop release']
+    types: [completed]
+  schedule:
+    - cron: '17,47 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-store-publish
+  cancel-in-progress: false
+  queue: max
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  dispatch:
+    name: Advance Microsoft Store queue
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Require Partner Center credentials
+        shell: pwsh
+        env:
+          PARTNER_CENTER_TENANT_ID: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
+          PARTNER_CENTER_SELLER_ID: ${{ secrets.PARTNER_CENTER_SELLER_ID }}
+          PARTNER_CENTER_CLIENT_ID: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
+          PARTNER_CENTER_CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
+        run: |
+          foreach ($name in @('PARTNER_CENTER_TENANT_ID', 'PARTNER_CENTER_SELLER_ID', 'PARTNER_CENTER_CLIENT_ID', 'PARTNER_CENTER_CLIENT_SECRET')) {
+            if (-not [Environment]::GetEnvironmentVariable($name)) { throw "Configure GitHub Actions secret $name for Microsoft Store publishing." }
+          }
+
+      - name: Install Microsoft Store Developer CLI
+        uses: microsoft/microsoft-store-apppublisher@cc9910a8d59f2eb55cbb83df0a3800cf3b5300e0 # v1.4
+        with:
+          version: v0.4.3
+
+      - name: Configure Partner Center authentication
+        shell: pwsh
+        env:
+          PARTNER_CENTER_TENANT_ID: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
+          PARTNER_CENTER_SELLER_ID: ${{ secrets.PARTNER_CENTER_SELLER_ID }}
+          PARTNER_CENTER_CLIENT_ID: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
+          PARTNER_CENTER_CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
+        run: |
+          msstore reconfigure --tenantId $env:PARTNER_CENTER_TENANT_ID --sellerId $env:PARTNER_CENTER_SELLER_ID --clientId $env:PARTNER_CENTER_CLIENT_ID --clientSecret $env:PARTNER_CENTER_CLIENT_SECRET
+          if ($LASTEXITCODE -ne 0) { throw 'Partner Center authentication configuration failed.' }
+
+      - name: Submit oldest qualified release or defer during certification
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: node apps/electron/scripts/store-release-queue.mjs dispatch

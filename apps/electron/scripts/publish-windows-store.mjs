@@ -1,6 +1,6 @@
 /** Submit qualified AppX packages through the pinned Microsoft Store Developer CLI. */
 import { execFile } from 'node:child_process'
-import { readdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
@@ -11,13 +11,13 @@ const project = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 /**
  * Upload both architectures, retain listing metadata, and commit an Immediate submission.
  * Return after commit acceptance; Partner Center continues ingestion, certification, and publication.
- * Existing pending submissions and older package versions fail before any remote writes.
+ * In-flight submissions defer this release; drafts and failed certification require intervention.
  * @param {{ productId: string, identityName: string, publisher: string }} identity Expected Partner Center application.
  * @param {string} version Qualified Store package version.
  * @param {string} packageDirectory Directory containing exactly the x64 and ARM64 AppX files.
  * @param {string} payloadPath Private runner-local path for submission metadata (contains an upload SAS).
  * @param {(args: string[]) => Promise<string>} [run] Microsoft CLI command executor.
- * @returns {Promise<{ status: 'submitted' | 'already-published', submissionId: string }>} Submission receipt; certification continues in Partner Center.
+ * @returns {Promise<{ status: 'submitted' | 'already-published' | 'deferred', submissionId: string }>} Submission receipt; only already-published confirms publication.
  */
 export async function publishWindowsStore(identity, version, packageDirectory, payloadPath, run = runStoreCli) {
   const expected = ['x64', 'arm64'].map(arch => `Rivetdeck-store-${version}-${arch}.appx`)
@@ -31,13 +31,14 @@ export async function publishWindowsStore(identity, version, packageDirectory, p
     throw new Error('Partner Center application identity differs from windows-store.json')
   }
   if (app.PendingApplicationSubmission !== null) {
-    throw new Error('Partner Center has a pending submission; finish or remove it before retrying this release')
+    return pendingSubmission(identity, app, run)
   }
   const publishedId = submissionId(app.LastPublishedApplicationSubmission)
   const published = parseRecord(await run(['submission', 'get', identity.productId]))
   if (published.Id !== publishedId) throw new Error('Partner Center published submission changed during release validation')
-  const publishedPackages = packageRecords(published)
-  if (['x64', 'arm64'].every(arch => publishedPackages.some(item => typeof item.Architecture === 'string' && item.Architecture.toLowerCase() === arch && item.Version === version))) {
+  const publishedPackages = packageRecords(published).filter(item => item.FileStatus !== 'PendingDelete')
+  if (publishedPackages.length === 2 && ['x64', 'arm64'].every(arch => publishedPackages.some(item => typeof item.Architecture === 'string'
+    && item.Architecture.toLowerCase() === arch && item.Version === version && item.FileStatus === 'Uploaded'))) {
     return { status: 'already-published', submissionId: publishedId }
   }
   for (const item of publishedPackages) {
@@ -48,10 +49,18 @@ export async function publishWindowsStore(identity, version, packageDirectory, p
 
   // The CLI's publish command replaces pending drafts; recheck just before calling it.
   const current = parseRecord(await run(['apps', 'get', identity.productId]))
-  if (current.PendingApplicationSubmission !== null || submissionId(current.LastPublishedApplicationSubmission) !== publishedId) {
+  if (current.PendingApplicationSubmission !== null) return pendingSubmission(identity, current, run)
+  if (submissionId(current.LastPublishedApplicationSubmission) !== publishedId) {
     throw new Error('Partner Center submission changed before upload; retry after resolving the pending submission')
   }
-  await run(['publish', project, '--appId', identity.productId, '--inputDirectory', packageDirectory, '--noCommit'])
+  // CLI Electron discovery runs npm install; its project must not contain pnpm workspace dependencies.
+  const cliProject = join(dirname(payloadPath), 'project')
+  await mkdir(cliProject)
+  await writeFile(join(cliProject, 'package.json'), `${JSON.stringify({
+    name: 'rivetdeck-store-submission', private: true, version: '1.0.0',
+    build: { appx: { identityName: identity.identityName, publisher: identity.publisher, applicationId: 'Rivetdeck' } },
+  })}\n`, { flag: 'wx' })
+  await run(['publish', cliProject, '--appId', identity.productId, '--inputDirectory', packageDirectory, '--noCommit'])
   const uploaded = parseRecord(await run(['apps', 'get', identity.productId]))
   const pendingId = submissionId(uploaded.PendingApplicationSubmission)
   const draft = parseRecord(await run(['submission', 'get', identity.productId]))
@@ -83,8 +92,30 @@ export async function publishWindowsStore(identity, version, packageDirectory, p
   return { status: 'submitted', submissionId: pendingId }
 }
 
+async function pendingSubmission(identity, app, run) {
+  const pendingId = submissionId(app.PendingApplicationSubmission)
+  const pending = parseRecord(await run(['submission', 'get', identity.productId]))
+  if (pending.Id !== pendingId) throw new Error('Partner Center pending submission changed during status check; retry')
+  if (pending.Status === 'PendingPublication' && pending.TargetPublishMode === 'Manual') {
+    throw new Error(`Partner Center submission ${pendingId} requires Publish now before the Store queue can advance`)
+  }
+  switch (pending.Status) {
+    case 'CommitStarted': case 'PreProcessing': case 'Certification':
+    case 'PendingPublication': case 'Publishing': case 'Release': case 'Published':
+      return { status: 'deferred', submissionId: pendingId }
+    default:
+      throw new Error(`Partner Center pending submission ${pendingId} is ${pending.Status}; finish or remove it before retrying the Store queue`)
+  }
+}
+
 function parseRecord(output) {
-  const value = JSON.parse(output)
+  let value
+  try {
+    value = JSON.parse(output)
+  } catch {
+    // Parser excerpts may expose the submission upload SAS.
+    throw new Error('Invalid Microsoft Store CLI JSON')
+  }
   if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('Invalid Microsoft Store CLI JSON object')
   return value
 }
@@ -115,7 +146,7 @@ function versionParts(version) {
 
 async function runStoreCli(args) {
   try {
-    const { stdout } = await execute('msstore', args, { maxBuffer: 16 * 1024 * 1024 })
+    const { stdout } = await execute('msstore', args, { maxBuffer: 16 * 1024 * 1024, timeout: 15 * 60 * 1000 })
     return stdout
   } catch (error) {
     // CLI output can contain the submission upload SAS; do not include it in CI errors.

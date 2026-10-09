@@ -8,6 +8,10 @@ on:
         description: Validated Desktop release tag
         type: string
         required: true
+      commit:
+        description: Validated release tag commit
+        type: string
+        required: true
       release_run_number:
         description: Desktop release run number used for the Store package version
         type: string
@@ -28,6 +32,7 @@ on:
 concurrency:
   group: desktop-store-${{ github.ref }}
   cancel-in-progress: false
+  queue: max
 
 permissions:
   contents: read
@@ -53,7 +58,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.commit || github.ref }}
+
+      - name: Resolve checked-out source commit
+        id: source
+        shell: pwsh
+        run: |
+          $commit = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve checked-out Store source commit.' }
+          "commit=$commit" >> $env:GITHUB_OUTPUT
 
       - name: Fetch pinned upstream audit baseline
         run: git fetch --depth=1 --no-tags https://github.com/deepseek-ai/deepseek-harness.git refs/tags/dsh-v0.2.0-rc.2:refs/tags/dsh-v0.2.0-rc.2
@@ -103,7 +116,7 @@ jobs:
       - name: Test Store distribution
         shell: pwsh
         run: |
-          pnpm exec vitest run apps/electron/tests/store-release.spec.ts apps/electron/tests/windows-store.spec.ts apps/electron/tests/updater.spec.ts apps/electron/tests/atomic-path.spec.ts apps/electron/tests/runtime-installer.spec.ts apps/electron/tests/profile-writer-diagnostics.spec.ts scripts/desktop-workflow.spec.ts
+          pnpm exec vitest run apps/electron/tests/store-release.spec.ts apps/electron/tests/store-release-queue.spec.ts apps/electron/tests/windows-store.spec.ts apps/electron/tests/updater.spec.ts apps/electron/tests/atomic-path.spec.ts apps/electron/tests/runtime-installer.spec.ts apps/electron/tests/profile-writer-diagnostics.spec.ts scripts/desktop-workflow.spec.ts
           if ($LASTEXITCODE -ne 0) { throw 'Store distribution tests failed.' }
           ./apps/electron/scripts/test-wack-report.ps1
 
@@ -122,7 +135,7 @@ jobs:
         if: ${{ !inputs.package_run_id }}
         env:
           RIVETDECK_BUILD: ${{ github.run_number }}
-          RIVETDECK_COMMIT: ${{ github.sha }}
+          RIVETDECK_COMMIT: ${{ steps.source.outputs.commit }}
         run: node apps/electron/scripts/write-build-info.mjs
 
       - name: Build unsigned Store package
@@ -135,7 +148,7 @@ jobs:
           SOURCE_RUN_ID: ${{ inputs.package_run_id || github.run_id }}
         run: |
           New-Item -ItemType Directory -Path "$env:RUNNER_TEMP/store-qualification" -Force | Out-Null
-          @{ packageRunId = $env:SOURCE_RUN_ID; qualificationCommit = '${{ github.sha }}' } | ConvertTo-Json | Set-Content "$env:RUNNER_TEMP/store-qualification/source.json"
+          @{ packageRunId = $env:SOURCE_RUN_ID; qualificationCommit = '${{ steps.source.outputs.commit }}' } | ConvertTo-Json | Set-Content "$env:RUNNER_TEMP/store-qualification/source.json"
 
       - name: Verify Store package contents
         id: contents
