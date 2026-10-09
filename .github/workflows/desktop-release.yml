@@ -47,7 +47,7 @@ jobs:
       store_version: ${{ steps.store-version.outputs.version }}
       commit: ${{ steps.context.outputs.commit }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.inputs.tag || github.ref_name }}
           fetch-depth: 0
@@ -136,7 +136,7 @@ jobs:
             fi
           done
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.validate.outputs.commit }}
 
@@ -224,7 +224,7 @@ jobs:
               dist/electron/latest-linux*.yml
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.validate.outputs.commit }}
           fetch-depth: 1
@@ -304,7 +304,7 @@ jobs:
     needs: [validate, package]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.validate.outputs.commit }}
 
@@ -369,7 +369,7 @@ jobs:
       actions: read
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.validate.outputs.commit }}
 
