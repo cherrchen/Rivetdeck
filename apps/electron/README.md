@@ -52,7 +52,7 @@ pnpm --filter @dsh-electron/dsh-electron test
 pnpm --filter @dsh-electron/dsh-electron test:ownership
 ```
 
-Git artifact acceptance compares native filesystem paths so Windows short names and Git path separators identify the same directory. Runtime verification fixtures link the installed Node executable on POSIX and copy it on Windows; the verification case and cleanup each allow 30 seconds to cover the verifier's 15-second child deadline.
+Git artifact acceptance compares native filesystem paths so Windows short names and Git path separators identify the same directory. Runtime verification fixtures link the installed Node executable on POSIX and copy it on Windows; the verification case and cleanup each allow 30 seconds to cover the verifier's 15-second child deadline. Managed runtime checks execute at the final generation path before activation ([lifecycle](../../docs/electron/runtime-environments.md)).
 
 The Electron application is a private installer, not an npm release member. Its dependency sync copies upstream CLI workspace dependencies using `workspace:^`, excludes experimental peers, and retains stable peers required by optional bundles; the repository's `constraints` check applies that range to this application and keeps the upstream publication rules on upstream packages.
 

@@ -52,7 +52,7 @@ pnpm --filter @dsh-electron/dsh-electron test
 pnpm --filter @dsh-electron/dsh-electron test:ownership
 ```
 
-Git 产物验收比较原生文件系统路径，使 Windows 短路径名与 Git 路径分隔符指向同一目录。运行时验证 fixture 在 POSIX 上链接已安装的 Node 可执行文件，在 Windows 上复制该文件；验证用例与清理各允许 30 秒，以覆盖验证器的 15 秒子进程期限。
+Git 产物验收比较原生文件系统路径，使 Windows 短路径名与 Git 路径分隔符指向同一目录。运行时验证 fixture 在 POSIX 上链接已安装的 Node 可执行文件，在 Windows 上复制该文件；验证用例与清理各允许 30 秒，以覆盖验证器的 15 秒子进程期限。托管运行环境的检查在激活前于最终 generation 路径执行（[生命周期](../../docs/electron/runtime-environments.zh.md)）。
 
 Electron 应用是私有安装程序，不作为 npm 发布成员。依赖同步使用 `workspace:^` 复制上游 CLI 的 workspace 依赖，排除实验性 peer 依赖，并保留可选 bundle 所需的稳定 peer 依赖；仓库的 `constraints` 检查对该应用执行此范围要求，并继续对上游包执行上游发布规则。
 

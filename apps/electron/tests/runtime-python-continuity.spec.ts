@@ -33,7 +33,9 @@ describe.runIf(process.env.DSH_ELECTRON_RUNTIME_ARCHIVE_SMOKE === '1')('User pac
       }
       const installing = await start()
       await Promise.all([installing.manager.install('node'), installing.manager.install('python')])
-      expect(installing.manager.state().python.phase).toBe('installed')
+      for (const name of ['node', 'python'] as const) {
+        expect(installing.manager.state()[name]).toMatchObject({ phase: 'installed' })
+      }
       await installing.manager.shutdown()
       const first = await start()
       const python = first.toolchains.python!.executable
@@ -91,10 +93,14 @@ with zipfile.ZipFile(sys.argv[1], 'w') as archive:
       let active = first
       for (let count = 0; count < 2; count++) {
         await Promise.all([active.manager.install('node'), active.manager.install('python')])
-        expect(active.manager.state().python.phase).toBe('installed')
+        for (const name of ['node', 'python'] as const) {
+          expect(active.manager.state()[name]).toMatchObject({ phase: 'installed' })
+        }
         await active.manager.shutdown()
         active = await start()
-        expect(active.manager.state().python.phase).toBe('installed')
+        for (const name of ['node', 'python'] as const) {
+          expect(active.manager.state()[name]).toMatchObject({ phase: 'installed' })
+        }
         expect(active.toolchains.python!.executable).not.toBe(python)
         expect(active.paths.pythonUserBase).toBe(first.paths.pythonUserBase)
         expect(run(command, [])).toBe(`console-ok|${python}`)

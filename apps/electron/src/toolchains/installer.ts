@@ -73,9 +73,10 @@ export async function verifyRuntime(name: RuntimeName, root: string, version: st
   }
 }
 
-/** Stage, checksum, securely extract, and verify before an immutable rename.
- * @param options Main-owned paths, authority, transport, cancellation, and state callbacks.
- * @returns Resolves after the generation exists; activation is separately persisted by the manager.
+/** Stage, checksum, securely extract, and verify at the immutable destination.
+ * @param options Main-owned paths, authority, transport, cancellation, and callbacks.
+ * The destination names a fresh, unselected generation.
+ * @returns Resolves after destination verification; failures remove the unselected generation. The manager persists activation separately.
  */
 export async function installRuntime(options: {
   name: RuntimeName
@@ -91,6 +92,7 @@ export async function installRuntime(options: {
 }): Promise<void> {
   const { signal, staging, entry } = options
   let stage: RuntimeError = 'download'
+  let moved = false
   const archive = join(staging, 'download.pending')
   try {
     await mkdir(staging, { recursive: true, mode: 0o700 })
@@ -140,11 +142,15 @@ export async function installRuntime(options: {
     await unpackRuntime(archive, entry, extracted)
     signal.throwIfAborted()
     stage = 'verification'
-    await (options.verify ?? verifyRuntime)(options.name, extracted, options.version, options.platform)
-    signal.throwIfAborted()
     await mkdir(join(options.destination, '..'), { recursive: true, mode: 0o700 })
     await renameDesktopPath(extracted, options.destination, { platform: options.platform, signal })
+    moved = true
+    // Windows can retain locks on executed images after the verifier exits.
+    // The unselected generation must reach its final path before execution.
+    await (options.verify ?? verifyRuntime)(options.name, options.destination, options.version, options.platform)
+    signal.throwIfAborted()
   } catch (error) {
+    if (moved) await rm(options.destination, { recursive: true, force: true, maxRetries: 8 })
     const code = error !== null && typeof error === 'object' && 'code' in error ? error.code : undefined
     throw new RuntimeInstallError(signal.aborted ? 'interrupted' : code === 'ENOSPC' ? 'disk' : stage, error)
   } finally { await rm(staging, { recursive: true, force: true }) }

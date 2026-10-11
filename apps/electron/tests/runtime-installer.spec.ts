@@ -28,15 +28,16 @@ async function fixture() {
 
 describe('Main runtime installer', () => {
   for (const name of ['node', 'python'] as const) {
-    it(`atomically installs verified ${name} and cleans staging`, async () => {
+    it(`verifies ${name} at its immutable destination and cleans staging`, async () => {
       const { root, bytes, entry } = await fixture()
       const phases: string[] = []
       const destination = join(root, 'installed')
       await installRuntime({ name, version: '1.2.3', entry, staging: join(root, 'staging'), destination, platform: process.platform,
         fetch: async () => new Response(bytes), signal: new AbortController().signal,
         phase: phase => phases.push(phase), verify: async (_name, directory) => {
+          expect(directory).toBe(destination)
           expect(await readFile(join(directory, 'bin/interpreter'), 'utf8')).toBe('runtime')
-          await expect(readFile(join(destination, 'bin/interpreter'))).rejects.toThrow()
+          await expect(readFile(join(root, 'staging/runtime/bin/interpreter'))).rejects.toMatchObject({ code: 'ENOENT' })
         },
       })
       expect(phases).toContain('verifying')
@@ -73,6 +74,20 @@ describe('Main runtime installer', () => {
     })).rejects.toMatchObject({ code: 'download' })
     expect(requests).toBe(1)
   })
+  it('removes the unselected destination when verification is cancelled', async () => {
+    const { root, bytes, entry } = await fixture()
+    const abort = new AbortController()
+    const destination = join(root, 'installed')
+    await expect(installRuntime({ name: 'node', version: '1.2.3', entry, staging: join(root, 'stage'), destination, platform: process.platform,
+      fetch: async () => new Response(bytes), signal: abort.signal, phase: () => {},
+      verify: async (_name, directory) => {
+        expect(await readFile(join(directory, 'bin/interpreter'), 'utf8')).toBe('runtime')
+        abort.abort()
+      },
+    })).rejects.toMatchObject({ code: 'interrupted' })
+    await expect(readFile(join(destination, 'bin/interpreter'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(readFile(join(root, 'stage/download.pending'))).rejects.toMatchObject({ code: 'ENOENT' })
+  })
   it('rejects missing interpreter and a wrong Node version', async () => {
     const { root } = await fixture()
     await expect(verifyRuntime('node', root, '24.17.0', process.platform)).rejects.toThrow(/missing/u)
@@ -91,6 +106,40 @@ describe('Main runtime installer', () => {
 })
 
 describe('Main runtime manager independence', () => {
+  for (const name of ['node', 'python'] as const) {
+    it(`retains the active ${name} selector when replacement verification fails`, async () => {
+      const { root, bytes, entry } = await fixture()
+      const manifest = structuredClone(loadManifest())
+      const target = `${process.platform}-${process.arch}` as keyof typeof manifest.node.targets
+      Object.assign(manifest[name].targets[target], entry)
+      const managed = join(root, 'managed-toolchains')
+      let previous: ReturnType<typeof readRuntimeReceipt>
+      let rejected: string | undefined
+      const manager = new RuntimeManager({ userData: root, manifest, fetch: async () => new Response(bytes),
+        verify: async (_name, directory) => {
+          expect(readRuntimeReceipt(managed, name)).toEqual(previous)
+          expect(await readFile(join(directory, 'bin/interpreter'), 'utf8')).toBe('runtime')
+          if (previous !== undefined) {
+            rejected = directory
+            throw new Error('broken replacement')
+          }
+        },
+      })
+      try {
+        await manager.prepare()
+        await manager.install(name)
+        previous = readRuntimeReceipt(managed, name)
+        expect(previous).toBeDefined()
+        const location = manager.state()[name].location!
+        await manager.install(name)
+        expect(manager.state()[name]).toMatchObject({ phase: 'failed', error: 'verification' })
+        expect(readRuntimeReceipt(managed, name)).toEqual(previous)
+        expect(await readFile(join(location, 'bin/interpreter'), 'utf8')).toBe('runtime')
+        expect(rejected).toBeDefined()
+        await expect(readFile(join(rejected!, 'bin/interpreter'))).rejects.toMatchObject({ code: 'ENOENT' })
+      } finally { await manager.shutdown() }
+    })
+  }
   for (const name of ['node', 'python'] as const) {
     it(`retains only Python predecessors across reinstall, update, restart, and removal of ${name}`, async () => {
       const { root, bytes, entry } = await fixture()
