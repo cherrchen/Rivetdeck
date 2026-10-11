@@ -11,6 +11,7 @@ const project = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 /**
  * Upload both architectures, retain listing metadata, and commit an Immediate submission.
  * Wait for commit processing and verify both accepted packages; certification and publication continue in Partner Center.
+ * Missing or null error lists count as no reported errors.
  * In-flight submissions defer this release; drafts and failed certification require intervention.
  * @param {{ productId: string, identityName: string, publisher: string }} identity Expected Partner Center application.
  * @param {string} version Qualified Store package version.
@@ -107,7 +108,7 @@ export async function publishWindowsStore(identity, version, packageDirectory, p
     default:
       throw new Error('Partner Center returned an unknown submission status after commit processing')
   }
-  if (committed.StatusDetails?.Errors !== undefined
+  if (committed.StatusDetails?.Errors !== undefined && committed.StatusDetails.Errors !== null
     && (!Array.isArray(committed.StatusDetails.Errors) || committed.StatusDetails.Errors.length !== 0)) {
     // StatusDetails can include upload URLs; keep their contents out of Actions logs.
     throw new Error('Partner Center reported submission errors after commit processing; inspect the submission before retrying')

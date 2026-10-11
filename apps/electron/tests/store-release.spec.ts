@@ -183,6 +183,13 @@ describe('Microsoft Store release submission', () => {
     })
   })
 
+  it.each([undefined, null, []])('confirms submission when the error list is %j', async (errors) => {
+    await withPackages(async (directory, payload) => {
+      const run = commitCommands({ ...accepted, StatusDetails: { Errors: errors } })
+      await expect(publishWindowsStore(identity, version, directory, payload, run)).resolves.toEqual({ status: 'submitted', submissionId: 'draft' })
+    })
+  })
+
   it.each(['None', 'PendingCommit', 'CommitStarted', 'CommitFailed', 'PreProcessingFailed', 'CertificationFailed', 'ReleaseFailed', 'PublishFailed', 'Canceled'])('rejects CLI success when Partner Center remains %s', async (status) => {
     await withPackages(async (directory, payload) => {
       const run = commitCommands({ ...accepted, Status: status })
