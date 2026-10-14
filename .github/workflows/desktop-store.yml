@@ -71,7 +71,7 @@ jobs:
       - name: Fetch pinned upstream audit baseline
         run: git fetch --depth=1 --no-tags https://github.com/deepseek-ai/deepseek-harness.git refs/tags/dsh-v0.2.0-rc.2:refs/tags/dsh-v0.2.0-rc.2
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
       - uses: actions/setup-node@v6
         with:
