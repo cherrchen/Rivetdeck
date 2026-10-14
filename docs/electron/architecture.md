@@ -357,9 +357,9 @@ The upstream Web bundle provides the Plugins UI and agent tool. Electron’s `De
 
 The [Network Settings page](network-settings.md) is an internal Desktop Client feature. It contributes a top-level `settings.section` entry and uses `ctx.desktop.network` for configuration, sanitized diagnostics, and connection tests; Main owns the policy, secrets, and restart. The native failure dialog can open this section without changing the selected route.
 
-Git (`@dsh-electron/dsh-plugin-git@0.2.4`) is a bundled ecosystem plugin installed only from npm. Its client occupies `ctx.sidebarRight` / `sidebarRightTabs` and is listed in `dshElectron.ecosystemPlugins`. Desktop seeds a CLI copy into the shared web profile once. Electron Installed reports its resolved bundled version and source; Enable and Disable persist in the shared profile.
+Git (`@dsh-electron/dsh-plugin-git@0.2.5`) is a bundled ecosystem plugin installed only from npm. Its client occupies `ctx.sidebarRight` / `sidebarRightTabs` and is listed in `dshElectron.ecosystemPlugins`. Desktop seeds a CLI copy into the shared web profile once. Electron Installed reports its resolved bundled version and source; Enable and Disable persist in the shared profile.
 
-Theme Studio (`@dsh-electron/dsh-theme-studio@0.1.3`) is a preinstalled ecosystem bundle listed in `dshElectron.ecosystemPlugins`. Its canonical source is `cherrchen/dsh-theme-studio`; this repository keeps no copy of it. The package registers **Settings → General → Themes** and calls `ctx.theme.overrideTokens()`; Electron Installed lists its actual bundled runtime package. Its published peer declarations include `0.1.7-rc.2`.
+Theme Studio (`@dsh-electron/dsh-theme-studio@0.1.4`) is a preinstalled ecosystem bundle listed in `dshElectron.ecosystemPlugins`. Its canonical source is `cherrchen/dsh-theme-studio`; this repository keeps no copy of it. The package registers **Settings → General → Themes** and calls `ctx.theme.overrideTokens()`; Electron Installed lists its actual bundled runtime package. Its published peer declarations include `0.1.7-rc.2`.
 
 ```text
 Feature Plugin
@@ -378,7 +378,7 @@ Electron Main
 Native OS APIs
 ```
 
-Every directory under `runtime/plugins/<name>/` is rebuilt from source. Portable runtime plugins declared in `dshElectron.runtimePlugins` likewise install, package, and link their published artifacts without rebuilding. Portable product features use independently published `@dsh-electron/dsh-plugin-*` packages; Electron installs, packages, and links their published artifacts without rebuilding or converting them.
+Every directory under `runtime/plugins/<name>/` is rebuilt from source, and its manifest version tracks the application version set by `set-version.mjs`. Portable runtime plugins declared in `dshElectron.runtimePlugins` likewise install, package, and link their published artifacts without rebuilding. Portable product features use independently published `@dsh-electron/dsh-plugin-*` packages; Electron installs, packages, and links their published artifacts without rebuilding or converting them.
 
 # Part II — Architecture Principles
 

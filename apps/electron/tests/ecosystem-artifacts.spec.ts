@@ -12,6 +12,7 @@ import { GitService } from '@dsh-electron/dsh-plugin-git'
 import * as react from 'react'
 import * as jsx from 'react/jsx-runtime'
 import * as primitives from '@deepseek-ai/dsh-client-ui-primitives'
+import * as clientStore from '@deepseek-ai/dsh-client-store'
 import type * as GitClient from '@dsh-electron/dsh-plugin-git/client'
 import type * as ThemeClient from '@dsh-electron/dsh-theme-studio/client'
 
@@ -31,6 +32,7 @@ function clientArtifact(name: string): typeof GitClient | typeof ThemeClient {
     if (id === 'react') return react
     if (id === 'react/jsx-runtime') return jsx
     if (id === '@deepseek-ai/dsh-client-ui-primitives') return primitives
+    if (id === '@deepseek-ai/dsh-client-store') return clientStore
     throw new Error(`Unexpected client dependency: ${id}`)
   })
 }
@@ -101,7 +103,7 @@ it('previews Theme Studio without persistence and persists applied themes from t
   expect(layers.has(client.ACTIVE_SOURCE)).toBe(true)
   expect(layers.has(client.PREVIEW_SOURCE)).toBe(false)
   runtime.restoreDefault()
-  await Promise.resolve()
+  await new Promise(resolve => setTimeout(resolve, 0))
   expect(write).toHaveBeenLastCalledWith('activeThemeId', null)
   expect(layers.size).toBe(0)
 })
