@@ -26,6 +26,22 @@ describe('Electron release version scripts', () => {
     expect(manifest).toMatchObject({ version: '0.1.0-beta.2' })
   })
 
+  it('syncs bundled runtime plugin manifests to the same version', async () => {
+    const root = await createElectronFixture({
+      'apps/electron/package.json': JSON.stringify({ name: '@dsh-electron/dsh-electron', version: '0.1.0-rc.1' }, null, 2),
+      'apps/electron/runtime/plugins/alpha/package.json': JSON.stringify({ name: '@dsh-electron/alpha', version: '0.0.1' }, null, 2),
+      'apps/electron/runtime/plugins/beta/package.json': JSON.stringify({ name: '@dsh-electron/beta', version: '0.1.0-beta.2' }, null, 2),
+      'apps/electron/runtime/plugins/stray-file.txt': 'not a plugin',
+    })
+    const setVersionScript = join(root, 'apps/electron/scripts/set-version.mjs')
+
+    execFileSync('node', [setVersionScript, '0.1.0-beta.2'], { cwd: root, encoding: 'utf8' })
+    const alpha: unknown = JSON.parse(await readFile(join(root, 'apps/electron/runtime/plugins/alpha/package.json'), 'utf8'))
+    const beta: unknown = JSON.parse(await readFile(join(root, 'apps/electron/runtime/plugins/beta/package.json'), 'utf8'))
+    expect(alpha).toMatchObject({ version: '0.1.0-beta.2' })
+    expect(beta).toMatchObject({ version: '0.1.0-beta.2' })
+  })
+
   it('restores the AGENTS.downstream.md reference after upstream AGENTS.md sync', async () => {
     const root = await createFixture({
       'AGENTS.md': '# AGENTS.md\n\nUpstream body.\n',

@@ -59,6 +59,8 @@ describe('bundled Desktop plugin startup', () => {
         '@dsh-electron/dsh-electron-desktop-capabilities',
         '@dsh-electron/dsh-electron-network-subprocess',
       ])
+      const appManifest = JSON.parse(readFileSync(join(appPath, 'package.json'), 'utf8')) as { version: string }
+      for (const plugin of runtime) expect(plugin.version).toBe(appManifest.version)
       expect(npmRuntime).toEqual([])
       expect(ecosystem.map(plugin => plugin.name)).toEqual([GIT, '@dsh-electron/dsh-theme-studio'])
       ensureRuntimePluginsLinked(appPath, harnessHome)
@@ -81,7 +83,7 @@ describe('bundled Desktop plugin startup', () => {
 
   it('resolves Theme Studio from its installed ecosystem artifact', () => {
     const plugin = discoverEcosystemPluginPackages(appPath).find(item => item.name === '@dsh-electron/dsh-theme-studio')
-    expect(plugin?.version).toBe('0.1.3')
+    expect(plugin?.version).toBe('0.1.4')
     expect(plugin?.rootPath).toBe(join(appPath, 'node_modules', '@dsh-electron', 'dsh-theme-studio'))
     expect(plugin?.hasClient).toBe(true)
   })

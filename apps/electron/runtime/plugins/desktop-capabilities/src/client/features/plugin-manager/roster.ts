@@ -1,10 +1,12 @@
 /** Official Plugins page items and the Desktop Capabilities component roster. */
 
+import manifest from '../../../../package.json'
+
 /** npm name of the Desktop Capabilities composition package. */
 export const DESKTOP_CAPABILITIES_PACKAGE = '@dsh-electron/dsh-electron-desktop-capabilities'
 
 /** Published version shown on the Desktop Capabilities detail page. */
-export const DESKTOP_CAPABILITIES_VERSION = '0.1.0'
+export const DESKTOP_CAPABILITIES_VERSION = manifest.version
 
 /** Internal feature whose Components row uses a composition subpath specifier. */
 export type CapabilitiesFeatureId = 'directory-picker' | 'brand' | 'network-settings'

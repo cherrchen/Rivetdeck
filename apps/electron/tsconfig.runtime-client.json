@@ -4,6 +4,7 @@
     "composite": false,
     "incremental": false,
     "noEmit": true,
+    "resolveJsonModule": true,
     "paths": {
       "@dsh-electron/dsh-electron-desktop-capabilities/client": [
         "./runtime/plugins/desktop-capabilities/src/client/index.ts"
