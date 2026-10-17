@@ -1,7 +1,7 @@
 {
   "name": "@dsh-electron/dsh-electron-desktop-capabilities",
   "description": "Desktop capabilities, Client features, and Host ownership refresh",
-  "version": "0.2.0-beta.3",
+  "version": "0.2.0-beta.4",
   "private": true,
   "type": "module",
   "main": "lib/index.js",
