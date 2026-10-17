@@ -101,8 +101,8 @@ minimumReleaseAgeExclude:
   - '@trycua/cua-driver-win32-x64-msvc@0.28.0'
   - '@trycua/cua-driver@0.28.0'
   # Desktop bundles these exact ecosystem plugin releases.
-  - '@dsh-electron/dsh-plugin-git@0.2.5'
-  - '@dsh-electron/dsh-theme-studio@0.1.4'
+  - '@dsh-electron/dsh-plugin-git@0.2.7'
+  - '@dsh-electron/dsh-theme-studio@0.1.5'
 patchedDependencies:
   '@earendil-works/pi-ai@0.87.1': patches/@earendil-works__pi-ai@0.87.1.patch
   '@electron/osx-sign@1.3.3': patches/@electron__osx-sign@1.3.3.patch

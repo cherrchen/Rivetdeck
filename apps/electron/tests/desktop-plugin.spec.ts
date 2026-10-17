@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
 import * as clientStore from '@deepseek-ai/dsh-client-store'
+import * as primitives from '@deepseek-ai/dsh-client-ui-primitives'
 import {
   CAPABILITIES_COMPONENTS,
   DESKTOP_CAPABILITIES_VERSION,
@@ -89,7 +90,7 @@ describe('theme studio published runtime plugin regression', () => {
       dsh?: { client?: { platform?: string; inject?: string[] } }
     }
     expect(manifest.name).toBe('@dsh-electron/dsh-theme-studio')
-    expect(manifest.version).toBe('0.1.4')
+    expect(manifest.version).toBe('0.1.5')
     const dshPeers = Object.entries(manifest.peerDependencies ?? {}).filter(([name]) => name.startsWith('@deepseek-ai/dsh-'))
     expect(dshPeers.length).toBeGreaterThan(0)
     for (const [, versions] of dshPeers) expect(versions.split(' || ')).toContain('0.1.7-rc.2')
@@ -100,6 +101,7 @@ describe('theme studio published runtime plugin regression', () => {
 
   it('registers its client bundle under the package id with only the seeded external', () => {
     const bundle = readFileSync(join(npmThemeStudioRoot, 'lib', 'client.js'), 'utf8')
+    const reactPackage: unknown = createRequire(import.meta.url)('react')
     const reactRuntime: unknown = createRequire(import.meta.url)('react/jsx-runtime')
     const loaded: Array<{ id: string; exported: { apply?: unknown; inject?: string[] } }> = []
     const host = globalThis as typeof globalThis & {
@@ -119,8 +121,10 @@ describe('theme studio published runtime plugin regression', () => {
           loaded.push({
             id: entry.id,
             exported: entry.factory((specifier) => {
+              if (specifier === 'react') return reactPackage
               if (specifier === 'react/jsx-runtime') return reactRuntime
               if (specifier === '@deepseek-ai/dsh-client-store') return clientStore
+              if (specifier === '@deepseek-ai/dsh-client-ui-primitives') return primitives
               throw new Error(`unexpected client bundle external: ${specifier}`)
             }),
           })
@@ -151,7 +155,7 @@ describe('desktop plugins roster', () => {
     expect(OFFICIAL_ROOT_ITEMS.map(item => item.id)).toEqual(['desktop-capabilities'])
     expect(OFFICIAL_ROOT_ITEMS.find(item => item.id === 'desktop-capabilities')?.version).toBe(DESKTOP_CAPABILITIES_VERSION)
     expect(manifest.version).toBe(DESKTOP_CAPABILITIES_VERSION)
-    expect(themeManifest.version).toBe('0.1.4')
+    expect(themeManifest.version).toBe('0.1.5')
     expect(source).toContain("name: 'plugins.item'")
     expect(source).toContain("name: 'plugins.detail.badge'")
     expect(source).toContain("name: 'plugins.detail.section'")
