@@ -83,7 +83,7 @@ describe('bundled Desktop plugin startup', () => {
 
   it('resolves Theme Studio from its installed ecosystem artifact', () => {
     const plugin = discoverEcosystemPluginPackages(appPath).find(item => item.name === '@dsh-electron/dsh-theme-studio')
-    expect(plugin?.version).toBe('0.1.4')
+    expect(plugin?.version).toBe('0.1.5')
     expect(plugin?.rootPath).toBe(join(appPath, 'node_modules', '@dsh-electron', 'dsh-theme-studio'))
     expect(plugin?.hasClient).toBe(true)
   })

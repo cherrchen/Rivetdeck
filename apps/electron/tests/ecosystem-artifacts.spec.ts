@@ -10,6 +10,7 @@ import { Context } from '@deepseek-ai/cordis'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import { GitService } from '@dsh-electron/dsh-plugin-git'
 import * as react from 'react'
+import * as reactDom from 'react-dom'
 import * as jsx from 'react/jsx-runtime'
 import * as primitives from '@deepseek-ai/dsh-client-ui-primitives'
 import * as clientStore from '@deepseek-ai/dsh-client-store'
@@ -30,6 +31,7 @@ function clientArtifact(name: string): typeof GitClient | typeof ThemeClient {
   if (captured.factory === undefined) throw new Error('Client artifact did not register its factory')
   return captured.factory((id) => {
     if (id === 'react') return react
+    if (id === 'react-dom') return reactDom
     if (id === 'react/jsx-runtime') return jsx
     if (id === '@deepseek-ai/dsh-client-ui-primitives') return primitives
     if (id === '@deepseek-ai/dsh-client-store') return clientStore
