@@ -218,6 +218,8 @@ int wmain(int argc, wchar_t** argv) {
     // Tiered cleanup (no delete flag): rebuildables removed, preferences and browser data kept.
     const std::wstring cacheDir = userData + L"\\Cache";
     const std::wstring partitionCache = userData + L"\\Partitions\\worker_1\\GPUCache";
+    const std::wstring dawnCache = userData + L"\\DawnWebGPUCache";
+    const std::wstring partitionDawn = userData + L"\\Partitions\\worker_1\\DawnGraphiteCache";
     const std::wstring partitionData = userData + L"\\Partitions\\worker_1\\IndexedDB";
     const std::wstring updater = root + L"\\rivetdeck-updater";
     const std::wstring report = root + L"\\residue.log";
@@ -227,6 +229,10 @@ int wmain(int argc, wchar_t** argv) {
     Mkdir(userData + L"\\Partitions\\worker_1");
     Mkdir(partitionCache);
     File(partitionCache + L"\\gpu.bin");
+    Mkdir(dawnCache);
+    File(dawnCache + L"\\dawn.bin");
+    Mkdir(partitionDawn);
+    File(partitionDawn + L"\\dawn.bin");
     Mkdir(partitionData);
     File(partitionData + L"\\db.leveldb");
     File(userData + L"\\desktop-preferences.json");
@@ -254,6 +260,8 @@ int wmain(int argc, wchar_t** argv) {
         assert(Exists(userData + L"\\electron\\toolchains\\keep.txt"));
         assert(!Exists(cacheDir));
         assert(!Exists(partitionCache));
+        assert(!Exists(dawnCache));
+        assert(!Exists(partitionDawn));
         assert(!Exists(updater));
         assert(Exists(userData + L"\\desktop-preferences.json"));
         assert(Exists(userData + L"\\Cookies"));

@@ -6,7 +6,7 @@ This guide lists the files Rivetdeck leaves behind after removal and how to dele
 
 ## Windows (NSIS installer)
 
-The assisted NSIS uninstaller removes the install directory, `managed-toolchains/`, `electron/toolchains/bin`, named Chromium cache directories (`Cache/`, `Code Cache/`, `GPUCache/`, and their per-partition equivalents), and `%LOCALAPPDATA%\rivetdeck-updater`. Updates and uninstaller replacement delete no data at all.
+The assisted NSIS uninstaller removes the install directory, `managed-toolchains/`, `electron/toolchains/bin`, named Chromium cache directories (`Cache/`, `Code Cache/`, `GPUCache/`, `DawnGraphiteCache/`, `DawnWebGPUCache/`, and their per-partition equivalents), and `%LOCALAPPDATA%\rivetdeck-updater`. Updates and uninstaller replacement delete no data at all.
 
 | Location | Contents | After uninstall |
 | --- | --- | --- |

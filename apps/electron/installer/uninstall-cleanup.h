@@ -353,7 +353,9 @@ struct CleanupState {
 // Removes every name-keyed pure cache directory that exists directly below `root`.
 inline void RemoveNamedCaches(CleanupState& state, const std::wstring& root,
                               const std::wstring& installation, const std::wstring& protectedHome) {
-    static const wchar_t* caches[] = {L"Cache", L"Code Cache", L"GPUCache"};
+    static const wchar_t* caches[] = {
+        L"Cache", L"Code Cache", L"GPUCache", L"DawnGraphiteCache", L"DawnWebGPUCache",
+    };
     for (const wchar_t* cache : caches) {
         const std::wstring path = root + L'\\' + cache;
         if (PathExists(path)) state.remove(path, installation, protectedHome);

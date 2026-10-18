@@ -24,7 +24,7 @@ macOS 的 DMG/ZIP 与 Linux 的 AppImage 不带卸载器；DEB 只移除 `/opt/R
 | --- | --- | --- |
 | `$INSTDIR` | 程序文件、`resources/core-runtime`（Windows `node.exe`）、`resources/network-runtime` | 安装器——已被删除 |
 | `userData/managed-toolchains` 与 `userData/electron/toolchains` | 下载的 Node/Python 世代、收据、staging、shim | 应用私有、完全可重建——主要清理目标 |
-| `userData` 内的 Chromium 缓存目录 | `Cache/`、`Code Cache/`、`GPUCache/` 及各分区下的对应目录 | 应用私有、可重建——清理目标 |
+| `userData` 内的 Chromium 缓存目录 | `Cache/`、`Code Cache/`、`GPUCache/`、`DawnGraphiteCache/`、`DawnWebGPUCache/` 及各分区下的对应目录 | 应用私有、可重建——清理目标 |
 | `userData`（其余部分） | `desktop-preferences.json`（代理配置、更新频道、运行时引导）、`network-secrets/`（仍可使用的加密代理凭据）、`network-startup-override.json`、`electron-host.patch.yml`、持久化浏览器存储（cookies、Local Storage、IndexedDB 及其他会话分区数据） | 应用私有设置、凭据与用户内容——评审后设计中默认保留 |
 | 更新器缓存 | 下载的更新包 | 应用私有、可重建——清理目标 |
 | `$DSH_HOME/electron` | `python-user/` 与 `node-global/` 用户安装的包、`bin/` shim、`host-profile/`、标记文件 | 共享主目录内的应用私有子树——卸载器不得删除；内容是用户安装的包而非缓存 |
@@ -96,7 +96,7 @@ macOS 的 DMG/ZIP 与 Linux 的 AppImage 不带卸载器；DEB 只移除 `/opt/R
 
 Windows NSIS 卸载器的决策空间由四个设计覆盖；四者都共享同一前提——绝不触碰 `$DSH_HOME`、`~/.agents` 与用户工作区文件。
 
-- **D——分层清理（评审建议）。** 卸载时只删除明确可重建的目标——`managed-toolchains/`、`electron/toolchains/bin`、具名纯缓存目录（`Cache/`、`Code Cache/`、`GPUCache/` 及各分区下的对应目录）、更新器缓存——同时保留 `desktop-preferences.json`、`network-secrets/`、`network-startup-override.json` 与全部持久化浏览器存储。会话分区不是缓存：其中可能有 cookies、Local Storage 与 IndexedDB，承载着未发送草稿等真实用户状态，因此只有 `--delete-app-data` 才删除它们——该参数升级为完整删除 `userData`。它既回收了大体积残留，又不会牺牲可用的代理配置——手动代理用户重装后可能要先靠它才能重新下载运行时。
+- **D——分层清理（评审建议）。** 卸载时只删除明确可重建的目标——`managed-toolchains/`、`electron/toolchains/bin`、具名纯缓存目录（`Cache/`、`Code Cache/`、`GPUCache/`、`DawnGraphiteCache/`、`DawnWebGPUCache/` 及各分区下的对应目录）、更新器缓存——同时保留 `desktop-preferences.json`、`network-secrets/`、`network-startup-override.json` 与全部持久化浏览器存储。会话分区不是缓存：其中可能有 cookies、Local Storage 与 IndexedDB，承载着未发送草稿等真实用户状态，因此只有 `--delete-app-data` 才删除它们——该参数升级为完整删除 `userData`。它既回收了大体积残留，又不会牺牲可用的代理配置——手动代理用户重装后可能要先靠它才能重新下载运行时。
 - **A——默认完整删除 `userData`（对齐上游）。** 删除 `$DSH_HOME` 之外的全部 Electron 自有数据。它只能作为一项明确的产品决策保留，而非无代价收益：会丢弃代理配置、更新频道、运行时引导状态和仍可使用的加密凭据，还可能让代理用户重装后无法重新下载运行时。
 - **B——Chrome 式 opt-in。** 辅助式卸载器提供"同时删除应用数据"选项（默认保留）；`/S` 保留数据；`--delete-app-data` 在静默模式下强制完整删除。保留了"重装即恢复设置"的体验，但需要定制卸载器页面及其本地化，且多数用户的工具链残留依旧。
 - **C——仅开关。** 沿用 `--delete-app-data` 语义并把更新器缓存纳入，文档说明该开关。改动最小，但几乎无人知晓——今天的残留状况不会改变。

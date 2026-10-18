@@ -6,7 +6,7 @@
 
 ## Windows（NSIS 安装包）
 
-assisted NSIS 卸载器会删除安装目录、`managed-toolchains/`、`electron/toolchains/bin`、具名 Chromium 缓存目录（`Cache/`、`Code Cache/`、`GPUCache/` 及各分区的对应目录）和 `%LOCALAPPDATA%\rivetdeck-updater`。更新与卸载器替换完全不删除数据。
+assisted NSIS 卸载器会删除安装目录、`managed-toolchains/`、`electron/toolchains/bin`、具名 Chromium 缓存目录（`Cache/`、`Code Cache/`、`GPUCache/`、`DawnGraphiteCache/`、`DawnWebGPUCache/` 及各分区的对应目录）和 `%LOCALAPPDATA%\rivetdeck-updater`。更新与卸载器替换完全不删除数据。
 
 | 位置 | 内容 | 卸载后 |
 | --- | --- | --- |
