@@ -2,6 +2,7 @@
 // verification, and tiered removal on top of the safe-deletion primitives.
 #pragma once
 #include <algorithm>
+#include <cwchar>
 #include <cwctype>
 #include <functional>
 #include <string>
@@ -28,7 +29,7 @@ inline std::wstring WideFromUtf8(const std::string& value) {
     int size = MultiByteToWideChar(CP_UTF8, 0, value.data(), static_cast<int>(value.size()), nullptr, 0);
     if (size <= 0) return {};
     std::wstring wide(static_cast<size_t>(size), L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, value.data(), static_cast<int>(value.size()), wide.data(), size);
+    MultiByteToWideChar(CP_UTF8, 0, value.data(), static_cast<int>(value.size()), &wide[0], size);
     return wide;
 }
 
@@ -37,7 +38,7 @@ inline std::string Utf8FromWide(const std::wstring& value) {
     int size = WideCharToMultiByte(CP_UTF8, 0, value.data(), static_cast<int>(value.size()), nullptr, 0, nullptr, nullptr);
     if (size <= 0) return {};
     std::string utf8(static_cast<size_t>(size), '\0');
-    WideCharToMultiByte(CP_UTF8, 0, value.data(), static_cast<int>(value.size()), utf8.data(), size, nullptr, nullptr);
+    WideCharToMultiByte(CP_UTF8, 0, value.data(), static_cast<int>(value.size()), &utf8[0], size, nullptr, nullptr);
     return utf8;
 }
 
@@ -59,7 +60,7 @@ inline DWORD ReadFileBytes(const std::wstring& path, std::string& bytes) {
     if (error == ERROR_SUCCESS) {
         bytes.resize(static_cast<size_t>(size.QuadPart));
         DWORD read = 0;
-        if (!bytes.empty() && !ReadFile(file, bytes.data(), static_cast<DWORD>(bytes.size()), &read, nullptr))
+        if (!bytes.empty() && !ReadFile(file, &bytes[0], static_cast<DWORD>(bytes.size()), &read, nullptr))
             error = GetLastError();
         else
             bytes.resize(read);
@@ -221,7 +222,7 @@ inline bool VerifyManagedToolchains(const std::wstring& root) {
                 return NameEquals(child, L"active.json") || NameEquals(child, L"installation.pending");
             if (!IsVersionDirectory(child.cFileName)) return false;
             const std::wstring version = runtime + L'\\' + child.cFileName;
-            return VerifyEntries(version, [](const WIN32_FIND_DATAW& target) {
+            return VerifyEntries(version, [&](const WIN32_FIND_DATAW& target) {
                 if (!IsDirectory(target) || !IsTargetDirectory(target.cFileName)) return false;
                 const std::wstring platform = version + L'\\' + target.cFileName;
                 return VerifyEntries(platform, [](const WIN32_FIND_DATAW& generation) {

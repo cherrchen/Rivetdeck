@@ -28,6 +28,14 @@ static void Mkdir(const std::wstring& path) { assert(CreateDirectoryW(path.c_str
 
 static bool Exists(const std::wstring& path) { return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES; }
 
+// History lines are written as narrow text; test paths are ASCII.
+static std::string Narrow(const std::wstring& wide) {
+    std::string narrow;
+    narrow.reserve(wide.size());
+    for (wchar_t ch : wide) narrow += static_cast<char>(ch);
+    return narrow;
+}
+
 // A directory junction lets a link sit where a real directory is expected; cleanup must
 // unlink the junction root and never descend into the target.
 static bool MakeJunction(const std::wstring& link, const std::wstring& target) {
@@ -157,14 +165,13 @@ int wmain(int argc, wchar_t** argv) {
     Mkdir(userData);
     Mkdir(home);
     const std::wstring historyPath = root + L"\\history.ini";
-    WriteText(historyPath, "complete=1\r\nuserData=" +
-        std::string(userData.begin(), userData.end()) + "\r\ndshHome=" +
-        std::string(home.begin(), home.end()) + "\r\n");
+    WriteText(historyPath, "complete=1\r\nuserData=" + Narrow(userData) +
+        "\r\ndshHome=" + Narrow(home) + "\r\n");
     {
         uninstall_cleanup::History history;
         assert(uninstall_cleanup::LoadHistory(historyPath.c_str(), history) == ERROR_SUCCESS);
         assert(history.present && history.complete && !history.damaged);
-        assert(history.userData.size() == 1 && history.homes.size() == 1);
+        assert(history.userData.size() == 1u && history.homes.size() == 1u);
     }
 
     // An unnormalizable dshHome claim is unresolvable protection, not dropped history.
@@ -296,8 +303,7 @@ int wmain(int argc, wchar_t** argv) {
     Mkdir(userData2);
     File(userData2 + L"\\Local State");
     const std::wstring incompleteHistory = root + L"\\incomplete.ini";
-    WriteText(incompleteHistory, "complete=0\r\nuserData=" +
-        std::string(userData2.begin(), userData2.end()) + "\r\n");
+    WriteText(incompleteHistory, "complete=0\r\nuserData=" + Narrow(userData2) + "\r\n");
     {
         uninstall_cleanup::CleanupRequest request;
         request.userData = userData2.c_str();
@@ -316,8 +322,7 @@ int wmain(int argc, wchar_t** argv) {
 
     // deleteAppData with complete history removes the entire attributed root.
     const std::wstring fullHistory = root + L"\\full.ini";
-    WriteText(fullHistory, "complete=1\r\nuserData=" +
-        std::string(userData2.begin(), userData2.end()) + "\r\n");
+    WriteText(fullHistory, "complete=1\r\nuserData=" + Narrow(userData2) + "\r\n");
     {
         uninstall_cleanup::CleanupRequest request;
         request.userData = userData2.c_str();

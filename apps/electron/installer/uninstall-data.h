@@ -1,6 +1,7 @@
 // Windows data cleanup: protect shell roots and pin directory names while enumerating.
 #pragma once
 #include <shlobj.h>
+#include <cwchar>
 #include <string>
 #include <vector>
 

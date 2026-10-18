@@ -26,7 +26,7 @@ $compileScript = Join-Path $output 'compile-uninstall-helper.cmd'
     '@echo off',
     ('call "{0}" >nul' -f $vcvars),
     'if errorlevel 1 exit /b %errorlevel%',
-    ('cl /nologo /LD /MT /O1 /W4 /WX /EHsc "{0}" /Fo"{1}" /link /OUT:"{2}" /IMPLIB:"{3}" shell32.lib ole32.lib uuid.lib advapi32.lib' -f
+    ('cl /nologo /std:c++17 /LD /MT /O1 /W4 /WX /EHsc "{0}" /Fo"{1}" /link /OUT:"{2}" /IMPLIB:"{3}" shell32.lib ole32.lib uuid.lib advapi32.lib' -f
         $source, (Join-Path $output 'uninstall-data.obj'), $library, (Join-Path $output 'rivetdeck-uninstall.lib'))
 ), [Text.Encoding]::Default)
 & $env:ComSpec /d /c $compileScript
@@ -43,7 +43,7 @@ if ($TestCleanup) {
         '@echo off',
         ('call "{0}" >nul' -f $vcvars),
         'if errorlevel 1 exit /b %errorlevel%',
-        ('cl /nologo /MT /W4 /WX /EHsc "{0}" /Fo"{1}" /Fe"{2}" /link shell32.lib ole32.lib uuid.lib advapi32.lib' -f
+        ('cl /nologo /std:c++17 /MT /W4 /WX /EHsc "{0}" /Fo"{1}" /Fe"{2}" /link shell32.lib ole32.lib uuid.lib advapi32.lib' -f
             $cleanupSource, (Join-Path $output 'data-cleanup-test.obj'), $cleanupExecutable)
     ), [Text.Encoding]::Default)
     & $env:ComSpec /d /c $cleanupScript
