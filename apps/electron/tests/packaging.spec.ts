@@ -111,13 +111,14 @@ it('wires the layered data-cleanup uninstaller through the native helper', async
     const output = join(projectDir, '.electron-build/nsis')
     const nsh = await readFile(join(output, 'uninstall.nsh'), 'utf8')
 
-    // Replacement and update flows keep data; the record migrates for the successor install.
+    // Replacement and update flows keep data; the record beside the default userData is
+    // outside $INSTDIR, so it already survives for the succeeding install.
     // Options are parsed with FileFunc, not the StdUtils-backed flag macros: the custom
     // functions compile before the plugin directory registers StdUtils.
     expect(nsh).toContain('${GetOptions} $R0 "--updated"')
     expect(nsh).toContain('/KEEP_APP_DATA')
-    expect(nsh).toContain('CopyFiles /SILENT "$INSTDIR\\${RIVETDECK_PATH_HISTORY}" "$APPDATA\\${RIVETDECK_PATH_HISTORY}"')
-    // A legacy install-dir record migrates only when no user-level record exists.
+    expect(nsh).not.toContain('$INSTDIR\\${RIVETDECK_PATH_HISTORY}')
+    expect(nsh).not.toContain('CopyFiles')
     expect(nsh).toContain('${AndIfNot} ${FileExists} "$APPDATA\\${RIVETDECK_PATH_HISTORY}"')
     expect(nsh).toContain('FileWrite $0 "complete=1$\\r$\\n"')
     // Fresh installs seed the record beside userData so the app can always rewrite it;

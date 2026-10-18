@@ -145,16 +145,8 @@ Var UnResidue
 Var UnSkipped
 Var UnMode
 
-; A replaced or updating uninstaller never deletes data. A record kept beside the
-; executable by an install-era layout migrates beside the default userData for the
-; succeeding install; an existing record there is never overwritten by a stale one.
-Function un.RivetdeckKeepData
-  ${'${If}'} ${'${FileExists}'} "$INSTDIR\\${'${RIVETDECK_PATH_HISTORY}'}"
-  ${'${AndIfNot}'} ${'${FileExists}'} "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}"
-    CopyFiles /SILENT "$INSTDIR\\${'${RIVETDECK_PATH_HISTORY}'}" "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}"
-  ${'${EndIf}'}
-FunctionEnd
-
+; A replaced or updating uninstaller never deletes data. The record beside the default
+; userData is outside $INSTDIR, so it already survives for the succeeding install.
 Function un.RivetdeckCleanData
   ; Command-line options are parsed with FileFunc rather than the StdUtils-backed flag
   ; macros: this function is compiled before the plugin directory registers StdUtils.
@@ -162,14 +154,12 @@ Function un.RivetdeckCleanData
   ClearErrors
   ${'${GetOptions}'} $R0 "--updated" $R1
   ${'${IfNot}'} ${'${Errors}'}
-    Call un.RivetdeckKeepData
     Return
   ${'${EndIf}'}
   ; The installer runs an older uninstaller with /KEEP_APP_DATA when replacing it.
   ClearErrors
   ${'${GetOptions}'} $R0 "/KEEP_APP_DATA" $R1
   ${'${IfNot}'} ${'${Errors}'}
-    Call un.RivetdeckKeepData
     Return
   ${'${EndIf}'}
   ClearErrors

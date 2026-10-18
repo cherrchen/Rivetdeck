@@ -12,7 +12,7 @@
 
 每次打包后启动时，应用在执行可能失败的网络与运行时初始化之前，先把解析后的 `userData` 与 `DSH_HOME` 合并进默认 `userData` 旁的逐行记录（`src/path-history.ts`，`%APPDATA%\rivetdeck-path-history.ini`），保证中途失败的启动也留下本次的根目录记录。该位置对应用始终可写（提权安装亦然），且不受安装目录删除影响。全新安装会以 `complete=1` 播种该记录；升级后首次生成的记录视为不完整，因为它无法证明此前运行过哪些根目录。
 
-卸载时 `customUnInstall` 调用 `un.RivetdeckCleanData`：当卸载器因更新（`--updated`）或同产品替换（`/KEEP_APP_DATA`）而运行时保留全部数据；两种场景还会把旧布局留在可执行文件旁的记录迁移到默认 `userData` 旁（仅当该处尚无记录），供后续安装采纳。否则该流程解析当前 `userData` 根（`$APPDATA\Rivetdeck`）、更新器缓存（`%LOCALAPPDATA%\rivetdeck-updater`）、环境 `DSH_HOME` 与记录文件，交给原生 `UninstallCleanup` 入口（`installer/uninstall-cleanup.h`）。辅助程序执行分层策略：通过归属与预期清单校验后删除 `managed-toolchains/`、`electron/toolchains/bin`、具名缓存目录（含各分区对应目录）与更新器缓存；保留 `desktop-preferences.json`、`network-secrets/`、`network-startup-override.json` 与持久化浏览器存储。`--delete-app-data` 仅在记录存在且完整时删除整个 `userData` 根。校验失败或与保护路径重叠的目标整体跳过；跳过项与删除失败写入 `%APPDATA%\Rivetdeck-uninstall-residue.log` 并显示在卸载器详情页。
+卸载时 `customUnInstall` 调用 `un.RivetdeckCleanData`：当卸载器因更新（`--updated`）或同产品替换（`/KEEP_APP_DATA`）而运行时保留全部数据；记录位于默认 `userData` 旁、`$INSTDIR` 之外，本来就能留存给后续安装。否则该流程解析当前 `userData` 根（`$APPDATA\Rivetdeck`）、更新器缓存（`%LOCALAPPDATA%\rivetdeck-updater`）、环境 `DSH_HOME` 与记录文件，交给原生 `UninstallCleanup` 入口（`installer/uninstall-cleanup.h`）。辅助程序执行分层策略：通过归属与预期清单校验后删除 `managed-toolchains/`、`electron/toolchains/bin`、具名缓存目录（含各分区对应目录）与更新器缓存；保留 `desktop-preferences.json`、`network-secrets/`、`network-startup-override.json` 与持久化浏览器存储。`--delete-app-data` 仅在记录存在且完整时删除整个 `userData` 根。校验失败或与保护路径重叠的目标整体跳过；跳过项与删除失败写入 `%APPDATA%\Rivetdeck-uninstall-residue.log` 并显示在卸载器详情页。
 
 macOS 的 DMG/ZIP 与 Linux 的 AppImage 不带卸载器；DEB 只移除 `/opt/Rivetdeck`。MSIX（应用商店）构建由操作系统卸载并连带其虚拟化的包内数据，但预先存在的非虚拟化文件会保留，`~/.dsh` 也在虚拟化范围之外——验证缺口见"其他平台"一节。
 

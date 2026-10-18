@@ -7,7 +7,7 @@
 import { readFileSync } from 'node:fs'
 import type { ChildProcessByStdio } from 'node:child_process'
 import type { Readable } from 'node:stream'
-import { dirname, join, resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import {
   app,
   BrowserWindow,
@@ -801,7 +801,6 @@ if (!primaryInstance) {
     // network or runtime preparation must still leave this launch's paths in history.
     if (process.platform === 'win32' && app.isPackaged) {
       await mergeLaunchPathHistory({
-        installDir: dirname(process.execPath),
         appDataDir: app.getPath('appData'),
         userData: userDataPath,
         dshHome: harnessHome,

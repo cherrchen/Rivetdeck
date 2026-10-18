@@ -22,9 +22,9 @@ describe('Electron path history', () => {
   })
 
   it('marks a first-ever record incomplete', async () => {
-    const { installDir, appDataDir } = await directories()
+    const appDataDir = await mkdtemp(join(tmpdir(), 'path-history-appdata-'))
     const record = await mergeLaunchPathHistory({
-      installDir, appDataDir,
+      appDataDir,
       userData: 'D:\\data\\Rivetdeck',
       dshHome: 'D:\\home\\.dsh',
     })
@@ -35,10 +35,10 @@ describe('Electron path history', () => {
   })
 
   it('merges relocated roots and keeps the installer-seeded completeness', async () => {
-    const { installDir, appDataDir } = await directories()
+    const appDataDir = await mkdtemp(join(tmpdir(), 'path-history-appdata-'))
     await writeFile(join(appDataDir, PATH_HISTORY_FILE), 'complete=1\r\nuserData=C:\\first\r\n')
     const record = await mergeLaunchPathHistory({
-      installDir, appDataDir,
+      appDataDir,
       userData: 'D:\\second',
       dshHome: 'D:\\home',
     })
@@ -46,46 +46,10 @@ describe('Electron path history', () => {
     expect(record?.userData).toEqual(['C:\\first', 'D:\\second'])
   })
 
-  it('adopts a record left beside the executable, then removes it', async () => {
-    const { installDir, appDataDir } = await directories()
-    const legacy = join(installDir, PATH_HISTORY_FILE)
-    await writeFile(legacy, 'complete=1\r\nuserData=C:\\old-root\r\ndshHome=C:\\old-home\r\n')
-    const record = await mergeLaunchPathHistory({
-      installDir, appDataDir,
-      userData: 'C:\\new-root',
-      dshHome: 'C:\\new-home',
-    })
-    expect(record?.complete).toBe(true)
-    expect(record?.userData).toEqual(['C:\\old-root', 'C:\\new-root'])
-    expect(record?.dshHome).toEqual(['C:\\old-home', 'C:\\new-home'])
-    await expect(readFile(legacy, 'utf8')).rejects.toThrow()
-  })
-
-  it('merges a legacy install-dir record into a newer user-level record', async () => {
-    const { installDir, appDataDir } = await directories()
-    await writeFile(join(appDataDir, PATH_HISTORY_FILE), 'complete=1\r\nuserData=C:\\first\r\n')
-    await writeFile(join(installDir, PATH_HISTORY_FILE), 'complete=0\r\nuserData=C:\\legacy\r\n')
-    const record = await mergeLaunchPathHistory({
-      installDir, appDataDir,
-      userData: 'C:\\new-root',
-      dshHome: 'C:\\home',
-    })
-    // A completeness claim survives only when every merged source proved its own coverage.
-    expect(record?.complete).toBe(false)
-    expect(record?.userData).toEqual(['C:\\first', 'C:\\legacy', 'C:\\new-root'])
-    await expect(readFile(join(installDir, PATH_HISTORY_FILE), 'utf8')).rejects.toThrow()
-  })
-
   it('accumulates duplicate roots once', async () => {
-    const { installDir, appDataDir } = await directories()
-    await mergeLaunchPathHistory({ installDir, appDataDir, userData: 'C:\\same', dshHome: 'C:\\same-home' })
-    const record = await mergeLaunchPathHistory({ installDir, appDataDir, userData: 'C:\\same', dshHome: 'C:\\same-home' })
+    const appDataDir = await mkdtemp(join(tmpdir(), 'path-history-appdata-'))
+    await mergeLaunchPathHistory({ appDataDir, userData: 'C:\\same', dshHome: 'C:\\same-home' })
+    const record = await mergeLaunchPathHistory({ appDataDir, userData: 'C:\\same', dshHome: 'C:\\same-home' })
     expect(record?.userData).toEqual(['C:\\same'])
   })
 })
-
-async function directories() {
-  const installDir = await mkdtemp(join(tmpdir(), 'path-history-install-'))
-  const appDataDir = await mkdtemp(join(tmpdir(), 'path-history-appdata-'))
-  return { installDir, appDataDir }
-}
