@@ -34,6 +34,11 @@ import { resolveDshInstallAnchor } from './runtime.ts'
 import { DesktopRuntime } from './desktop-runtime.ts'
 import { DesktopPluginManager } from './desktop-plugin-manager.ts'
 import { DesktopConfigEditor } from './desktop-config-editor.ts'
+import {
+  writeShutdownReportSync,
+  type HostDisposeOutcome,
+  type ShutdownRequestCause,
+} from './harness/shutdown-report.ts'
 
 const NAME = 'dsh'
 
@@ -93,42 +98,82 @@ function createAppReady(): { service: AppReady; commit(): void } {
   }
 }
 
-/** Process-exit controller matching the CLI Host lifecycle. */
-function createProcessShutdown(dispose: () => Promise<void>): {
-  shutdown(code: number): Promise<void>
-  interrupt(code: number): void
+/** Shutdown facts the controller folds into the report the Host leaves behind. */
+export interface HostShutdownState {
+  /** First channel that requested shutdown. */
+  requestedBy: ShutdownRequestCause | null
+  /** The Web composition reached readiness. */
+  reachedReady: boolean
+}
+
+/** Minimal process sink so tests can observe exit decisions without exiting. */
+export interface HostExitTarget {
+  /** Force the process out now. */
+  exit(code: number): void
+  /** Set the code the process exits with once the event loop drains. */
+  applyExitCode(code: number): void
+}
+
+/** Live process sink used in production. */
+const processExitTarget: HostExitTarget = {
+  exit: (code) => { process.exit(code) },
+  applyExitCode: (code) => { process.exitCode = code },
+}
+
+/**
+ * Process-exit controller matching the CLI Host lifecycle.
+ * @param dispose - Profile teardown awaited once per shutdown.
+ * @param state - Mutable facts reported on the exit path.
+ * @param writeReport - Durable report write invoked immediately before exiting.
+ * @param target - Process exit sink; injectable for tests.
+ * @returns Shutdown entry points for signals and the cmdline exit channel.
+ */
+export function createProcessShutdown(
+  dispose: () => Promise<void>,
+  state: HostShutdownState,
+  writeReport: (dispose: HostDisposeOutcome, exitCode: number | null) => void,
+  target: HostExitTarget = processExitTarget,
+): {
+  shutdown(code: number, cause: ShutdownRequestCause): Promise<void>
+  interrupt(code: number, cause: ShutdownRequestCause): void
 } {
   let pending: Promise<void> | undefined
   let timeout: ReturnType<typeof setTimeout> | undefined
   let completed = false
   let forceExited = false
-  const forceExitOnce = (code: number): void => {
+  const forceExitOnce = (code: number, outcome: HostDisposeOutcome): void => {
     if (forceExited) return
     forceExited = true
     if (timeout !== undefined) clearTimeout(timeout)
-    process.exit(code)
+    writeReport(outcome, code)
+    target.exit(code)
   }
   const start = (code: number, forceAfterDispose: boolean): Promise<void> => {
     if (pending !== undefined) return pending
-    timeout = setTimeout(() => { forceExitOnce(code) }, PROCESS_SHUTDOWN_TIMEOUT_MS)
+    timeout = setTimeout(() => { forceExitOnce(code, 'timeout') }, PROCESS_SHUTDOWN_TIMEOUT_MS)
     pending = Promise.resolve().then(dispose).then(
       () => {
-        if (forceAfterDispose) forceExitOnce(code)
+        if (forceAfterDispose) forceExitOnce(code, 'clean')
         else if (!completed && !forceExited) {
           completed = true
           if (timeout !== undefined) clearTimeout(timeout)
-          process.exitCode = code
+          writeReport('clean', code)
+          target.applyExitCode(code)
         }
       },
-      () => { forceExitOnce(code) },
+      () => { forceExitOnce(code, 'failed') },
     )
     return pending
   }
   return {
-    shutdown(code) { return start(code, false) },
-    interrupt(code) {
+    shutdown(code, cause) {
+      state.requestedBy ??= cause
+      return start(code, false)
+    },
+    interrupt(code, cause) {
+      state.requestedBy ??= cause
       if (pending !== undefined) {
-        forceExitOnce(code)
+        forceExitOnce(code, 'interrupted')
         return
       }
       void start(code, true)
@@ -173,16 +218,31 @@ export async function runDesktopHost(options: HostLaunchOptions): Promise<{ ctx:
     if (failures.length > 1) throw new AggregateError(failures, 'dsh: profile cleanup failed')
   })()
 
+  const shutdownState: HostShutdownState = { requestedBy: null, reachedReady: false }
+  const writeReport = (outcome: HostDisposeOutcome, exitCode: number | null): void => {
+    try {
+      writeShutdownReportSync(home, {
+        pid: process.pid,
+        reachedReady: shutdownState.reachedReady,
+        requestedBy: shutdownState.requestedBy,
+        dispose: outcome,
+        exitCode,
+      })
+    } catch (reportError) {
+      process.stderr.write(`${NAME}: shutdown report write failed: ${String(reportError)}\n`)
+    }
+  }
+
   try {
     const appReady = createAppReady()
-    const shutdown = createProcessShutdown(dispose)
+    const shutdown = createProcessShutdown(dispose, shutdownState, writeReport)
     const signalShutdown = new AbortController()
-    const interrupt = (code: number): void => {
+    const interrupt = (code: number, cause: ShutdownRequestCause): void => {
       signalShutdown.abort()
-      shutdown.interrupt(code)
+      shutdown.interrupt(code, cause)
     }
-    process.on('SIGTERM', () => { interrupt(0) })
-    process.on('SIGINT', () => { interrupt(130) })
+    process.on('SIGTERM', () => { interrupt(0, 'SIGTERM') })
+    process.on('SIGINT', () => { interrupt(130, 'SIGINT') })
     installFailLoud(NAME, process, async () => {
       await app.current?.fiber.dispose()
     })
@@ -223,7 +283,7 @@ export async function runDesktopHost(options: HostLaunchOptions): Promise<{ ctx:
         runtime.install(hostCtx)
         provideCmdline(hostCtx, {
           args: options.args,
-          exit: code => void shutdown.shutdown(code),
+          exit: code => void shutdown.shutdown(code, 'cli'),
           ready: appReady.service,
         })
       },
@@ -232,14 +292,19 @@ export async function runDesktopHost(options: HostLaunchOptions): Promise<{ ctx:
     if (!signalShutdown.signal.aborted
       && ctx.fiber.state === FiberState.ACTIVE
       && ctx.get('loader') !== undefined) {
+      shutdownState.reachedReady = true
       appReady.commit()
     }
     return { ctx }
   } catch (error) {
     console.error('electron host startup failed:', error)
+    let outcome: HostDisposeOutcome = 'clean'
     try { await dispose() } catch (cleanupError) {
+      outcome = 'failed'
+      writeReport(outcome, null)
       throw new AggregateError([error, cleanupError], 'dsh: profile startup and cleanup failed')
     }
+    writeReport(outcome, null)
     throw error
   }
 }

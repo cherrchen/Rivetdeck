@@ -30,7 +30,8 @@ import {
   isAllowedExternalUrl,
 } from './desktop/index.ts'
 import { DesktopServices } from './desktop/services.ts'
-import { stopHarness } from './harness/process.ts'
+import { stopHarness, type HarnessStopReport } from './harness/process.ts'
+import { mergeMainShutdownFacts } from './harness/shutdown-report.ts'
 import { HttpHarnessTransport } from './harness/transport.ts'
 import { installDesktopIpc } from './ipc.ts'
 import { readDesktopManifest, resolveUpdateRepository, usesStoreUpdates } from './manifest.ts'
@@ -81,6 +82,8 @@ import process from 'node:process'
 type HarnessProcess = ChildProcessByStdio<null, Readable, Readable>
 
 let harness: HarnessProcess | undefined
+/** `$DSH_HOME` of the supervised run; set before Host spawn, read by exit merging. */
+let harnessHome: string | undefined
 let mainWindow: BrowserWindow | undefined
 let tray: Tray | undefined
 let updater: UpdaterController | undefined
@@ -140,7 +143,8 @@ async function startHarness(
       scan.settled = true
       scan.output = ''
       const timeoutError = new Error(`Rivetdeck did not become ready within ${String(HARNESS_START_TIMEOUT_MS / 1000)} seconds.`)
-      void stopHarness(child).then(() => {
+      void stopHarness(child).then(async (report) => {
+        await recordHarnessShutdown(child.pid, report)
         reject(timeoutError)
       }, (cleanupError: unknown) => {
         reject(new AggregateError([timeoutError, cleanupError], `${timeoutError.message} Harness shutdown also failed.`))
@@ -157,6 +161,16 @@ async function startHarness(
 
     child.once('error', fail)
     child.once('exit', (code, signal) => {
+      // The listener stays armed past readiness, so every child exit — early
+      // crash, external kill, or clean drain — leaves its result on record;
+      // prepareToInstall's own observation then merges signal/timeout/kill.
+      void recordHarnessShutdown(child.pid, {
+        signal: null,
+        timeout: false,
+        kill: false,
+        exitCode: code,
+        signalCode: signal,
+      })
       fail(new Error(`Rivetdeck exited before startup (code ${String(code)}, signal ${String(signal)}).`))
     })
     child.stdout.on('data', (chunk: Buffer) => {
@@ -250,6 +264,28 @@ function requestQuit(): void {
   app.quit()
 }
 
+/**
+ * Merge Main's supervision facts onto the Host's shutdown report.
+ * @param pid - Child pid the observation describes; absent when spawn failed.
+ * @param report - Facts `stopHarness` observed while draining the child.
+ */
+async function recordHarnessShutdown(pid: number | undefined, report: HarnessStopReport): Promise<void> {
+  const home = harnessHome
+  if (home === undefined || pid === undefined) return
+  try {
+    await mergeMainShutdownFacts(home, {
+      pid,
+      signal: report.signal,
+      timeout: report.timeout,
+      kill: report.kill,
+      exitCode: report.exitCode,
+      signalCode: report.signalCode,
+    })
+  } catch (error) {
+    console.error('desktop shutdown: failed to merge Harness exit report', error)
+  }
+}
+
 async function prepareToInstall(): Promise<void> {
   quitting = true
   stopping = true
@@ -258,7 +294,10 @@ async function prepareToInstall(): Promise<void> {
   await transport.stop()
   const child = harness
   harness = undefined
-  if (child !== undefined) await stopHarness(child)
+  if (child !== undefined) {
+    const report = await stopHarness(child)
+    await recordHarnessShutdown(child.pid, report)
+  }
   await runtimes?.shutdown()
   await network?.shutdown().catch(() => undefined)
 }
@@ -513,7 +552,7 @@ if (!primaryInstance) {
       packaged: app.isPackaged,
       override: process.env.DSH_ELECTRON_NODE_BINARY,
     })
-    const harnessHome = process.env.DSH_HOME ?? resolveHarnessHome(app.getPath('home'))
+    harnessHome = process.env.DSH_HOME ?? resolveHarnessHome(app.getPath('home'))
     const shim = prepareToolchainShims({ userData: userDataPath, harnessHome }, toolchains, process.platform)
     const toolchainPolicy: DesktopToolchainPolicy = {
       version: 2,
