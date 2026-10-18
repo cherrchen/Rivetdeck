@@ -8,6 +8,7 @@ import {
   type CheckpointFileEntry,
   type CheckpointManifest,
   type CheckpointSessionEntry,
+  type CheckpointSessionHeader,
 } from '../src/checkpoint/manifest.ts'
 import { detectCheckpointDrift, confirmUnreadable, type DriftDetection } from '../src/checkpoint/detect.ts'
 import {
@@ -16,7 +17,9 @@ import {
   listPendingRestores,
 } from '../src/checkpoint/pending.ts'
 import { detectFormatRefusalFrame } from '../src/checkpoint/refusal.ts'
-import { resolveSessionRefusal } from '../src/checkpoint/index.ts'
+import { filterIdleWriters, resolveSessionRefusal } from '../src/checkpoint/index.ts'
+import type { AcquireSessionLease } from '../src/checkpoint/restore.ts'
+import type { ConfirmedUnreadable } from '../src/checkpoint/detect.ts'
 import { buildNoCheckpointNotice, buildRestoreConfirm } from '../src/checkpoint/dialog.ts'
 import { en, zh } from '../src/locale.ts'
 import type { CheckpointValidationReport } from '../src/checkpoint/capture.ts'
@@ -367,5 +370,45 @@ describe('restore dialog copy', () => {
     expect(spec.detail).toContain('检查点')
     const notice = buildNoCheckpointNotice(en, 'aaaa-1111')
     expect(notice.message).toContain('no verified checkpoint copy exists')
+  })
+})
+
+describe('filterIdleWriters', () => {
+  const HEADER: CheckpointSessionHeader = { id: 'aaaa-1111', cwd: '/work', isSeeded: false, delegationDepth: 0 }
+
+  function candidate(dir: string, header?: CheckpointSessionHeader): ConfirmedUnreadable {
+    return {
+      sessionId: dir,
+      dir,
+      entry: {
+        sessionId: dir,
+        dir,
+        capturedAt: 0,
+        sourceCheckpointId: '1000',
+        validator: { appVersion: '0.2.0', sessionFormatVersion: 4 },
+        ...(header === undefined ? {} : { header }),
+      },
+      reasons: ['changed'],
+      newerGeneration: undefined,
+      error: undefined,
+    }
+  }
+
+  it('keeps candidates whose write lease is free and drops held or unleasable ones', async () => {
+    const held = new Set(['--work--/held'])
+    const acquire: AcquireSessionLease = async (subject) => {
+      if (held.has(subject.dir)) {
+        const error = new Error('already owned')
+        error.name = 'SessionAlreadyOwnedError'
+        throw error
+      }
+      return { release: async () => undefined }
+    }
+    const kept = await filterIdleWriters([
+      candidate('--work--/free', HEADER),
+      candidate('--work--/held', { ...HEADER, id: 'held' }),
+      candidate('--work--/no-header'),
+    ], acquire)
+    expect(kept.map(item => item.dir)).toEqual(['--work--/free'])
   })
 })

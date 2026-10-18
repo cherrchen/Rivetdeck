@@ -35,8 +35,11 @@ export interface SessionLease {
   release(): Promise<void>
 }
 
+/** Session identity the lease seam may consult; a journal member qualifies. */
+export type SessionLeaseSubject = Pick<RestoreJournalMember, 'sessionId' | 'dir' | 'header'>
+
 /** Lease provider: production resolves the backend seam; tests inject fakes. */
-export type AcquireSessionLease = (member: RestoreJournalMember) => Promise<SessionLease>
+export type AcquireSessionLease = (subject: SessionLeaseSubject) => Promise<SessionLease>
 
 /** Staged replacement name inside the member dir, next to the canonical file. */
 function stagedName(canonical: string): string {

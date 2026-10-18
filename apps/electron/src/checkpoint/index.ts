@@ -214,9 +214,13 @@ export async function consumePendingSessionRestores(
  * checkpoint, then worker confirmation on the live sessions root. Returns
  * only sessions confirmed unreadable AND holding a verified copy — the set a
  * confirmation prompt may offer to restore.
+ * @param options.confirmIdleLease - Set while a writer may be live (the local
+ *   Host is up): a torn mid-append read then reports a healthy session as
+ *   unreadable, so only candidates whose `session.lock` write lease can be
+ *   acquired — proving no writer — keep the verdict.
  */
 export async function detectUnreadableSessions(
-  options: DesktopSessionMaintenanceOptions,
+  options: DesktopSessionMaintenanceOptions & { readonly confirmIdleLease?: boolean | undefined },
 ): Promise<{ manifest: CheckpointManifest; unreadable: readonly ConfirmedUnreadable[] } | undefined> {
   const anchor = resolveDshInstallAnchor(options.appPath)
   const formatVersion = await resolveSessionFormatVersion(anchor).catch(() => undefined)
@@ -232,7 +236,44 @@ export async function detectUnreadableSessions(
     options.hostRuntime,
     AbortSignal.timeout(DETECTION_BUDGET_MS),
   )
-  return { manifest: detection.manifest, unreadable: confirmUnreadable(detection, report) }
+  const unreadable = confirmUnreadable(detection, report)
+  if (options.confirmIdleLease !== true || unreadable.length === 0) {
+    return { manifest: detection.manifest, unreadable }
+  }
+  const leases = await backendLeaseAcquirer(options.home, anchor)
+  try {
+    return { manifest: detection.manifest, unreadable: await filterIdleWriters(unreadable, leases.acquire, options.log) }
+  } finally {
+    await leases.dispose()
+  }
+}
+
+/**
+ * Drop confirmed-unreadable candidates that cannot prove the absence of a
+ * live writer: a held lease means a mid-append torn read may have produced
+ * the verdict. A header-less entry cannot be leased at all and drops under
+ * the same "unverifiable while writers may be live" rule.
+ */
+export async function filterIdleWriters(
+  candidates: readonly ConfirmedUnreadable[],
+  acquireLease: AcquireSessionLease,
+  log?: ((message: string) => void) | undefined,
+): Promise<readonly ConfirmedUnreadable[]> {
+  const confirmed: ConfirmedUnreadable[] = []
+  for (const item of candidates) {
+    if (item.entry.header === undefined) {
+      log?.(`drift candidate ${item.dir} skipped: no stored header to lease against`)
+      continue
+    }
+    try {
+      const lease = await acquireLease({ sessionId: item.sessionId, dir: item.dir, header: item.entry.header })
+      await lease.release()
+      confirmed.push(item)
+    } catch (error) {
+      log?.(`drift candidate ${item.dir} skipped: write lease held by a live writer (${(error as Error).message})`)
+    }
+  }
+  return confirmed
 }
 
 /**

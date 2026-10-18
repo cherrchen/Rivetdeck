@@ -492,7 +492,12 @@ async function requestSessionRollback(): Promise<void> {
     hostRuntime: runtime,
     hostRunning: () => harness !== undefined,
   }
-  const detected = await detectUnreadableSessions(maintenance).catch((error: unknown) => {
+  // While the local Host is up a torn mid-append read can masquerade as an
+  // unreadable session, so candidates must also prove an idle write lease.
+  const detected = await detectUnreadableSessions({
+    ...maintenance,
+    confirmIdleLease: harness !== undefined,
+  }).catch((error: unknown) => {
     console.error('desktop checkpoint: manual detection failed', error)
     return undefined
   })
