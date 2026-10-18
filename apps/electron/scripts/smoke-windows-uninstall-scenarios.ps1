@@ -158,6 +158,18 @@ try {
   Assert-Exists (Join-Path $extraRoot 'desktop-preferences.json') 'recorded userData roots keep protected data'
 
   Write-Output 'All uninstall data-cleanup scenarios passed.'
+} catch {
+  # Diagnostics for the next failure: the residue report and the surviving tree identify
+  # which branch the uninstaller took (skipped vs tiered vs full removal).
+  Write-Output "residue log: $(Test-Path -LiteralPath $residueLog)"
+  if (Test-Path -LiteralPath $residueLog) { Get-Content -LiteralPath $residueLog }
+  Write-Output "history seed: $(Test-Path -LiteralPath (Join-Path $installDirectory $historyName))"
+  if (Test-Path -LiteralPath (Join-Path $installDirectory $historyName)) {
+    Get-Content -LiteralPath (Join-Path $installDirectory $historyName)
+  }
+  Write-Output "userData contents:"
+  Get-ChildItem -LiteralPath $userData -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object { Write-Output $_.FullName }
+  throw
 } finally {
   Reset-State
   Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue

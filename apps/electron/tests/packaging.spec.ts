@@ -112,7 +112,9 @@ it('wires the layered data-cleanup uninstaller through the native helper', async
     const nsh = await readFile(join(output, 'uninstall.nsh'), 'utf8')
 
     // Replacement and update flows keep data; the record migrates for the successor install.
-    expect(nsh).toContain('${isUpdated}')
+    // Options are parsed with FileFunc, not the StdUtils-backed flag macros: the custom
+    // functions compile before the plugin directory registers StdUtils.
+    expect(nsh).toContain('${GetOptions} $R0 "--updated"')
     expect(nsh).toContain('/KEEP_APP_DATA')
     expect(nsh).toContain('CopyFiles /SILENT "$INSTDIR\\${RIVETDECK_PATH_HISTORY}" "$APPDATA\\${RIVETDECK_PATH_HISTORY}"')
     expect(nsh).toContain('FileWrite $0 "complete=1$\\r$\\n"')
@@ -127,7 +129,7 @@ it('wires the layered data-cleanup uninstaller through the native helper', async
     expect(nsh).toContain('!define RIVETDECK_UPDATER_CACHE "rivetdeck-updater"')
     expect(nsh).toContain('File "/oname=$PLUGINSDIR\\rivetdeck-uninstall.dll" "${RIVETDECK_UNINSTALL_HELPER}"')
     expect(nsh).toContain('UninstallCleanup(w "$UnTarget", w "$INSTDIR", w "$UnHome", w "$UnReport"')
-    expect(nsh).toContain('${isDeleteAppData}')
+    expect(nsh).toContain('${GetOptions} $R0 "--delete-app-data"')
     expect(nsh).toContain('DetailPrint "$(RIVETDECK_UNINSTALL_RESIDUE)"')
     expect(nsh).toContain('!macro customUnInstall')
     expect(nsh).toContain('!macro customInstall')

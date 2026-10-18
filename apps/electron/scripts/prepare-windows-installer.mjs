@@ -115,20 +115,11 @@ function renderUninstallNsh({ helperDll, updaterCacheName }) {
 !macroend
 
 !macro customUnInstall
-  ; This file is parsed before multiUser.nsh declares installMode and before the plugin
-  ; directory registers StdUtils, so the shell-context switch and the StdUtils-backed flag
-  ; tests run here at the expansion site inside the uninstall section. $UnMode: 0 tiered,
-  ; 1 requested full removal, 2 update/replacement — protections take precedence.
+  ; This file is parsed before multiUser.nsh declares installMode, so the shell-context
+  ; switch happens here at the expansion site inside the uninstall section.
   ${'${if}'} $installMode == "all"
     SetShellVarContext current
   ${'${endif}'}
-  StrCpy $UnMode "0"
-  ${'${If}'} ${'${isDeleteAppData}'}
-    StrCpy $UnMode "1"
-  ${'${EndIf}'}
-  ${'${If}'} ${'${isUpdated}'}
-    StrCpy $UnMode "2"
-  ${'${EndIf}'}
   Call un.RivetdeckCleanData
   ${'${if}'} $installMode == "all"
     SetShellVarContext all
@@ -152,17 +143,27 @@ Function un.RivetdeckKeepData
 FunctionEnd
 
 Function un.RivetdeckCleanData
-  ${'${If}'} $UnMode == "2"
+  ; Command-line options are parsed with FileFunc rather than the StdUtils-backed flag
+  ; macros: this function is compiled before the plugin directory registers StdUtils.
+  ${'${GetParameters}'} $R0
+  ClearErrors
+  ${'${GetOptions}'} $R0 "--updated" $R1
+  ${'${IfNot}'} ${'${Errors}'}
     Call un.RivetdeckKeepData
     Return
   ${'${EndIf}'}
   ; The installer runs an older uninstaller with /KEEP_APP_DATA when replacing it.
-  ${'${GetParameters}'} $R0
   ClearErrors
   ${'${GetOptions}'} $R0 "/KEEP_APP_DATA" $R1
   ${'${IfNot}'} ${'${Errors}'}
     Call un.RivetdeckKeepData
     Return
+  ${'${EndIf}'}
+  ClearErrors
+  ${'${GetOptions}'} $R0 "--delete-app-data" $R1
+  StrCpy $UnMode "0"
+  ${'${IfNot}'} ${'${Errors}'}
+    StrCpy $UnMode "1"
   ${'${EndIf}'}
   ReadEnvStr $UnHome DSH_HOME
   StrCpy $UnTarget "$APPDATA\\${'${APP_FILENAME}'}"
