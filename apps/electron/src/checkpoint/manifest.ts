@@ -102,8 +102,41 @@ export async function writeManifest(checkpointDir: string, manifest: CheckpointM
   await writeDesktopFileAtomic(manifestPath(checkpointDir), `${JSON.stringify(manifest, undefined, 2)}\n`)
 }
 
+/** A single path segment: no separators, no traversal. */
+export function isPathSegment(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0
+    && !value.includes('/') && !value.includes('\\') && !value.includes('\0')
+    && value !== '.' && value !== '..'
+}
+
+/** A POSIX-relative path made only of safe segments. */
+function isRelativePath(value: unknown): value is string {
+  return typeof value === 'string' && value.split('/').every(isPathSegment)
+}
+
 /**
- * Read one committed manifest, tolerating absence and malformed JSON.
+ * Durable-boundary shape check: a version-1 record whose `files`/`sessions`
+ * lists or session dirs do not fit is treated as unreadable, never half-read.
+ */
+function isManifest(parsed: unknown): parsed is CheckpointManifest {
+  if (typeof parsed !== 'object' || parsed === null) return false
+  const record = parsed as CheckpointManifest
+  if (record.version !== 1 || typeof record.id !== 'string' || typeof record.capturedAt !== 'number'
+    || !Array.isArray(record.files) || !Array.isArray(record.sessions)) return false
+  for (const file of record.files) {
+    if (typeof file !== 'object' || file === null || !isRelativePath(file.path)
+      || typeof file.digest !== 'object' || file.digest === null
+      || typeof file.digest.sha256 !== 'string' || typeof file.digest.size !== 'number') return false
+  }
+  for (const entry of record.sessions) {
+    if (typeof entry !== 'object' || entry === null
+      || typeof entry.sessionId !== 'string' || !isRelativePath(entry.dir)) return false
+  }
+  return true
+}
+
+/**
+ * Read one committed manifest, tolerating absence and malformed content.
  * @param checkpointDir - Committed checkpoint directory.
  * @returns The manifest, or undefined when unreadable.
  */
@@ -120,8 +153,5 @@ export async function readManifest(checkpointDir: string): Promise<CheckpointMan
   } catch {
     return undefined
   }
-  if (typeof parsed !== 'object' || parsed === null) return undefined
-  const record = parsed as { readonly version?: unknown }
-  if (record.version !== 1) return undefined
-  return parsed as CheckpointManifest
+  return isManifest(parsed) ? parsed : undefined
 }

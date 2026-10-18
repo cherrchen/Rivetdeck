@@ -11,7 +11,7 @@
 import { readFile, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { writeDesktopFileAtomic } from '../atomic-file.ts'
-import type { CheckpointDigest, CheckpointSessionHeader } from './manifest.ts'
+import { isPathSegment, type CheckpointDigest, type CheckpointSessionHeader } from './manifest.ts'
 
 export type RestoreJournalPhase = 'intent' | 'committed' | 'finalized' | 'conflicted'
 
@@ -81,6 +81,51 @@ export async function deleteRestoreJournal(home: string, id: string): Promise<vo
   await rm(join(restoreJournalsDir(home), `${id}.json`), { force: true })
 }
 
+function isFingerprint(value: unknown): value is RestoreFingerprint {
+  if (typeof value !== 'object' || value === null) return false
+  const entry = value as RestoreFingerprint
+  return isPathSegment(entry.name)
+    && typeof entry.size === 'number' && typeof entry.mtimeNs === 'string'
+}
+
+function isPublish(value: unknown): value is RestorePublish {
+  if (typeof value !== 'object' || value === null) return false
+  const entry = value as RestorePublish
+  return isPathSegment(entry.name)
+    && typeof entry.digest === 'object' && entry.digest !== null
+    && typeof entry.digest.sha256 === 'string' && typeof entry.digest.size === 'number'
+}
+
+/**
+ * Durable-boundary shape check: a journal whose id, quarantine, member dirs,
+ * or file names could drive a path outside the sessions/quarantine roots is
+ * treated as unreadable, never half-read.
+ */
+function isRestoreJournal(parsed: unknown): parsed is RestoreJournal {
+  if (typeof parsed !== 'object' || parsed === null) return false
+  const journal = parsed as RestoreJournal
+  if (journal.version !== 1) return false
+  if (journal.phase !== 'intent' && journal.phase !== 'committed'
+    && journal.phase !== 'finalized' && journal.phase !== 'conflicted') return false
+  if (!isPathSegment(journal.id)
+    || typeof journal.checkpointId !== 'string'
+    || typeof journal.targetSessionId !== 'string'
+    || typeof journal.createdAt !== 'number' || typeof journal.updatedAt !== 'number'
+    || typeof journal.quarantine !== 'string'
+    || !journal.quarantine.startsWith('electron/quarantine/')
+    || !isPathSegment(journal.quarantine.slice('electron/quarantine/'.length))
+    || !Array.isArray(journal.members)) return false
+  for (const member of journal.members) {
+    if (typeof member !== 'object' || member === null
+      || typeof member.sessionId !== 'string'
+      || typeof member.dir !== 'string' || !member.dir.split('/').every(isPathSegment)
+      || typeof member.header !== 'object' || member.header === null
+      || !Array.isArray(member.liveFiles) || !member.liveFiles.every(isFingerprint)
+      || !Array.isArray(member.publish) || !member.publish.every(isPublish)) return false
+  }
+  return true
+}
+
 /** Read one journal, tolerating absence and malformed content. */
 export async function readRestoreJournal(path: string): Promise<RestoreJournal | undefined> {
   let raw: string
@@ -95,12 +140,7 @@ export async function readRestoreJournal(path: string): Promise<RestoreJournal |
   } catch {
     return undefined
   }
-  if (typeof parsed !== 'object' || parsed === null) return undefined
-  const record = parsed as { readonly version?: unknown; readonly phase?: unknown }
-  if (record.version !== 1) return undefined
-  if (record.phase !== 'intent' && record.phase !== 'committed'
-    && record.phase !== 'finalized' && record.phase !== 'conflicted') return undefined
-  return parsed as RestoreJournal
+  return isRestoreJournal(parsed) ? parsed : undefined
 }
 
 /** List persisted journals (absolute paths), oldest id first. */

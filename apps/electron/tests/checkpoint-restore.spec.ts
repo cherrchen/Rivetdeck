@@ -288,23 +288,38 @@ describe('restoreSession', () => {
     expect(existsSync(join(home, 'storages', 'session_projcache', 'x.json'))).toBe(true)
   })
 
-  it('fails a manifest whose session dir would escape the sessions root', async () => {
+  it('refuses a manifest whose session dir would escape the sessions root', async () => {
     const home = makeHome()
     liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'LIVE' })
     seedCheckpoint(home, '1000', [{
       sessionId: 'session-parent-1', dir: '../escape', header: PARENT,
       files: { 'session.v4.jsonl.zstd': 'VERIFIED' },
     }])
-    const outcome = await restore(home, 'session-parent-1', {
-      validate: async () => ({
-        sessionFormatVersion: 4,
-        sessions: [{ sessionId: 'session-parent-1', dir: '../escape', ok: true }],
-      }),
-    }).run
-    expect(outcome.kind).toBe('failed')
-    expect(outcome.kind === 'failed' && outcome.reason).toContain('unsafe session dir')
+    // A traversal in a durable session dir makes the manifest unreadable, so
+    // the checkpoint never enters restore.
+    const outcome = await restore(home, 'session-parent-1').run
+    expect(outcome).toMatchObject({ kind: 'refused', reason: { key: 'no-checkpoint' } })
     expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('LIVE')
     expect(existsSync(join(home, 'escape'))).toBe(false)
+  })
+
+  it('skips a structurally malformed manifest and restores from the next-newest checkpoint', async () => {
+    const home = makeHome()
+    liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'POLLUTED' })
+    seedCheckpoint(home, '1000', [{
+      sessionId: 'session-parent-1', dir: SESSION_DIR, header: PARENT,
+      files: { 'session.v4.jsonl.zstd': 'VERIFIED-1000' },
+    }])
+    seedCheckpoint(home, '2000', [{
+      sessionId: 'session-parent-1', dir: SESSION_DIR, header: PARENT,
+      files: { 'session.v4.jsonl.zstd': 'VERIFIED-2000' },
+    }])
+    // Right version, wrong shape: `files`/`sessions` are not arrays.
+    writeFileSync(join(checkpointsRoot(home), '2000', 'manifest.json'),
+      JSON.stringify({ version: 1, id: '2000', capturedAt: 2000, files: 'nope', sessions: 42 }))
+    const outcome = await restore(home, 'session-parent-1').run
+    expect(outcome).toMatchObject({ kind: 'restored', checkpointId: '1000' })
+    expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('VERIFIED-1000')
   })
 })
 
@@ -511,6 +526,28 @@ describe('convergeRestoreJournals', () => {
     expect(result).toEqual({ converged: ['8000-session-parent-1'], conflicted: [], deferred: [], unresolvable: [] })
     expect(existsSync(row)).toBe(false)
     expect(await listRestoreJournals(home)).toEqual([])
+  })
+
+  it('leaves a structurally malformed journal in place and untouched', async () => {
+    const home = makeHome()
+    liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'LIVE' })
+    // A hostile id would escape restore-journals/ on delete; a member dir or
+    // publish name with traversal would escape sessions/. Both are unreadable.
+    writeFile(join(restoreJournalsDir(home), 'bad-id.json'), JSON.stringify({
+      version: 1, id: '../../escape', phase: 'intent', checkpointId: '1000',
+      targetSessionId: 'session-parent-1', createdAt: 1, updatedAt: 1,
+      quarantine: 'electron/quarantine/x', members: [],
+    }))
+    writeFile(join(restoreJournalsDir(home), 'bad-dir.json'), JSON.stringify({
+      version: 1, id: 'bad-dir', phase: 'intent', checkpointId: '1000',
+      targetSessionId: 'session-parent-1', createdAt: 1, updatedAt: 1,
+      quarantine: 'electron/quarantine/bad-dir',
+      members: [{ sessionId: 's', dir: '../escape', header: {}, liveFiles: [], publish: [] }],
+    }))
+    const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+    expect(result).toEqual({ converged: [], conflicted: [], deferred: [], unresolvable: [] })
+    expect(await listRestoreJournals(home)).toHaveLength(2)
+    expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('LIVE')
   })
 
   it('invalidates member rows inside the legacy whole-unit projcache file', async () => {
