@@ -65,8 +65,10 @@ interface CordisModule {
     plugin(plugin: unknown, config: unknown): Promise<unknown>
     sessionPersistence: {
       list(): Promise<readonly { header: CheckpointSessionHeader }[]>
-      open(id: string, mode: 'read'): Promise<{
+      open(id: string, access: 'read' | 'write'): Promise<{
         read(offset: number): Promise<{ events: readonly { seq: number }[] }>
+        append(events: readonly Record<string, unknown>[]): Promise<void>
+        flush(): Promise<void>
         close(): Promise<void>
       }>
       acquireWriteLease(header: CheckpointSessionHeader): Promise<{ release(): Promise<void> }>
