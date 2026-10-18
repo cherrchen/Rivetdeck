@@ -42,6 +42,7 @@ function Install-To([string]$Dir) {
   if ($install.ExitCode -ne 0) { throw "Installer exited with code $($install.ExitCode)." }
   Assert-Exists (Join-Path $Dir 'Rivetdeck.exe') 'install must complete'
   Assert-Exists (Join-Path $Dir 'Uninstall Rivetdeck.exe') 'install must complete'
+  Assert-Exists (Join-Path $Dir $historyName) 'a fresh install seeds the path-history record'
 }
 
 function Uninstall-From([string]$Dir, [string[]]$ExtraArgs = @()) {

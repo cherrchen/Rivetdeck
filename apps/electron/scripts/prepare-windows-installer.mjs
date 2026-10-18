@@ -100,17 +100,14 @@ function renderUninstallNsh({ helperDll, updaterCacheName }) {
 !define RIVETDECK_PATH_HISTORY "rivetdeck-path-history.ini"
 
 !macro customInstall
-  ; Seed the path-history record on fresh installs so a later complete-removal request can
-  ; prove coverage. Reinstalls and updates keep the surviving record instead.
+  ; Fresh installs seed the record so a later complete-removal request can prove coverage;
+  ; an existing record survives updates and reinstalls untouched. The installation-mode
+  ; flags cannot detect a fresh install — /currentuser forces them during initMultiUser.
   ${'${IfNot}'} ${'${isUpdated}'}
-    !ifndef INSTALL_MODE_PER_ALL_USERS
-      ${'${If}'} $hasPerUserInstallation == "0"
-      ${'${AndIf}'} $hasPerMachineInstallation == "0"
-        FileOpen $0 "$INSTDIR\\${'${RIVETDECK_PATH_HISTORY}'}" w
-        FileWrite $0 "complete=1$\\r$\\n"
-        FileClose $0
-      ${'${EndIf}'}
-    !endif
+  ${'${AndIfNot}'} ${'${FileExists}'} "$INSTDIR\\${'${RIVETDECK_PATH_HISTORY}'}"
+    FileOpen $0 "$INSTDIR\\${'${RIVETDECK_PATH_HISTORY}'}" w
+    FileWrite $0 "complete=1$\\r$\\n"
+    FileClose $0
   ${'${EndIf}'}
 !macroend
 

@@ -118,8 +118,10 @@ it('wires the layered data-cleanup uninstaller through the native helper', async
     expect(nsh).toContain('/KEEP_APP_DATA')
     expect(nsh).toContain('CopyFiles /SILENT "$INSTDIR\\${RIVETDECK_PATH_HISTORY}" "$APPDATA\\${RIVETDECK_PATH_HISTORY}"')
     expect(nsh).toContain('FileWrite $0 "complete=1$\\r$\\n"')
-    // Fresh installs seed the record; reinstalls and updates do not re-seed.
-    expect(nsh).toContain('$hasPerUserInstallation == "0"')
+    // Fresh installs seed the record; a surviving record is never overwritten. The install
+    // flags cannot detect a fresh install — /currentuser forces $hasPerUserInstallation to 1.
+    expect(nsh).toContain('${AndIfNot} ${FileExists} "$INSTDIR\\${RIVETDECK_PATH_HISTORY}"')
+    expect(nsh).not.toContain('$hasPerUserInstallation')
 
     // History, env protection, tiered targets, and the updater cache reach the helper.
     expect(nsh).toContain('ReadEnvStr $UnHome DSH_HOME')
