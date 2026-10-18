@@ -115,11 +115,20 @@ function renderUninstallNsh({ helperDll, updaterCacheName }) {
 !macroend
 
 !macro customUnInstall
-  ; Functions are parsed before multiUser.nsh declares installMode, so the per-machine
-  ; shell-context switch happens here at the expansion site inside the uninstall section.
+  ; This file is parsed before multiUser.nsh declares installMode and before the plugin
+  ; directory registers StdUtils, so the shell-context switch and the StdUtils-backed flag
+  ; tests run here at the expansion site inside the uninstall section. $UnMode: 0 tiered,
+  ; 1 requested full removal, 2 update/replacement — protections take precedence.
   ${'${if}'} $installMode == "all"
     SetShellVarContext current
   ${'${endif}'}
+  StrCpy $UnMode "0"
+  ${'${If}'} ${'${isDeleteAppData}'}
+    StrCpy $UnMode "1"
+  ${'${EndIf}'}
+  ${'${If}'} ${'${isUpdated}'}
+    StrCpy $UnMode "2"
+  ${'${EndIf}'}
   Call un.RivetdeckCleanData
   ${'${if}'} $installMode == "all"
     SetShellVarContext all
@@ -143,7 +152,7 @@ Function un.RivetdeckKeepData
 FunctionEnd
 
 Function un.RivetdeckCleanData
-  ${'${If}'} ${'${isUpdated}'}
+  ${'${If}'} $UnMode == "2"
     Call un.RivetdeckKeepData
     Return
   ${'${EndIf}'}
@@ -159,11 +168,6 @@ Function un.RivetdeckCleanData
   StrCpy $UnTarget "$APPDATA\\${'${APP_FILENAME}'}"
   StrCpy $UnResidue "$APPDATA\\${'${APP_FILENAME}'}-uninstall-residue.log"
   StrCpy $UnReport "$INSTDIR\\${'${RIVETDECK_PATH_HISTORY}'}"
-  ; ${'${isDeleteAppData}'} is electron-builder's generated --delete-app-data flag test.
-  StrCpy $UnMode "0"
-  ${'${If}'} ${'${isDeleteAppData}'}
-    StrCpy $UnMode "1"
-  ${'${EndIf}'}
   InitPluginsDir
   File "/oname=$PLUGINSDIR\\rivetdeck-uninstall.dll" "${'${RIVETDECK_UNINSTALL_HELPER}'}"
   System::Call '$PLUGINSDIR\\rivetdeck-uninstall.dll::UninstallCleanup(w "$UnTarget", w "$INSTDIR", w "$UnHome", w "$UnReport", w "$LOCALAPPDATA\\${'${RIVETDECK_UPDATER_CACHE}'}", w "$UnResidue", i $UnMode, *i .R6, *i .R7) i .R8 ?c'
