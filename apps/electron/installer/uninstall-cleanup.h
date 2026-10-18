@@ -373,20 +373,27 @@ inline void CleanupUserDataTiered(CleanupState& state, const std::wstring& root,
     if (PathExists(shims)) {
         if (VerifyShimDirectory(shims)) {
             state.remove(shims, installation, protectedHome);
+            // A parent that still holds residue ends the walk with ERROR_DIR_NOT_EMPTY;
+            // that is the normal case, not a failure worth reporting.
             DWORD error = uninstall_data::RemoveEmptyParents(shims.c_str(), root.c_str());
-            state.note(error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND ? ERROR_SUCCESS : error);
+            state.note(error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND
+                || error == ERROR_DIR_NOT_EMPTY ? ERROR_SUCCESS : error);
         } else {
             state.skip(shims, L"unexpected content");
         }
     }
     RemoveNamedCaches(state, root, installation, protectedHome);
-    // Session partitions hold non-cache browser data; only their pure cache directories go.
+    // Session partitions hold non-cache browser data; only their pure cache directories
+    // go. A partition tree that exists but cannot be listed leaves caches behind, so the
+    // root itself lands in the residue report.
     const std::wstring partitions = root + L"\\Partitions";
-    ForEachEntry(partitions, [&](const WIN32_FIND_DATAW& entry) {
+    if (!ForEachEntry(partitions, [&](const WIN32_FIND_DATAW& entry) {
         if (!IsDirectory(entry) || (entry.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) return true;
         RemoveNamedCaches(state, partitions + L'\\' + entry.cFileName, installation, protectedHome);
         return true;
-    });
+    })) {
+        state.skip(partitions, L"could not enumerate partition caches");
+    }
 }
 
 inline DWORD Cleanup(const CleanupRequest& request) {

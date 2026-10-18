@@ -231,6 +231,9 @@ int wmain(int argc, wchar_t** argv) {
     File(partitionData + L"\\db.leveldb");
     File(userData + L"\\desktop-preferences.json");
     File(userData + L"\\Cookies");
+    // A foreign file beside the shim directory keeps its parents non-empty; removing
+    // empty parents then stops on ordinary residue, which must not fail the cleanup.
+    File(userData + L"\\electron\\toolchains\\keep.txt");
     Mkdir(updater);
     File(updater + L"\\installer.exe");
     Mkdir(updater + L"\\pending");
@@ -247,7 +250,8 @@ int wmain(int argc, wchar_t** argv) {
         request.residue = &residue;
         assert(uninstall_cleanup::Cleanup(request) == ERROR_SUCCESS);
         assert(!Exists(toolchains));
-        assert(!Exists(userData + L"\\electron"));
+        assert(!Exists(shims));
+        assert(Exists(userData + L"\\electron\\toolchains\\keep.txt"));
         assert(!Exists(cacheDir));
         assert(!Exists(partitionCache));
         assert(!Exists(updater));
