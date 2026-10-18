@@ -396,6 +396,21 @@ describe('convergeRestoreJournals', () => {
     expect(await listRestoreJournals(home)).toEqual([])
   })
 
+  it('re-stages a torn staged temp instead of publishing its bytes', async () => {
+    const home = makeHome()
+    liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'POLLUTED' })
+    seedCheckpoint(home, '1000', [{
+      sessionId: 'session-parent-1', dir: SESSION_DIR, header: PARENT,
+      files: { 'session.v4.jsonl.zstd': 'VERIFIED' },
+    }])
+    await seedIntentJournal(home)
+    // A crash mid-copy leaves a truncated staged temp; resume must not publish it.
+    writeFileSync(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd.restore.tmp'), 'VERI')
+    const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+    expect(result.converged).toEqual(['8000-session-parent-1'])
+    expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('VERIFIED')
+  })
+
   it('stops and surfaces drift when a foreign writer appended during the interruption', async () => {
     const home = makeHome()
     liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'POLLUTED' })

@@ -211,6 +211,15 @@ async function resumeMember(
 
     if (plan === undefined) continue
     if (await pathExists(stagedPath)) {
+      // A leftover staged temp is ours by name but unverified bytes: a crash
+      // can truncate the copy, so a digest mismatch is re-staged from the
+      // checkpoint rather than published.
+      const staged = await digestFile(stagedPath)
+      if (staged.sha256 !== plan.digest.sha256 || staged.size !== plan.digest.size) {
+        await rm(stagedPath, { force: true })
+      }
+    }
+    if (await pathExists(stagedPath)) {
       await renameDesktopPath(stagedPath, livePath)
     } else if (!(await pathExists(livePath))) {
       await stagePublishFile(checkpointDir, member, plan, liveDir)

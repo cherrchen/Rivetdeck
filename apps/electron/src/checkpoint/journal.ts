@@ -27,7 +27,7 @@ export interface RestoreFingerprint {
 export interface RestorePublish {
   /** Canonical filename inside the member dir, e.g. `session.v4.jsonl.zstd`. */
   readonly name: string
-  /** Integrity of the bytes staged for publish; verified again on resume. */
+  /** Integrity of the staged bytes; re-verified on resume so a torn or replaced temp is re-staged, never published. */
   readonly digest: CheckpointDigest
 }
 
