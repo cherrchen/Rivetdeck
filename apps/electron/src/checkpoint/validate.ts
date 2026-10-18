@@ -12,6 +12,7 @@ import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import type { CheckpointValidationReport, SessionValidationResult } from './capture.ts'
+import type { CheckpointSessionHeader } from './manifest.ts'
 
 /** Minimal typed surface of `@deepseek-ai/dsh-session-persistence-jsonl` used here. */
 interface BackendModule {
@@ -63,11 +64,12 @@ interface CordisModule {
   readonly Context: new () => {
     plugin(plugin: unknown, config: unknown): Promise<unknown>
     sessionPersistence: {
-      list(): Promise<readonly { header: { id: unknown; cwd?: string } }[]>
+      list(): Promise<readonly { header: CheckpointSessionHeader }[]>
       open(id: string, mode: 'read'): Promise<{
         read(offset: number): Promise<{ events: readonly { seq: number }[] }>
         close(): Promise<void>
       }>
+      acquireWriteLease(header: CheckpointSessionHeader): Promise<{ release(): Promise<void> }>
     }
     fiber: { dispose(): Promise<void> }
   }
@@ -90,6 +92,38 @@ async function loadBackendModules(installAnchor: string): Promise<{
   return { backend, cordis, session }
 }
 
+/** A mounted sessions backend; `dispose` tears down the cordis context. */
+export interface MountedSessionsBackend {
+  readonly sessionFormatVersion: number
+  readonly persistence: InstanceType<CordisModule['Context']>['sessionPersistence']
+  dispose(): Promise<void>
+}
+
+/**
+ * Mount the bundled JSONL backend on one sessions root in-process. Restore
+ * uses this in Main for `acquireWriteLease`; validation uses it inside the
+ * worker. `compression` matches the deployment (backend default is zstd and
+ * the base patch sets no override).
+ */
+export async function mountSessionsBackend(
+  sessionsRoot: string,
+  installAnchor: string,
+): Promise<MountedSessionsBackend> {
+  const { backend, cordis, session } = await loadBackendModules(installAnchor)
+  const ctx = new cordis.Context()
+  try {
+    await ctx.plugin(backend.default, { root: sessionsRoot, compression: 'zstd' })
+  } catch (error) {
+    await ctx.fiber.dispose().catch(() => undefined)
+    throw error
+  }
+  return {
+    sessionFormatVersion: session.SESSION_FORMAT_VERSION,
+    persistence: ctx.sessionPersistence,
+    dispose: async () => { await ctx.fiber.dispose().catch(() => undefined) },
+  }
+}
+
 /**
  * Validate every session the backend lists under one sessions root.
  * Sessions skipped by listing (header admission failure) never appear here —
@@ -107,17 +141,13 @@ export async function validateSessionsRoot(options: {
   if (!existsSync(options.sessionsRoot)) {
     return { sessionFormatVersion: -1, sessions: [] }
   }
-  const { backend, cordis, session } = await loadBackendModules(options.installAnchor)
-  const ctx = new cordis.Context()
+  const mounted = await mountSessionsBackend(options.sessionsRoot, options.installAnchor)
   try {
-    // `compression` matches the deployment: the base patch sets no override and
-    // the backend default is zstd.
-    await ctx.plugin(backend.default, { root: options.sessionsRoot, compression: 'zstd' })
-    const persistence = ctx.sessionPersistence
+    const persistence = mounted.persistence
     const results: SessionValidationResult[] = []
     for (const snapshot of await persistence.list()) {
       options.signal?.throwIfAborted()
-      const id = String(snapshot.header.id)
+      const id = snapshot.header.id
       const dir = sessionDirRel(snapshot.header.cwd, id)
       try {
         const handle = await persistence.open(id, 'read')
@@ -133,18 +163,19 @@ export async function validateSessionsRoot(options: {
         } finally {
           await handle.close()
         }
-        results.push({ sessionId: id, dir, ok: true })
+        results.push({ sessionId: id, dir, header: snapshot.header, ok: true })
       } catch (error) {
         results.push({
           sessionId: id,
           dir,
+          header: snapshot.header,
           ok: false,
           error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
         })
       }
     }
-    return { sessionFormatVersion: session.SESSION_FORMAT_VERSION, sessions: results }
+    return { sessionFormatVersion: mounted.sessionFormatVersion, sessions: results }
   } finally {
-    await ctx.fiber.dispose().catch(() => undefined)
+    await mounted.dispose()
   }
 }

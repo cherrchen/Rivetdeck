@@ -5,8 +5,12 @@
  * blocks or fails the exit path.
  */
 
+import { join } from 'node:path'
 import { runExitCheckpoint, type ExitCheckpointOutcome } from './capture.ts'
+import { listRestoreJournals } from './journal.ts'
+import { convergeRestoreJournals, restoreSession, type AcquireSessionLease, type RestoreOutcome } from './restore.ts'
 import { resolveDshInstallAnchor, resolveHostRuntime, type HostRuntime } from '../runtime.ts'
+import { mountSessionsBackend } from './validate.ts'
 import { runValidationWorker, validateWorkerModule } from './worker.ts'
 
 /** Total wall-clock budget for one exit capture; the deadline kills the validation worker. */
@@ -52,4 +56,86 @@ export async function captureExitCheckpoint(
     validate: (sessionsRoot, signal) =>
       runValidationWorker(workerModule, sessionsRoot, anchor, runtime, signal),
   })
+}
+
+/**
+ * Lease acquisition through the live backend's `acquireWriteLease` seam — the
+ * same kernel lock (`session.lock`) the Host honors, so acquisition fails
+ * while any writer holds the session.
+ */
+async function backendLeaseAcquirer(home: string, installAnchor: string): Promise<{
+  acquire: AcquireSessionLease
+  dispose(): Promise<void>
+}> {
+  const mounted = await mountSessionsBackend(join(home, 'sessions'), installAnchor)
+  return {
+    acquire: member => mounted.persistence.acquireWriteLease(member.header),
+    dispose: () => mounted.dispose(),
+  }
+}
+
+/**
+ * Converge leftover restore journals before the Host spawns. The no-journals
+ * fast path returns without loading the backend; convergence failures are
+ * logged and never block startup.
+ */
+export async function convergeDesktopRestoreJournals(options: {
+  readonly home: string
+  readonly appPath: string
+  readonly signal?: AbortSignal | undefined
+  readonly log?: ((message: string) => void) | undefined
+}): Promise<{ converged: string[]; conflicted: string[]; deferred: string[] }> {
+  if ((await listRestoreJournals(options.home)).length === 0) {
+    return { converged: [], conflicted: [], deferred: [] }
+  }
+  const leases = await backendLeaseAcquirer(options.home, resolveDshInstallAnchor(options.appPath))
+  try {
+    return await convergeRestoreJournals({
+      home: options.home,
+      acquireLease: leases.acquire,
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+      ...(options.log === undefined ? {} : { log: options.log }),
+    })
+  } finally {
+    await leases.dispose()
+  }
+}
+
+/**
+ * Restore one session plus its related-source closure from the newest
+ * verified checkpoint. Runs in a Host-down window; the caller supplies the
+ * local-Host guard.
+ */
+export async function restoreCheckpointSession(options: {
+  readonly home: string
+  readonly sessionId: string
+  readonly checkpointId?: string | undefined
+  readonly appPath: string
+  readonly resourcesPath: string
+  readonly packaged: boolean
+  readonly hostRunning?: (() => boolean) | undefined
+  readonly log?: ((message: string) => void) | undefined
+}): Promise<RestoreOutcome> {
+  const anchor = resolveDshInstallAnchor(options.appPath)
+  const runtime = resolveHostRuntime({
+    appPath: options.appPath,
+    resourcesPath: options.resourcesPath,
+    packaged: options.packaged,
+    override: process.env.DSH_ELECTRON_NODE_BINARY,
+  })
+  const workerModule = validateWorkerModule(options.appPath)
+  const leases = await backendLeaseAcquirer(options.home, anchor)
+  try {
+    return await restoreSession({
+      home: options.home,
+      sessionId: options.sessionId,
+      ...(options.checkpointId === undefined ? {} : { checkpointId: options.checkpointId }),
+      ...(options.hostRunning === undefined ? {} : { hostRunning: options.hostRunning }),
+      acquireLease: leases.acquire,
+      validate: (sessionsRoot, signal) => runValidationWorker(workerModule, sessionsRoot, anchor, runtime, signal),
+      ...(options.log === undefined ? {} : { log: options.log }),
+    })
+  } finally {
+    await leases.dispose()
+  }
 }

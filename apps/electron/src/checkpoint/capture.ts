@@ -20,6 +20,7 @@ import {
   type CheckpointFileEntry,
   type CheckpointManifest,
   type CheckpointSessionEntry,
+  type CheckpointSessionHeader,
   type CheckpointValidator,
 } from './manifest.ts'
 import { readShutdownReportFile } from '../harness/shutdown-report.ts'
@@ -167,6 +168,8 @@ export interface SessionValidationResult {
   readonly sessionId: string
   /** Directory relative to `sessions/`, POSIX separators. */
   readonly dir: string
+  /** Stored header; restore derives closure and re-acquires the write lease from it. */
+  readonly header?: CheckpointSessionHeader
   readonly ok: boolean
   readonly error?: string
 }
@@ -455,6 +458,7 @@ export async function runExitCheckpoint(options: ExitCheckpointOptions): Promise
       return {
         sessionId: result.sessionId,
         dir: result.dir,
+        ...(result.header === undefined ? {} : { header: result.header }),
         capturedAt: carried?.capturedAt ?? now(),
         sourceCheckpointId: carried?.sourceCheckpointId ?? id,
         validator,

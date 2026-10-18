@@ -32,7 +32,7 @@ import {
 import { DesktopServices } from './desktop/services.ts'
 import { stopHarness, type HarnessStopReport } from './harness/process.ts'
 import { mergeMainShutdownFacts } from './harness/shutdown-report.ts'
-import { captureExitCheckpoint } from './checkpoint/index.ts'
+import { captureExitCheckpoint, convergeDesktopRestoreJournals } from './checkpoint/index.ts'
 import { HttpHarnessTransport } from './harness/transport.ts'
 import { installDesktopIpc } from './ipc.ts'
 import { readDesktopManifest, resolveUpdateRepository, usesStoreUpdates } from './manifest.ts'
@@ -577,6 +577,16 @@ if (!primaryInstance) {
       override: process.env.DSH_ELECTRON_NODE_BINARY,
     })
     harnessHome = process.env.DSH_HOME ?? resolveHarnessHome(app.getPath('home'))
+    // Restore journals must converge before the Host spawns: a leftover
+    // `intent` journal finishes its switch, a `committed` one completes
+    // projcache invalidation, and either blocks nothing when absent.
+    await convergeDesktopRestoreJournals({
+      home: harnessHome,
+      appPath,
+      log: (message) => { console.error(`desktop checkpoint: ${message}`) },
+    }).catch((error: unknown) => {
+      console.error('desktop checkpoint: journal convergence failed', error)
+    })
     const shim = prepareToolchainShims({ userData: userDataPath, harnessHome }, toolchains, process.platform)
     const toolchainPolicy: DesktopToolchainPolicy = {
       version: 2,

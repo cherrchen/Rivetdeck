@@ -43,10 +43,32 @@ export interface CheckpointFileEntry {
   readonly sourceCheckpointId?: string
 }
 
+/**
+ * Stored session header fields the restore transaction relies on: `cwd`/`id`
+ * derive the session directory and write lease, `parentSession`/`origin`
+ * derive the related-source closure. Entries written by this version carry
+ * the complete backend header object; older checkpoints may lack it, which
+ * refuses their restore rather than guessing the closure.
+ */
+export interface CheckpointSessionHeader {
+  readonly id: string
+  readonly cwd?: string
+  readonly parentSession?: string
+  readonly origin?: string
+  readonly createdAt?: number
+  readonly isSeeded?: boolean
+  readonly delegationDepth?: number
+  readonly agentPreset?: string
+  readonly version?: number
+  readonly type?: string
+}
+
 export interface CheckpointSessionEntry {
   readonly sessionId: string
   /** Session directory relative to the checkpoint's `sessions/` root, POSIX separators. */
   readonly dir: string
+  /** Stored header as listed by the backend; complete JSON survives the manifest round-trip. */
+  readonly header?: CheckpointSessionHeader
   /** When the stored bytes were captured; carried sessions keep their original value. */
   readonly capturedAt: number
   /** Checkpoint whose capture produced the stored bytes. */
