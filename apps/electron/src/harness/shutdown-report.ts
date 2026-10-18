@@ -144,11 +144,20 @@ function mergeMainSections(previous: MainShutdownSection | undefined, facts: Mai
 }
 
 /**
+ * Read the persisted shutdown report for one Harness home.
+ * @param home - `$DSH_HOME` the report lives under.
+ * @returns The stored sections, or none when the file is absent or unreadable.
+ */
+export async function readShutdownReportFile(home: string): Promise<Partial<ShutdownReport>> {
+  return readShutdownReport(shutdownReportPath(home))
+}
+
+/**
  * Read a persisted report, tolerating a missing or unreadable file.
  * @param path - Report path.
  * @returns The stored sections, or none when the file is absent or not a report.
  */
-async function readShutdownReport(path: string): Promise<Pick<ShutdownReport, 'host' | 'main'>> {
+async function readShutdownReport(path: string): Promise<Partial<ShutdownReport>> {
   let raw: string
   try {
     raw = await readFile(path, 'utf8')
@@ -166,9 +175,16 @@ async function readShutdownReport(path: string): Promise<Pick<ShutdownReport, 'h
     return {}
   }
   if (typeof parsed !== 'object' || parsed === null) return {}
-  const record = parsed as { readonly version?: unknown; readonly host?: unknown; readonly main?: unknown }
+  const record = parsed as {
+    readonly version?: unknown
+    readonly recordedAt?: unknown
+    readonly host?: unknown
+    readonly main?: unknown
+  }
   if (record.version !== 1) return {}
   return {
+    version: 1,
+    ...(typeof record.recordedAt === 'number' ? { recordedAt: record.recordedAt } : {}),
     ...(typeof record.host === 'object' && record.host !== null ? { host: record.host as HostShutdownSection } : {}),
     ...(typeof record.main === 'object' && record.main !== null ? { main: record.main as MainShutdownSection } : {}),
   }

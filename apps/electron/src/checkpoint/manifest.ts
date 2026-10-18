@@ -1,0 +1,105 @@
+/**
+ * Checkpoint manifest schema (docs/electron/session-checkpoint-restore.md).
+ * One committed checkpoint directory under `$DSH_HOME/electron/checkpoints/`
+ * is self-contained: it physically holds the verified bytes of every session
+ * it lists, whether captured at this exit or carried forward from an earlier
+ * verified checkpoint.
+ */
+
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { writeDesktopFileAtomic } from '../atomic-file.ts'
+import type { ShutdownReport } from '../harness/shutdown-report.ts'
+
+/** Build identity that verified a session copy; verification does not carry over across builds. */
+export interface CheckpointValidator {
+  readonly appVersion: string
+  readonly sessionFormatVersion: number
+}
+
+/** Live-file state observed at copy time; the startup stat-diff compares against it. */
+export interface CheckpointSourceState {
+  /** Path relative to `$DSH_HOME`, POSIX separators. */
+  readonly path: string
+  readonly size: number
+  readonly mtimeNs: string
+}
+
+/** Digest bound to the bytes actually stored in the checkpoint. */
+export interface CheckpointDigest {
+  readonly size: number
+  readonly sha256: string
+}
+
+export interface CheckpointFileEntry {
+  /** Path relative to the checkpoint root, POSIX separators. */
+  readonly path: string
+  /** `captured` copies live bytes; `carried` materializes a previous verified copy. */
+  readonly origin: 'captured' | 'carried'
+  readonly digest: CheckpointDigest
+  /** Live stat recorded at this capture; absent when the live file was already gone. */
+  readonly source?: CheckpointSourceState
+  /** Checkpoint whose capture produced these bytes; set when `origin` is `carried`. */
+  readonly sourceCheckpointId?: string
+}
+
+export interface CheckpointSessionEntry {
+  readonly sessionId: string
+  /** Session directory relative to the checkpoint's `sessions/` root, POSIX separators. */
+  readonly dir: string
+  /** When the stored bytes were captured; carried sessions keep their original value. */
+  readonly capturedAt: number
+  /** Checkpoint whose capture produced the stored bytes. */
+  readonly sourceCheckpointId: string
+  readonly validator: CheckpointValidator
+}
+
+export interface CheckpointManifest {
+  readonly version: 1
+  /** Committed directory name under `checkpoints/`; equals the capture-time epoch string. */
+  readonly id: string
+  readonly capturedAt: number
+  /** The promotable shutdown report that authorized this capture. */
+  readonly shutdown: ShutdownReport
+  readonly files: readonly CheckpointFileEntry[]
+  readonly sessions: readonly CheckpointSessionEntry[]
+}
+
+/** Root holding every committed checkpoint plus in-flight `<id>.tmp` candidates. */
+export function checkpointsRoot(home: string): string {
+  return join(home, 'electron', 'checkpoints')
+}
+
+/** Manifest path inside one checkpoint directory. */
+export function manifestPath(checkpointDir: string): string {
+  return join(checkpointDir, 'manifest.json')
+}
+
+/** Persist the manifest atomically inside the candidate before the directory rename publishes it. */
+export async function writeManifest(checkpointDir: string, manifest: CheckpointManifest): Promise<void> {
+  await writeDesktopFileAtomic(manifestPath(checkpointDir), `${JSON.stringify(manifest, undefined, 2)}\n`)
+}
+
+/**
+ * Read one committed manifest, tolerating absence and malformed JSON.
+ * @param checkpointDir - Committed checkpoint directory.
+ * @returns The manifest, or undefined when unreadable.
+ */
+export async function readManifest(checkpointDir: string): Promise<CheckpointManifest | undefined> {
+  let raw: string
+  try {
+    raw = await readFile(manifestPath(checkpointDir), 'utf8')
+  } catch {
+    return undefined
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return undefined
+  }
+  if (typeof parsed !== 'object' || parsed === null) return undefined
+  const record = parsed as { readonly version?: unknown }
+  if (record.version !== 1) return undefined
+  return parsed as CheckpointManifest
+}

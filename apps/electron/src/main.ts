@@ -32,6 +32,7 @@ import {
 import { DesktopServices } from './desktop/services.ts'
 import { stopHarness, type HarnessStopReport } from './harness/process.ts'
 import { mergeMainShutdownFacts } from './harness/shutdown-report.ts'
+import { captureExitCheckpoint } from './checkpoint/index.ts'
 import { HttpHarnessTransport } from './harness/transport.ts'
 import { installDesktopIpc } from './ipc.ts'
 import { readDesktopManifest, resolveUpdateRepository, usesStoreUpdates } from './manifest.ts'
@@ -297,6 +298,29 @@ async function prepareToInstall(): Promise<void> {
   if (child !== undefined) {
     const report = await stopHarness(child)
     await recordHarnessShutdown(child.pid, report)
+    // Exit checkpoint capture: the promotable shutdown report plus per-session
+    // read-path validation gates promotion. Failures and the capture deadline
+    // must never block or fail quit.
+    const home = harnessHome
+    if (home !== undefined && child.pid !== undefined) {
+      await captureExitCheckpoint({
+        home,
+        childPid: child.pid,
+        appPath: app.getAppPath(),
+        packaged: app.isPackaged,
+        resourcesPath: process.resourcesPath,
+        appVersion: app.getVersion(),
+        log: (message) => { console.error(`desktop checkpoint: ${message}`) },
+      }).then((outcome) => {
+        if (outcome.kind === 'committed') {
+          console.error(`desktop checkpoint: committed ${outcome.id} (${outcome.sessions} sessions)`)
+        } else {
+          console.error(`desktop checkpoint: ${outcome.kind} — ${outcome.reason}`)
+        }
+      }).catch((error: unknown) => {
+        console.error('desktop checkpoint: capture failed', error)
+      })
+    }
   }
   await runtimes?.shutdown()
   await network?.shutdown().catch(() => undefined)
