@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for cleanup-user-files.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/electron/user/cleanup-user-files.md
+/cleaning-up-rivetdeck-user-files:
+  en: 91f06213bfecbd43
+  zh: 71c090f667ce116a
+/cleaning-up-rivetdeck-user-files/windows-nsis-installer:
+  en: 6bcac7502e81cb7e
+  zh: 8a14cc2f18e676fd
+/cleaning-up-rivetdeck-user-files/macos:
+  en: 31bb870352db8c17
+  zh: ccb8a45f90186490
+/cleaning-up-rivetdeck-user-files/linux:
+  en: 2e44d871455a4734
+  zh: af9fac1430982baf
+/cleaning-up-rivetdeck-user-files/shared-roots-never-removed:
+  en: eeaaddf98477023d
+  zh: 714ff6caffc03d76
+/cleaning-up-rivetdeck-user-files/custom-locations:
+  en: 27733f24300cff19
+  zh: fe281f014acad956

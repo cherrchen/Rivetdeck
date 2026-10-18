@@ -62,6 +62,7 @@ Electron 应用是私有安装程序，不作为 npm 发布成员。依赖同步
 
 独立的 [Network Runtime](../../docs/electron/network-runtime.zh.md) 为 Manual HTTP、HTTPS、SOCKS5 和严格 System 策略路由提供环回 Gateway。验证命令及接入限制见该文档。
 [网络设置指南](../../docs/electron/network-settings.zh.md) 介绍设置页面、连接测试、安全存储提示及诊断信息。
+[用户文件清理指南](../../docs/electron/user/cleanup-user-files.zh.md) 列出卸载后各平台上可由用户删除的位置。
 
 ## 桌面集成
 

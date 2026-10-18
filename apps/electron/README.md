@@ -62,6 +62,7 @@ Repository Python integration tests require CPython 3.10+ selected by `python3` 
 
 The independent [Network Runtime](../../docs/electron/network-runtime.md) provides a loopback Gateway for Manual HTTP, HTTPS, SOCKS5, and strict System policy routing. Its verification command and integration limits are documented there.
 The [Network Settings guide](../../docs/electron/network-settings.md) covers the Settings page, connection tests, secure storage prompts, and diagnostics.
+The [user file cleanup guide](../../docs/electron/user/cleanup-user-files.md) lists the per-platform locations users can remove after uninstall.
 
 ## Desktop integration
 
