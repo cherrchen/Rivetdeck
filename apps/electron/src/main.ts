@@ -32,7 +32,25 @@ import {
 import { DesktopServices } from './desktop/services.ts'
 import { stopHarness, type HarnessStopReport } from './harness/process.ts'
 import { mergeMainShutdownFacts } from './harness/shutdown-report.ts'
-import { captureExitCheckpoint, convergeDesktopRestoreJournals } from './checkpoint/index.ts'
+import {
+  captureExitCheckpoint,
+  consumePendingSessionRestores,
+  convergeDesktopRestoreJournals,
+  detectUnreadableSessions,
+  queueSessionRestore,
+  resolveSessionRefusal,
+  restoreCheckpointSession,
+  type DesktopSessionMaintenanceOptions,
+} from './checkpoint/index.ts'
+import { detectFormatRefusalFrame, type SessionRefusalHit } from './checkpoint/refusal.ts'
+import { resolveRestoreClosure, type RestoreOutcome } from './checkpoint/restore.ts'
+import {
+  buildNoCheckpointNotice,
+  buildRestoreConfirm,
+  buildRestoreNotice,
+  refusalLabel,
+  type RestoreDialogOptions,
+} from './checkpoint/dialog.ts'
 import { HttpHarnessTransport } from './harness/transport.ts'
 import { installDesktopIpc } from './ipc.ts'
 import { readDesktopManifest, resolveUpdateRepository, usesStoreUpdates } from './manifest.ts'
@@ -95,6 +113,11 @@ let network: DesktopNetworkController | undefined
 let electronProxy: ElectronProxyApplier | undefined
 let networkDialogQueue: Promise<void> = Promise.resolve()
 let credentialPromptQueue: Promise<void> = Promise.resolve()
+let restoreDialogQueue: Promise<void> = Promise.resolve()
+/** Refusal keys already prompted this run — one dialog per session, never repeated. */
+const promptedRefusals = new Set<string>()
+/** Runtime resolved at startup; the manual rollback entry reuses it for the worker. */
+let activeHostRuntime: HostRuntime | undefined
 let quitting = false
 let stopping = false
 const transport = new HttpHarnessTransport()
@@ -337,6 +360,163 @@ async function relaunchDesktop(): Promise<void> {
   app.exit(0)
 }
 
+/** Show one restore-related dialog, windowed when the main window exists. */
+async function presentRestoreDialog(options: RestoreDialogOptions): Promise<number> {
+  const spec = {
+    type: options.type,
+    title: options.title,
+    message: options.message,
+    detail: options.detail,
+    buttons: [...options.buttons],
+    defaultId: options.defaultId,
+    cancelId: options.cancelId,
+  }
+  const shown = mainWindow === undefined
+    ? dialog.showMessageBox(spec)
+    : dialog.showMessageBox(mainWindow, spec)
+  return (await shown).response
+}
+
+/** Report a finished restore outcome once; conflicts and refusals stay visible until dismissed. */
+async function notifyRestoreOutcome(sessionId: string, outcome: RestoreOutcome): Promise<void> {
+  const { messages } = resolveDesktopMainLocale(app.getLocale())
+  const spec = ((): RestoreDialogOptions | undefined => {
+    switch (outcome.kind) {
+      case 'restored':
+        return buildRestoreNotice(messages, messages.sessionRestoreDoneTitle,
+          formatDesktopMessage(messages.sessionRestoreDoneBody,
+            { id: sessionId, checkpoint: outcome.checkpointId, quarantine: join(harnessHome ?? '', outcome.quarantine) }))
+      case 'refused':
+        return buildRestoreNotice(messages, messages.sessionRestoreRefusedTitle,
+          formatDesktopMessage(messages.sessionRestoreRefusedBody, { id: sessionId, reason: outcome.reason }))
+      case 'conflicted':
+        return buildRestoreNotice(messages, messages.sessionRestoreConflictTitle,
+          formatDesktopMessage(messages.sessionRestoreConflictBody, { reason: outcome.reason }))
+      case 'failed':
+        return buildRestoreNotice(messages, messages.sessionRestoreFailedTitle,
+          formatDesktopMessage(messages.sessionRestoreFailedBody, { id: sessionId, reason: outcome.reason }))
+    }
+  })()
+  if (spec !== undefined) await presentRestoreDialog(spec)
+}
+
+/**
+ * Prompt for one confirmed-unreadable session, then run or queue the restore.
+ * With the Host down (startup, pending consumption) the transaction runs in
+ * place; with the Host up the confirmed intent is persisted and the relaunch
+ * reaches the pre-Host window where the entry is legal.
+ * @returns `true` when the intent was queued and the caller should relaunch.
+ */
+async function offerSessionRestore(options: {
+  readonly sessionId: string
+  readonly capturedAt: number
+  readonly memberCount: number
+  readonly maintenance: DesktopSessionMaintenanceOptions
+}): Promise<boolean> {
+  const home = harnessHome
+  if (home === undefined) return false
+  const locale = resolveDesktopMainLocale(app.getLocale())
+  const spec = buildRestoreConfirm(locale.messages, locale.id, {
+    sessionId: options.sessionId,
+    capturedAt: options.capturedAt,
+    memberCount: options.memberCount,
+    quarantine: join(home, 'electron', 'quarantine'),
+    requiresRelaunch: harness !== undefined,
+    productName: app.name,
+  })
+  if ((await presentRestoreDialog(spec)) !== 0) return false
+  if (harness !== undefined) {
+    await queueSessionRestore(home, options.sessionId)
+    console.error(`desktop checkpoint: queued restore of ${options.sessionId} for the next launch`)
+    return true
+  }
+  const maintenance = options.maintenance
+  const outcome = await restoreCheckpointSession({
+    home: maintenance.home,
+    sessionId: options.sessionId,
+    appPath: maintenance.appPath,
+    resourcesPath: maintenance.resourcesPath,
+    packaged: maintenance.packaged,
+    hostRunning: maintenance.hostRunning,
+    ...(maintenance.log === undefined ? {} : { log: maintenance.log }),
+  })
+  await notifyRestoreOutcome(options.sessionId, outcome)
+  return false
+}
+
+/** Open-time refusal attribution: resolve the session, then prompt once per run. */
+async function handleSessionRefusal(hit: SessionRefusalHit): Promise<void> {
+  const home = harnessHome
+  const runtime = activeHostRuntime
+  if (home === undefined || runtime === undefined) return
+  const locale = resolveDesktopMainLocale(app.getLocale())
+  const resolved = await resolveSessionRefusal(home, hit)
+  if (resolved === undefined) {
+    await presentRestoreDialog(
+      buildNoCheckpointNotice(locale.messages, refusalLabel(hit.sessionId, hit.dirTail)),
+    )
+    return
+  }
+  const members = resolveRestoreClosure(resolved.manifest, resolved.entry.sessionId)
+  const queued = await offerSessionRestore({
+    sessionId: resolved.entry.sessionId,
+    capturedAt: resolved.entry.capturedAt,
+    memberCount: members?.length ?? 1,
+    maintenance: {
+      home,
+      appPath: app.getAppPath(),
+      resourcesPath: process.resourcesPath,
+      packaged: app.isPackaged,
+      hostRuntime: runtime,
+      hostRunning: () => harness !== undefined,
+    },
+  })
+  if (queued) await relaunchDesktop()
+}
+
+/** Manual menu/tray entry: rescan drift and offer restore for confirmed unreadable sessions. */
+async function requestSessionRollback(): Promise<void> {
+  const home = harnessHome
+  const runtime = activeHostRuntime
+  if (home === undefined || runtime === undefined) return
+  const locale = resolveDesktopMainLocale(app.getLocale())
+  const maintenance: DesktopSessionMaintenanceOptions = {
+    home,
+    appPath: app.getAppPath(),
+    resourcesPath: process.resourcesPath,
+    packaged: app.isPackaged,
+    hostRuntime: runtime,
+    hostRunning: () => harness !== undefined,
+  }
+  const detected = await detectUnreadableSessions(maintenance).catch((error: unknown) => {
+    console.error('desktop checkpoint: manual detection failed', error)
+    return undefined
+  })
+  if (detected === undefined) {
+    await presentRestoreDialog(buildRestoreNotice(locale.messages,
+      locale.messages.sessionRestoreFailedTitle, locale.messages.sessionRestoreNoneBody))
+    return
+  }
+  if (detected.unreadable.length === 0) {
+    await presentRestoreDialog(buildRestoreNotice(locale.messages,
+      locale.messages.sessionRestoreNoneTitle, locale.messages.sessionRestoreNoneBody))
+    return
+  }
+  let relaunchPending = false
+  for (const item of detected.unreadable) {
+    const members = resolveRestoreClosure(detected.manifest, item.sessionId)
+    // The relaunch waits until every prompt is answered so a queued intent
+    // never silently drops a later confirmation.
+    relaunchPending = await offerSessionRestore({
+      sessionId: item.sessionId,
+      capturedAt: item.entry.capturedAt,
+      memberCount: members?.length ?? 1,
+      maintenance,
+    }) || relaunchPending
+  }
+  if (relaunchPending) await relaunchDesktop()
+}
+
 function installDesktopMenus(): void {
   const m = resolveDesktopMainLocale(app.getLocale()).messages
   const checkForUpdates = (): void => { void updater?.check(true) }
@@ -352,6 +532,7 @@ function installDesktopMenus(): void {
       submenu: [
         { label: aboutLabel, click: showAbout },
         ...updateItems,
+        { label: m.menuSessionRollback, click: () => { void requestSessionRollback() } },
         { type: 'separator' },
         { role: 'services' },
         { type: 'separator' },
@@ -372,6 +553,7 @@ function installDesktopMenus(): void {
         { label: showLabel, click: showMainWindow },
         ...updateItems,
         { label: aboutLabel, click: showAbout },
+        { label: m.menuSessionRollback, click: () => { void requestSessionRollback() } },
         { type: 'separator' },
         { label: m.menuQuit, accelerator: 'CommandOrControl+Q', click: requestQuit },
       ],
@@ -393,6 +575,7 @@ function installDesktopMenus(): void {
     { label: showLabel, click: showMainWindow },
     ...updateItems,
     { label: aboutLabel, click: showAbout },
+    { label: m.menuSessionRollback, click: () => { void requestSessionRollback() } },
     { type: 'separator' },
     { label: m.menuQuit, click: requestQuit },
   ]))
@@ -576,6 +759,23 @@ if (!primaryInstance) {
       packaged: app.isPackaged,
       override: process.env.DSH_ELECTRON_NODE_BINARY,
     })
+    activeHostRuntime = hostRuntime
+    // Open-time refusal sniffing: `SessionFormatUnsupportedError` reaches the
+    // renderer as a `gateway/internal` stream failure; the observer matches the
+    // stable message text and queues one restore prompt per session per run.
+    transport.harnessProxy.onStreamText = (data) => {
+      if (quitting) return
+      const hit = detectFormatRefusalFrame(data)
+      if (hit === undefined) return
+      const key = hit.sessionId ?? hit.dirTail
+      if (key === undefined || promptedRefusals.has(key)) return
+      promptedRefusals.add(key)
+      restoreDialogQueue = restoreDialogQueue
+        .then(() => handleSessionRefusal(hit))
+        .catch((error: unknown) => {
+          console.error('desktop checkpoint: open-time restore prompt failed', error)
+        })
+    }
     harnessHome = process.env.DSH_HOME ?? resolveHarnessHome(app.getPath('home'))
     // Restore journals must converge before the Host spawns: a leftover
     // `intent` journal finishes its switch, a `committed` one completes
@@ -587,6 +787,39 @@ if (!primaryInstance) {
     }).catch((error: unknown) => {
       console.error('desktop checkpoint: journal convergence failed', error)
     })
+    // Pending restores confirmed during the last run execute in this pre-Host
+    // window; then stat-diff + vN scan + worker confirmation surface foreign
+    // writes and offer an in-place restore before the Host can read live data.
+    const sessionMaintenance: DesktopSessionMaintenanceOptions = {
+      home: harnessHome,
+      appPath,
+      resourcesPath: process.resourcesPath,
+      packaged: app.isPackaged,
+      hostRuntime,
+      hostRunning: () => harness !== undefined,
+      log: (message) => { console.error(`desktop checkpoint: ${message}`) },
+    }
+    try {
+      for (const pending of await consumePendingSessionRestores(sessionMaintenance)) {
+        await notifyRestoreOutcome(pending.sessionId, pending.outcome)
+      }
+      const detected = await detectUnreadableSessions(sessionMaintenance)
+      if (detected !== undefined) {
+        for (const item of detected.unreadable) {
+          const members = resolveRestoreClosure(detected.manifest, item.sessionId)
+          await offerSessionRestore({
+            sessionId: item.sessionId,
+            capturedAt: item.entry.capturedAt,
+            memberCount: members?.length ?? 1,
+            maintenance: sessionMaintenance,
+          })
+        }
+      }
+    } catch (error) {
+      // Detection or prompts never block startup: the Host boots with whatever
+      // live state exists, exactly as it would without this feature.
+      console.error('desktop checkpoint: startup session maintenance failed', error)
+    }
     const shim = prepareToolchainShims({ userData: userDataPath, harnessHome }, toolchains, process.platform)
     const toolchainPolicy: DesktopToolchainPolicy = {
       version: 2,

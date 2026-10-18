@@ -286,7 +286,7 @@ async function convergeJournal(
 }
 
 /** Compute the restore unit: the target plus its transitive subagent descendants. */
-function relatedClosure(manifest: CheckpointManifest, targetSessionId: string): CheckpointSessionEntry[] | undefined {
+export function resolveRestoreClosure(manifest: CheckpointManifest, targetSessionId: string): CheckpointSessionEntry[] | undefined {
   const entries = manifest.sessions
   const target = entries.find(entry => entry.sessionId === targetSessionId)
   if (target === undefined) return undefined
@@ -374,7 +374,7 @@ export async function restoreSession(options: RestoreSessionOptions): Promise<Re
   if (found === undefined) {
     return { kind: 'refused', reason: `no verified checkpoint copy exists for session ${options.sessionId}` }
   }
-  const members = relatedClosure(found.manifest, options.sessionId)
+  const members = resolveRestoreClosure(found.manifest, options.sessionId)
   if (members === undefined) {
     return { kind: 'refused', reason: 'checkpoint does not record enough header data to derive the related-source closure' }
   }

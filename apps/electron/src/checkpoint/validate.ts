@@ -92,6 +92,20 @@ async function loadBackendModules(installAnchor: string): Promise<{
   return { backend, cordis, session }
 }
 
+/**
+ * Read the bundled `SESSION_FORMAT_VERSION` without mounting the backend —
+ * the vN filename scan needs only the constant, not a cordis context.
+ * @param installAnchor - `@deepseek-ai/dsh/package.json` of the supervised install.
+ * @returns The format version the supervised build reads and writes.
+ */
+export async function resolveSessionFormatVersion(installAnchor: string): Promise<number> {
+  const backendRequire = createRequire(installAnchor)
+  const session = await import(
+    pathToFileURL(backendRequire.resolve('@deepseek-ai/dsh-session')).href,
+  ) as SessionModule
+  return session.SESSION_FORMAT_VERSION
+}
+
 /** A mounted sessions backend; `dispose` tears down the cordis context. */
 export interface MountedSessionsBackend {
   readonly sessionFormatVersion: number

@@ -32,6 +32,15 @@ export class HarnessProxy {
   private readonly activeStreams = new Set<ActiveStream>()
 
   /**
+   * Observer for Host→renderer text frames on `/api/remote.mux`. The session
+   * rollback open-time entry uses it to recognize `SessionFormatUnsupportedError`
+   * refusals (serialized as `gateway/internal` failures) without parsing the
+   * stream protocol's item traffic. Exceptions inside the observer are swallowed
+   * so a sniffing bug can never break the carrier.
+   */
+  onStreamText: ((data: string) => void) | undefined
+
+  /**
    * @param createWebSocket - Host WebSocket factory; injectable for lifecycle tests.
    * @param fetchImpl - Host HTTP implementation; injectable for authentication tests.
    */
@@ -227,6 +236,11 @@ export class HarnessProxy {
         return
       }
       port.postMessage({ type: 'message', data: event.data } satisfies HostStreamPortMessage)
+      try {
+        this.onStreamText?.(event.data)
+      } catch {
+        // The frame observer must never break stream delivery.
+      }
     })
     socket.addEventListener('close', () => {
       if (!closing) {

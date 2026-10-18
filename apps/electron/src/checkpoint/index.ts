@@ -10,11 +10,19 @@ import { runExitCheckpoint, type ExitCheckpointOutcome } from './capture.ts'
 import { listRestoreJournals } from './journal.ts'
 import { convergeRestoreJournals, restoreSession, type AcquireSessionLease, type RestoreOutcome } from './restore.ts'
 import { resolveDshInstallAnchor, resolveHostRuntime, type HostRuntime } from '../runtime.ts'
-import { mountSessionsBackend } from './validate.ts'
+import { detectCheckpointDrift, confirmUnreadable, type ConfirmedUnreadable } from './detect.ts'
+import { consumePendingRestores, enqueuePendingRestore } from './pending.ts'
+import { checkpointsRoot, readManifest, type CheckpointManifest, type CheckpointSessionEntry } from './manifest.ts'
+import { mountSessionsBackend, resolveSessionFormatVersion } from './validate.ts'
 import { runValidationWorker, validateWorkerModule } from './worker.ts'
+import type { SessionRefusalHit } from './refusal.ts'
+import { readdir } from 'node:fs/promises'
 
 /** Total wall-clock budget for one exit capture; the deadline kills the validation worker. */
 export const CHECKPOINT_CAPTURE_BUDGET_MS = 120_000
+
+/** Startup drift confirmation reuses the capture worker with its own bound. */
+export const DETECTION_BUDGET_MS = 90_000
 
 export interface CaptureExitCheckpointOptions {
   /** `$DSH_HOME` the Host ran against. */
@@ -138,4 +146,119 @@ export async function restoreCheckpointSession(options: {
   } finally {
     await leases.dispose()
   }
+}
+
+export interface DesktopSessionMaintenanceOptions {
+  readonly home: string
+  readonly appPath: string
+  readonly resourcesPath: string
+  readonly packaged: boolean
+  /** Resolved once by startup; re-used by detection so the worker exec is identical. */
+  readonly hostRuntime: HostRuntime
+  /** Local-Host guard handed to every restore entry. */
+  readonly hostRunning: () => boolean
+  readonly log?: ((message: string) => void) | undefined
+}
+
+function restoreOptions(options: DesktopSessionMaintenanceOptions, sessionId: string): {
+  readonly home: string
+  readonly sessionId: string
+  readonly appPath: string
+  readonly resourcesPath: string
+  readonly packaged: boolean
+  readonly hostRunning: () => boolean
+  readonly log: ((message: string) => void) | undefined
+} {
+  return {
+    home: options.home,
+    sessionId,
+    appPath: options.appPath,
+    resourcesPath: options.resourcesPath,
+    packaged: options.packaged,
+    hostRunning: options.hostRunning,
+    log: options.log,
+  }
+}
+
+/** Outcome of one consumed pending request, for caller-side notification. */
+export interface PendingRestoreResult {
+  readonly sessionId: string
+  readonly outcome: RestoreOutcome
+}
+
+/**
+ * Execute user-confirmed restores queued while the Host was up. Runs inside
+ * the same pre-Host window as journal convergence, so `hostRunning` stays
+ * false and lease acquisition is the live-writer proof. Failures surface to
+ * the caller; they never block startup.
+ */
+export async function consumePendingSessionRestores(
+  options: DesktopSessionMaintenanceOptions,
+): Promise<PendingRestoreResult[]> {
+  const results: PendingRestoreResult[] = []
+  for (const request of await consumePendingRestores(options.home)) {
+    const outcome = await restoreCheckpointSession(restoreOptions(options, request.sessionId))
+    results.push({ sessionId: request.sessionId, outcome })
+    options.log?.(`pending restore ${request.sessionId}: ${outcome.kind}`)
+  }
+  return results
+}
+
+/**
+ * Startup detection: stat-diff plus the `session.vN` scan against the newest
+ * checkpoint, then worker confirmation on the live sessions root. Returns
+ * only sessions confirmed unreadable AND holding a verified copy — the set a
+ * confirmation prompt may offer to restore.
+ */
+export async function detectUnreadableSessions(
+  options: DesktopSessionMaintenanceOptions,
+): Promise<{ manifest: CheckpointManifest; unreadable: readonly ConfirmedUnreadable[] } | undefined> {
+  const anchor = resolveDshInstallAnchor(options.appPath)
+  const formatVersion = await resolveSessionFormatVersion(anchor).catch(() => undefined)
+  const detection = await detectCheckpointDrift(options.home, { formatVersion })
+  if (detection === undefined) return undefined
+  if (detection.candidates.length === 0) return { manifest: detection.manifest, unreadable: [] }
+  options.log?.(`drift detected against checkpoint ${detection.checkpointId}: ${detection.candidates.map(c => c.dir).join(', ')}`)
+  const workerModule = validateWorkerModule(options.appPath)
+  const report = await runValidationWorker(
+    workerModule,
+    join(options.home, 'sessions'),
+    anchor,
+    options.hostRuntime,
+    AbortSignal.timeout(DETECTION_BUDGET_MS),
+  )
+  return { manifest: detection.manifest, unreadable: confirmUnreadable(detection, report) }
+}
+
+/**
+ * Attribute an open-time refusal frame to a checkpointed session. The raw id
+ * matches `sessionId` directly; the `raw log:` path names the encoded dir
+ * tail. Only a session with a verified copy is actionable.
+ * @returns The newest manifest entry for the session, or undefined.
+ */
+export async function resolveSessionRefusal(
+  home: string,
+  hit: SessionRefusalHit,
+): Promise<{ checkpointId: string; manifest: CheckpointManifest; entry: CheckpointSessionEntry } | undefined> {
+  let names: string[]
+  try {
+    names = await readdir(checkpointsRoot(home))
+  } catch {
+    return undefined
+  }
+  for (const name of names.filter(entry => !entry.endsWith('.tmp')).sort().reverse()) {
+    const manifest = await readManifest(join(checkpointsRoot(home), name))
+    if (manifest === undefined) continue
+    const entry = manifest.sessions.find(candidate => candidate.sessionId === hit.sessionId)
+      ?? (hit.dirTail === undefined
+        ? undefined
+        : manifest.sessions.find(candidate => candidate.dir.split('/').pop() === hit.dirTail))
+    if (entry !== undefined) return { checkpointId: manifest.id, manifest, entry }
+  }
+  return undefined
+}
+
+/** Record one open-time confirmed intent for the next launch's pre-Host window. */
+export async function queueSessionRestore(home: string, sessionId: string): Promise<void> {
+  await enqueuePendingRestore(home, sessionId)
 }
