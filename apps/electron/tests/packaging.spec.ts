@@ -134,6 +134,14 @@ it('wires the layered data-cleanup uninstaller through the native helper', async
     expect(nsh).toContain('Call un.RivetdeckCleanData')
     expect(nsh).not.toContain('RMDir')
 
+    // The custom include is parsed before the stock script loads LogicLib/FileFunc, so the
+    // file provides them itself; function bodies must not touch variables multiUser.nsh
+    // only declares later (the shell-context switch lives in the expanding macro instead).
+    expect(nsh.indexOf('!include "LogicLib.nsh"')).toBeLessThan(nsh.indexOf('Function un.'))
+    expect(nsh.indexOf('!include "FileFunc.nsh"')).toBeLessThan(nsh.indexOf('Function un.'))
+    const functions = nsh.slice(nsh.indexOf('Function un.'))
+    expect(functions).not.toContain('$installMode')
+
     // Localized residue text is generated from the owned dictionary, not hardcoded.
     const strings = await readFile(join(output, 'uninstall-strings.nsh'), 'utf8')
     expect(strings).toContain('LangString RIVETDECK_UNINSTALL_RESIDUE 1033 ')

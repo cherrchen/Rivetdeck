@@ -91,6 +91,10 @@ function renderUninstallNsh({ helperDll, updaterCacheName }) {
   return `; Rivetdeck data cleanup: every deletion outside $INSTDIR goes through the native
 ; helper, which verifies path ownership and expected inventory, never descends into links,
 ; and reports residue rather than failing the uninstall.
+; The custom include is parsed before the stock script pulls in these headers; both are
+; include-guarded so the later stock includes stay inert.
+!include "LogicLib.nsh"
+!include "FileFunc.nsh"
 !define RIVETDECK_UNINSTALL_HELPER "${quoted(helperDll)}"
 !define RIVETDECK_UPDATER_CACHE "${updaterCacheName}"
 !define RIVETDECK_PATH_HISTORY "rivetdeck-path-history.ini"
@@ -111,7 +115,15 @@ function renderUninstallNsh({ helperDll, updaterCacheName }) {
 !macroend
 
 !macro customUnInstall
+  ; Functions are parsed before multiUser.nsh declares installMode, so the per-machine
+  ; shell-context switch happens here at the expansion site inside the uninstall section.
+  ${'${if}'} $installMode == "all"
+    SetShellVarContext current
+  ${'${endif}'}
   Call un.RivetdeckCleanData
+  ${'${if}'} $installMode == "all"
+    SetShellVarContext all
+  ${'${endif}'}
 !macroend
 
 !ifdef BUILD_UNINSTALLER
@@ -125,15 +137,9 @@ Var UnMode
 ; A replaced or updating uninstaller never deletes data; the path history moves beside the
 ; default userData so the succeeding install adopts it.
 Function un.RivetdeckKeepData
-  ${'${if}'} $installMode == "all"
-    SetShellVarContext current
-  ${'${endif}'}
   ${'${If}'} ${'${FileExists}'} "$INSTDIR\\${'${RIVETDECK_PATH_HISTORY}'}"
     CopyFiles /SILENT "$INSTDIR\\${'${RIVETDECK_PATH_HISTORY}'}" "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}"
   ${'${EndIf}'}
-  ${'${if}'} $installMode == "all"
-    SetShellVarContext all
-  ${'${endif}'}
 FunctionEnd
 
 Function un.RivetdeckCleanData
@@ -149,9 +155,6 @@ Function un.RivetdeckCleanData
     Call un.RivetdeckKeepData
     Return
   ${'${EndIf}'}
-  ${'${if}'} $installMode == "all"
-    SetShellVarContext current
-  ${'${endif}'}
   ReadEnvStr $UnHome DSH_HOME
   StrCpy $UnTarget "$APPDATA\\${'${APP_FILENAME}'}"
   StrCpy $UnResidue "$APPDATA\\${'${APP_FILENAME}'}-uninstall-residue.log"
@@ -165,9 +168,6 @@ Function un.RivetdeckCleanData
   File "/oname=$PLUGINSDIR\\rivetdeck-uninstall.dll" "${'${RIVETDECK_UNINSTALL_HELPER}'}"
   System::Call '$PLUGINSDIR\\rivetdeck-uninstall.dll::UninstallCleanup(w "$UnTarget", w "$INSTDIR", w "$UnHome", w "$UnReport", w "$LOCALAPPDATA\\${'${RIVETDECK_UPDATER_CACHE}'}", w "$UnResidue", i $UnMode, *i .R6, *i .R7) i .R8 ?c'
   StrCpy $UnSkipped $R7
-  ${'${if}'} $installMode == "all"
-    SetShellVarContext all
-  ${'${endif}'}
   ${'${If}'} $UnSkipped > 0
     DetailPrint "$(RIVETDECK_UNINSTALL_RESIDUE)"
     DetailPrint "$UnResidue"
