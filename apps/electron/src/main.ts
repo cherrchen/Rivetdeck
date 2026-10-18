@@ -503,7 +503,7 @@ async function requestSessionRollback(): Promise<void> {
   })
   if (detected === undefined) {
     await presentRestoreDialog(buildRestoreNotice(locale.messages,
-      locale.messages.sessionRestoreFailedTitle, locale.messages.sessionRestoreNoneBody))
+      locale.messages.sessionRestoreFailedTitle, locale.messages.sessionRestoreScanFailedBody))
     return
   }
   if (detected.unreadable.length === 0) {

@@ -105,6 +105,7 @@ export const en = {
   sessionRestoreNoCheckpointBody: 'Session "{id}" cannot be read by this version, and no verified checkpoint copy exists, so rollback cannot run. The live files are left untouched.',
   sessionRestoreNoneTitle: 'No rollback needed',
   sessionRestoreNoneBody: 'Every session with a verified checkpoint reads cleanly under this version.',
+  sessionRestoreScanFailedBody: 'The checkpoint scan could not complete. No session was changed; quit other DeepSeek Harness or Rivetdeck instances and try again.',
   sessionRestorePreparing: 'Checking session checkpoints…',
 } as const
 
@@ -216,6 +217,7 @@ export const zh = {
   sessionRestoreNoCheckpointBody: '会话 "{id}" 无法被当前版本读取，且不存在已验证的检查点副本，无法回滚。live 文件保持原样。',
   sessionRestoreNoneTitle: '无需回滚',
   sessionRestoreNoneBody: '所有持有已验证检查点的会话在当前版本下均可正常读取。',
+  sessionRestoreScanFailedBody: '检查点扫描未能完成。未改动任何会话；请退出其它 DeepSeek Harness / Rivetdeck 实例后重试。',
   sessionRestorePreparing: '正在检查会话检查点…',
 } as const satisfies DesktopMainMessages
 
