@@ -278,6 +278,8 @@ async function persistPhase(home: string, journal: RestoreJournal, phase: Restor
 /**
  * Drive a journal from its recorded phase to deletion: `intent` resumes the
  * switch, `committed` only finalizes, `finalized` only deletes the record.
+ * @param checkpointDir - Committed checkpoint holding the publish bytes;
+ *   consulted only by the intent-phase switch.
  * @returns The terminal phase, or the conflict description when it stops.
  */
 async function convergeJournal(
@@ -504,6 +506,19 @@ export interface ConvergeJournalsOptions {
   readonly signal?: AbortSignal | undefined
 }
 
+/** Outcome of one startup journal sweep, bucketed by what the caller must surface. */
+export interface JournalConvergence {
+  readonly converged: string[]
+  readonly conflicted: string[]
+  /** Retryable on the next launch: a live writer holds a lease, or a step failed. */
+  readonly deferred: string[]
+  /**
+   * Intent journals whose checkpoint is gone: the interrupted switch can never
+   * complete, so retry is futile — the caller offers an abandon choice.
+   */
+  readonly unresolvable: string[]
+}
+
 /**
  * Converge leftover restore journals at startup, before the Host spawns.
  * The resume re-establishes the no-other-Harness precondition by
@@ -513,11 +528,12 @@ export interface ConvergeJournalsOptions {
  */
 export async function convergeRestoreJournals(
   options: ConvergeJournalsOptions,
-): Promise<{ converged: string[]; conflicted: string[]; deferred: string[] }> {
+): Promise<JournalConvergence> {
   const log = options.log ?? (() => undefined)
   const converged: string[] = []
   const conflicted: string[] = []
   const deferred: string[] = []
+  const unresolvable: string[] = []
   for (const path of await listRestoreJournals(options.home)) {
     options.signal?.throwIfAborted()
     const journal = await readRestoreJournal(path)
@@ -529,10 +545,12 @@ export async function convergeRestoreJournals(
       conflicted.push(journal.id)
       continue
     }
+    // Only the intent phase needs checkpoint bytes: `committed`/`finalized`
+    // journals finish projcache invalidation and record deletion without them.
     const checkpoint = await findCheckpoint(options.home, journal.targetSessionId, journal.checkpointId)
-    if (checkpoint === undefined) {
-      deferred.push(journal.id)
-      log(`restore journal ${journal.id}: checkpoint ${journal.checkpointId} is gone; deferred`)
+    if (checkpoint === undefined && journal.phase === 'intent') {
+      unresolvable.push(journal.id)
+      log(`restore journal ${journal.id}: checkpoint ${journal.checkpointId} is gone; the interrupted switch can never complete`)
       continue
     }
     const leases: SessionLease[] = []
@@ -545,7 +563,7 @@ export async function convergeRestoreJournals(
       continue
     }
     try {
-      const terminal = await convergeJournal(options.home, checkpoint.dir, journal)
+      const terminal = await convergeJournal(options.home, checkpoint?.dir ?? '', journal)
       if (terminal.phase === 'conflicted') {
         conflicted.push(terminal.id)
         log(`restore journal ${terminal.id}: ${terminal.conflict ?? 'live drift'} — stopped instead of overwriting`)
@@ -570,5 +588,5 @@ export async function convergeRestoreJournals(
       for (const lease of leases) await lease.release().catch(() => undefined)
     }
   }
-  return { converged, conflicted, deferred }
+  return { converged, conflicted, deferred, unresolvable }
 }

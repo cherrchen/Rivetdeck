@@ -134,6 +134,31 @@ export function buildDeferredJournalsGate(
   }
 }
 
+/**
+ * Startup gate for an intent journal whose checkpoint is gone — the
+ * interrupted switch can never finish. Button 0 abandons the restore record,
+ * button 1 keeps it pending for the next launch, button 2 quits; keeping is
+ * the default so a stray Enter never discards the recovery record.
+ */
+export function buildOrphanedJournalGate(
+  messages: DesktopMainMessages,
+  facts: { readonly checkpointId: string; readonly quarantine: string },
+): RestoreDialogOptions {
+  return {
+    type: 'warning',
+    title: messages.sessionRestoreOrphanTitle,
+    message: formatDesktopMessage(messages.sessionRestoreOrphanBody, { checkpoint: facts.checkpointId }),
+    detail: formatDesktopMessage(messages.sessionRestoreOrphanDetail, { quarantine: facts.quarantine }),
+    buttons: [
+      messages.sessionRestoreOrphanAbandon,
+      messages.sessionRestoreOrphanKeep,
+      messages.menuQuit,
+    ],
+    defaultId: 1,
+    cancelId: 2,
+  }
+}
+
 /** Post-restore outcome or manual-scan notice: one dismiss-only info dialog. */
 export function buildRestoreNotice(
   messages: DesktopMainMessages,

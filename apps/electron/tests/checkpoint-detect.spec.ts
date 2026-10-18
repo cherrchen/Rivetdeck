@@ -20,7 +20,7 @@ import { detectFormatRefusalFrame } from '../src/checkpoint/refusal.ts'
 import { filterIdleWriters, resolveSessionRefusal } from '../src/checkpoint/index.ts'
 import type { AcquireSessionLease } from '../src/checkpoint/restore.ts'
 import type { ConfirmedUnreadable } from '../src/checkpoint/detect.ts'
-import { buildNoCheckpointNotice, buildRestoreConfirm } from '../src/checkpoint/dialog.ts'
+import { buildNoCheckpointNotice, buildOrphanedJournalGate, buildRestoreConfirm } from '../src/checkpoint/dialog.ts'
 import { en, zh } from '../src/locale.ts'
 import type { CheckpointValidationReport } from '../src/checkpoint/capture.ts'
 
@@ -370,6 +370,16 @@ describe('restore dialog copy', () => {
     expect(spec.detail).toContain('检查点')
     const notice = buildNoCheckpointNotice(en, 'aaaa-1111')
     expect(notice.message).toContain('no verified checkpoint copy exists')
+  })
+
+  it('gates an orphaned intent journal on abandon, keep, or quit — keep is the default', () => {
+    const spec = buildOrphanedJournalGate(en, { checkpointId: '1000', quarantine: '/q' })
+    expect(spec.buttons).toEqual(['Abandon Restore', 'Keep Pending', 'Quit'])
+    expect(spec.defaultId).toBe(1)
+    expect(spec.cancelId).toBe(2)
+    expect(spec.message).toContain('1000')
+    expect(spec.detail).toContain('/q')
+    expect(buildOrphanedJournalGate(zh, { checkpointId: '1000', quarantine: '/q' }).buttons[0]).toBe('放弃恢复')
   })
 })
 

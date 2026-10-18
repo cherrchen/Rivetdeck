@@ -8,7 +8,13 @@
 import { join } from 'node:path'
 import { runExitCheckpoint, type ExitCheckpointOutcome } from './capture.ts'
 import { listRestoreJournals } from './journal.ts'
-import { convergeRestoreJournals, restoreSession, type AcquireSessionLease, type RestoreOutcome } from './restore.ts'
+import {
+  convergeRestoreJournals,
+  restoreSession,
+  type AcquireSessionLease,
+  type JournalConvergence,
+  type RestoreOutcome,
+} from './restore.ts'
 import { resolveDshInstallAnchor, resolveHostRuntime, type HostRuntime } from '../runtime.ts'
 import { detectCheckpointDrift, confirmUnreadable, type ConfirmedUnreadable } from './detect.ts'
 import { dequeuePendingRestore, enqueuePendingRestore, listPendingRestores } from './pending.ts'
@@ -94,9 +100,9 @@ export async function convergeDesktopRestoreJournals(options: {
   readonly appPath: string
   readonly signal?: AbortSignal | undefined
   readonly log?: ((message: string) => void) | undefined
-}): Promise<{ converged: string[]; conflicted: string[]; deferred: string[] }> {
+}): Promise<JournalConvergence> {
   if ((await listRestoreJournals(options.home)).length === 0) {
-    return { converged: [], conflicted: [], deferred: [] }
+    return { converged: [], conflicted: [], deferred: [], unresolvable: [] }
   }
   const leases = await backendLeaseAcquirer(options.home, resolveDshInstallAnchor(options.appPath))
   try {

@@ -239,7 +239,7 @@ describe('acceptance case 4: interruption at each switch stage converges at next
     // Crash after staging: the tmp sibling is complete on disk.
     writeFile(join(home, 'sessions', CASE4_DIR, 'session.v4.jsonl.zstd.restore.tmp'), 'VERIFIED')
     const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
-    expect(result).toEqual({ converged: ['8000-session-parent-1'], conflicted: [], deferred: [] })
+    expect(result).toEqual({ converged: ['8000-session-parent-1'], conflicted: [], deferred: [], unresolvable: [] })
     const liveDir = join(home, 'sessions', CASE4_DIR)
     expect(readFileSync(join(liveDir, 'session.v4.jsonl.zstd'), 'utf8')).toBe('VERIFIED')
     expect(existsSync(join(liveDir, 'session.v4.jsonl.zstd.restore.tmp'))).toBe(false)

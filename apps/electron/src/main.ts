@@ -43,11 +43,12 @@ import {
   type DesktopSessionMaintenanceOptions,
 } from './checkpoint/index.ts'
 import { detectFormatRefusalFrame, type SessionRefusalHit } from './checkpoint/refusal.ts'
-import { listRestoreJournals, readRestoreJournal, restoreJournalsDir } from './checkpoint/journal.ts'
+import { deleteRestoreJournal, listRestoreJournals, readRestoreJournal, restoreJournalsDir } from './checkpoint/journal.ts'
 import { resolveRestoreClosure, type RestoreOutcome } from './checkpoint/restore.ts'
 import {
   buildDeferredJournalsGate,
   buildNoCheckpointNotice,
+  buildOrphanedJournalGate,
   buildRestoreConfirm,
   buildRestoreNotice,
   formatRestoreRefusal,
@@ -833,6 +834,32 @@ if (!primaryInstance) {
         `desktop checkpoint: ${deferredCount} restore journal(s) left deferred by user choice`,
       )
       break
+    }
+    // An unresolvable journal marks an interrupted switch whose checkpoint is
+    // gone — it can never converge, so the user chooses between deleting the
+    // record and keeping it for a later launch that might restore the missing
+    // checkpoint (for example from a backup).
+    if (convergence !== undefined) {
+      for (const journalId of convergence.unresolvable) {
+        const journal = await readRestoreJournal(join(restoreJournalsDir(harnessHome), `${journalId}.json`))
+        const response = await presentRestoreDialog(buildOrphanedJournalGate(
+          resolveDesktopMainLocale(app.getLocale()).messages,
+          {
+            checkpointId: journal?.checkpointId ?? journalId,
+            quarantine: join(harnessHome, journal?.quarantine ?? 'electron/quarantine'),
+          },
+        ))
+        if (response === 2) {
+          requestQuit()
+          return
+        }
+        if (response === 0) {
+          await deleteRestoreJournal(harnessHome, journalId).catch((error: unknown) => {
+            console.error(`desktop checkpoint: failed to abandon restore journal ${journalId}`, error)
+          })
+          console.error(`desktop checkpoint: abandoned unresolvable restore journal ${journalId}`)
+        }
+      }
     }
     // A conflicted journal means the interrupted switch stopped on live drift
     // with part of the closure possibly already replaced — surface it instead
