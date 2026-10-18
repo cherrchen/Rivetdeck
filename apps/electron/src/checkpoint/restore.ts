@@ -15,7 +15,7 @@ import { createHash } from 'node:crypto'
 import { constants } from 'node:fs'
 import { access, copyFile, mkdir, open, readFile, readdir, rm, stat, unlink } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { renameDesktopPath } from '../atomic-file.ts'
+import { renameDesktopPath, writeDesktopFileAtomic } from '../atomic-file.ts'
 import { checkpointsRoot, readManifest, type CheckpointManifest, type CheckpointSessionEntry } from './manifest.ts'
 import {
   deleteRestoreJournal,
@@ -256,6 +256,33 @@ async function applySwitch(
 /** `SAFE_KEY_RE` in storage-json/src/per-record-unit.ts: a non-matching id can never own a row. */
 const SAFE_KEY = /^[A-Za-z0-9_-]+$/
 
+/**
+ * Remove member rows inside the legacy whole-unit projcache file. The unit
+ * bootstraps the per-record tree when that tree is empty
+ * (storage-json/src/per-record-unit.ts), so a fully invalidated member set
+ * would otherwise resurrect stale rows on the next Host boot.
+ */
+async function finalizeLegacyProjcache(home: string, journal: RestoreJournal): Promise<void> {
+  const legacyPath = join(home, 'storages', 'session_projcache.json')
+  let document: { unit?: { name?: unknown }; tables?: unknown }
+  try {
+    document = JSON.parse(await readFile(legacyPath, 'utf8')) as typeof document
+  } catch {
+    return // Missing or malformed legacy file: not ours to interpret or delete.
+  }
+  if (document.unit?.name !== 'session_projcache') return
+  const tables = document.tables
+  if (typeof tables !== 'object' || tables === null) return
+  const sessions = (tables as Record<string, unknown>).sessions
+  if (typeof sessions !== 'object' || sessions === null || Array.isArray(sessions)) return
+  const rows = sessions as Record<string, unknown>
+  const members = new Set(journal.members.map(member => member.sessionId))
+  const kept = Object.entries(rows).filter(([key]) => !members.has(key))
+  if (kept.length === Object.keys(rows).length) return
+  ;(tables as Record<string, unknown>).sessions = Object.fromEntries(kept)
+  await writeDesktopFileAtomic(legacyPath, `${JSON.stringify(document)}\n`)
+}
+
 /** Invalidate the projcache rows of the target and its related-source closure; idempotent. */
 async function finalizeProjcache(home: string, journal: RestoreJournal): Promise<void> {
   const rowsDir = join(home, 'storages', 'session_projcache', 'sessions')
@@ -266,6 +293,7 @@ async function finalizeProjcache(home: string, journal: RestoreJournal): Promise
     await rm(join(rowsDir, `${member.sessionId}.json`), { force: true })
   }
   if (await pathExists(rowsDir)) await syncDirectory(rowsDir)
+  await finalizeLegacyProjcache(home, journal)
 }
 
 /** Persist a phase transition durably before the work it gates proceeds. */

@@ -512,4 +512,19 @@ describe('convergeRestoreJournals', () => {
     expect(existsSync(row)).toBe(false)
     expect(await listRestoreJournals(home)).toEqual([])
   })
+
+  it('invalidates member rows inside the legacy whole-unit projcache file', async () => {
+    const home = makeHome()
+    liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'VERIFIED' })
+    const legacyPath = join(home, 'storages', 'session_projcache.json')
+    writeFile(legacyPath, JSON.stringify({
+      unit: { name: 'session_projcache', version: 1 },
+      tables: { sessions: { 'session-parent-1': { stale: true }, 'other-session': { keep: true } } },
+    }))
+    await seedIntentJournal(home, { phase: 'committed' })
+    const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+    expect(result.converged).toEqual(['8000-session-parent-1'])
+    const legacy = JSON.parse(read(legacyPath)) as { tables: { sessions: Record<string, unknown> } }
+    expect(Object.keys(legacy.tables.sessions)).toEqual(['other-session'])
+  })
 })
