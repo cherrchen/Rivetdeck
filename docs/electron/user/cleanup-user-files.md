@@ -13,7 +13,7 @@ The assisted NSIS uninstaller removes the install directory, `managed-toolchains
 | `%APPDATA%\Rivetdeck` | `desktop-preferences.json`, `network-secrets/`, `network-startup-override.json`, Cookies, `Local Storage/`, `IndexedDB/`, non-cache session-partition data | Preserved — delete the folder manually to remove it |
 | `%APPDATA%\Rivetdeck-uninstall-residue.log` | Skipped targets and removal failures from the last uninstall | Delete manually |
 | `%LOCALAPPDATA%\rivetdeck-updater` | Downloaded update packages | Removed by the uninstaller |
-| `<install dir>\rivetdeck-path-history.ini` | Record of every `userData` and `DSH_HOME` root this install used | Removed with the install directory |
+| `%APPDATA%\rivetdeck-path-history.ini` | Record of every `userData` and `DSH_HOME` root the product used | Preserved — it is what lets a later uninstall protect or remove the right roots; delete manually if unwanted |
 
 Running `"Uninstall Rivetdeck.exe" --delete-app-data` requests removal of the whole `%APPDATA%\Rivetdeck`. It proceeds only when the install's path-history record exists and is complete; otherwise the directory is skipped and reported in the residue log. To delete it regardless, remove `%APPDATA%\Rivetdeck` manually.
 
@@ -35,4 +35,4 @@ The following locations belong to the Harness or to you and are never removed by
 
 ## Custom locations
 
-If the app ever ran with `--user-data-dir` or a different `DSH_HOME`, the per-install `rivetdeck-path-history.ini` record lists every root it used. The record sits beside the executable while the app is installed; after an update or reinstall it may also exist next to `%APPDATA%`.
+If the app ever ran with `--user-data-dir` or a different `DSH_HOME`, the `rivetdeck-path-history.ini` record beside `%APPDATA%` lists every root it used.

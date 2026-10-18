@@ -13,7 +13,7 @@ assisted NSIS 卸载器会删除安装目录、`managed-toolchains/`、`electron
 | `%APPDATA%\Rivetdeck` | `desktop-preferences.json`、`network-secrets/`、`network-startup-override.json`、Cookies、`Local Storage/`、`IndexedDB/`、非缓存会话分区数据 | 保留——如需删除请手动删除该目录 |
 | `%APPDATA%\Rivetdeck-uninstall-residue.log` | 上一次卸载中跳过的目标与删除失败记录 | 手动删除 |
 | `%LOCALAPPDATA%\rivetdeck-updater` | 下载的更新包 | 由卸载器删除 |
-| `<安装目录>\rivetdeck-path-history.ini` | 该安装实例使用过的全部 `userData` 与 `DSH_HOME` 记录 | 随安装目录一并删除 |
+| `%APPDATA%\rivetdeck-path-history.ini` | 产品使用过的全部 `userData` 与 `DSH_HOME` 根目录记录 | 保留——后续卸载依靠它保护或删除正确的根目录；不需要时可手动删除 |
 
 运行 `"Uninstall Rivetdeck.exe" --delete-app-data` 会请求删除整个 `%APPDATA%\Rivetdeck`。仅当该安装的路径历史记录存在且完整时才会执行；否则该目录被跳过并写入残留日志。如需强制删除，请手动移除 `%APPDATA%\Rivetdeck`。
 
@@ -35,4 +35,4 @@ AppImage 是单个文件——直接删除即可。DEB 包会移除 `/opt/Rivetd
 
 ## 自定义位置
 
-如果应用曾以 `--user-data-dir` 或其他 `DSH_HOME` 运行，每个安装实例的 `rivetdeck-path-history.ini` 会记录它使用过的全部根目录。应用安装期间该记录位于可执行文件旁；经过更新或重装后，它也可能存在于 `%APPDATA%` 旁。
+如果应用曾以 `--user-data-dir` 或其他 `DSH_HOME` 运行，`%APPDATA%` 旁的 `rivetdeck-path-history.ini` 会记录它使用过的全部根目录。

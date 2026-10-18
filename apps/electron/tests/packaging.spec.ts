@@ -117,20 +117,23 @@ it('wires the layered data-cleanup uninstaller through the native helper', async
     expect(nsh).toContain('${GetOptions} $R0 "--updated"')
     expect(nsh).toContain('/KEEP_APP_DATA')
     expect(nsh).toContain('CopyFiles /SILENT "$INSTDIR\\${RIVETDECK_PATH_HISTORY}" "$APPDATA\\${RIVETDECK_PATH_HISTORY}"')
+    // A legacy install-dir record migrates only when no user-level record exists.
+    expect(nsh).toContain('${AndIfNot} ${FileExists} "$APPDATA\\${RIVETDECK_PATH_HISTORY}"')
     expect(nsh).toContain('FileWrite $0 "complete=1$\\r$\\n"')
-    // Fresh installs seed the record; a surviving record is never overwritten. The install
-    // flags cannot detect a fresh install — /currentuser forces $hasPerUserInstallation to 1.
-    expect(nsh).toContain('${AndIfNot} ${FileExists} "$INSTDIR\\${RIVETDECK_PATH_HISTORY}"')
+    // Fresh installs seed the record beside userData so the app can always rewrite it;
+    // a surviving record is never overwritten. The install flags cannot detect a fresh
+    // install — /currentuser forces $hasPerUserInstallation to 1.
+    expect(nsh).toContain('FileOpen $0 "$APPDATA\\${RIVETDECK_PATH_HISTORY}" w')
     expect(nsh).not.toContain('$hasPerUserInstallation')
 
     // History, env protection, tiered targets, and the updater cache reach the helper.
     expect(nsh).toContain('ReadEnvStr $UnHome DSH_HOME')
     expect(nsh).toContain('StrCpy $UnTarget "$APPDATA\\${APP_FILENAME}"')
-    expect(nsh).toContain('StrCpy $UnReport "$INSTDIR\\${RIVETDECK_PATH_HISTORY}"')
+    expect(nsh).toContain('StrCpy $UnHistory "$APPDATA\\${RIVETDECK_PATH_HISTORY}"')
     expect(nsh).toContain('$LOCALAPPDATA\\${RIVETDECK_UPDATER_CACHE}')
     expect(nsh).toContain('!define RIVETDECK_UPDATER_CACHE "rivetdeck-updater"')
     expect(nsh).toContain('File "/oname=$PLUGINSDIR\\rivetdeck-uninstall.dll" "${RIVETDECK_UNINSTALL_HELPER}"')
-    expect(nsh).toContain('UninstallCleanup(w "$UnTarget", w "$INSTDIR", w "$UnHome", w "$UnReport"')
+    expect(nsh).toContain('UninstallCleanup(w "$UnTarget", w "$INSTDIR", w "$UnHome", w "$UnHistory"')
     expect(nsh).toContain('${GetOptions} $R0 "--delete-app-data"')
     expect(nsh).toContain('DetailPrint "$(RIVETDECK_UNINSTALL_RESIDUE)"')
     expect(nsh).toContain('!macro customUnInstall')

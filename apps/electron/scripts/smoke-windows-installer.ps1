@@ -94,8 +94,10 @@ try {
   $userData = Join-Path $env:APPDATA 'Rivetdeck'
   $updaterCache = Join-Path $env:LOCALAPPDATA 'rivetdeck-updater'
   $residueLog = Join-Path $env:APPDATA 'Rivetdeck-uninstall-residue.log'
-  $historyFile = Join-Path $installDirectory 'rivetdeck-path-history.ini'
-  if (-not (Test-Path -LiteralPath $historyFile -PathType Leaf)) {
+  $historyFile = Join-Path $env:APPDATA 'rivetdeck-path-history.ini'
+  # The launched app also writes this file; only the installer seed carries complete=1.
+  if (-not (Test-Path -LiteralPath $historyFile -PathType Leaf) -or
+      -not (Select-String -LiteralPath $historyFile -Pattern 'complete=1' -Quiet)) {
     throw "Installer did not seed the path-history record: $historyFile"
   }
 
@@ -153,4 +155,5 @@ try {
   if (-not (Select-String -LiteralPath $residueLog -Pattern 'Cache' -Quiet)) {
     throw "Residue report does not list the protection-overlapped target."
   }
+  Remove-Item -LiteralPath $historyFile -Force -ErrorAction SilentlyContinue
 }

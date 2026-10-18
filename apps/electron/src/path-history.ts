@@ -6,8 +6,8 @@ import { readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { withDesktopFileWriter, writeDesktopFileAtomic } from './atomic-file.ts'
 
-/** Record file written beside the installed executable; the replacing uninstaller migrates
- * it next to the default userData so the succeeding install adopts it. */
+/** Record file stored beside the default userData (`%APPDATA%`), a location the app can
+ * always write. Installs that kept it beside the executable are adopted and removed. */
 export const PATH_HISTORY_FILE = 'rivetdeck-path-history.ini'
 
 /** Parsed path-history record: `complete` is false whenever history cannot prove it
@@ -55,13 +55,14 @@ export function renderPathHistory(record: PathHistoryRecord): string {
 
 /**
  * Merge this launch's resolved userData and DSH_HOME into the install's durable record.
- * Values accumulate — earlier roots are never overwritten or dropped. When the record is
- * absent but the replaced uninstaller migrated one beside the default userData, that
- * record is adopted (its completeness survives the upgrade); with no record at all the
- * launch starts a new record marked incomplete, because the first record after an upgrade
- * cannot prove what ran before it.
- * @param options installDir (directory of the running executable), appDataDir (fixed
- *   roaming root where migrated records land), plus this launch's resolved roots.
+ * Values accumulate — earlier roots are never overwritten or dropped. The record lives
+ * beside the default userData so an unelevated process can always update it; a record
+ * left beside the executable by an install-era layout is merged in and removed. With no
+ * record at all the launch starts a new record marked incomplete, because the first
+ * record cannot prove which roots ran before it existed.
+ * @param options appDataDir (fixed roaming root that survives install-directory removal),
+ *   installDir (legacy record location adopted on first launch), plus this launch's
+ *   resolved roots.
  * @returns The merged record, or undefined when nothing could be persisted.
  */
 export async function mergeLaunchPathHistory(options: {
@@ -70,18 +71,23 @@ export async function mergeLaunchPathHistory(options: {
   userData: string
   dshHome: string
 }): Promise<PathHistoryRecord | undefined> {
-  const recordPath = join(options.installDir, PATH_HISTORY_FILE)
-  const migratedPath = join(options.appDataDir, PATH_HISTORY_FILE)
+  const recordPath = join(options.appDataDir, PATH_HISTORY_FILE)
+  const installPath = join(options.installDir, PATH_HISTORY_FILE)
   return withDesktopFileWriter(recordPath, async () => {
+    const installRecord = installPath === recordPath ? undefined : await readRecord(installPath)
     const existing = await readRecord(recordPath)
-    const migrated = existing === undefined ? await readRecord(migratedPath) : undefined
     const record: PathHistoryRecord = existing
-      ?? migrated
+      ?? installRecord
       ?? { complete: false, userData: [], dshHome: [] }
+    if (existing !== undefined && installRecord !== undefined) {
+      record.complete = record.complete && installRecord.complete
+      for (const path of installRecord.userData) pushUnique(record.userData, path)
+      for (const path of installRecord.dshHome) pushUnique(record.dshHome, path)
+    }
     pushUnique(record.userData, options.userData)
     pushUnique(record.dshHome, options.dshHome)
     await writeDesktopFileAtomic(recordPath, renderPathHistory(record))
-    if (migrated !== undefined) await rm(migratedPath, { force: true })
+    if (installRecord !== undefined) await rm(installPath, { force: true })
     return record
   })
 }

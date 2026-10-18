@@ -796,6 +796,19 @@ if (!primaryInstance) {
     installRendererProtocol(resolveRendererRoot(app.getAppPath()), transport.harnessProxy)
     const appPath = app.getAppPath()
     const userDataPath = app.getPath('userData')
+    harnessHome = process.env.DSH_HOME ?? resolveHarnessHome(app.getPath('home'))
+    // Record the resolved roots before the fallible startup steps: a launch that dies in
+    // network or runtime preparation must still leave this launch's paths in history.
+    if (process.platform === 'win32' && app.isPackaged) {
+      await mergeLaunchPathHistory({
+        installDir: dirname(process.execPath),
+        appDataDir: app.getPath('appData'),
+        userData: userDataPath,
+        dshHome: harnessHome,
+      }).catch((error: unknown) => {
+        console.error('desktop path history recording failed', error)
+      })
+    }
     network = new DesktopNetworkController({
       userDataPath,
       preferences: new DesktopPreferencesStore(userDataPath),
@@ -890,7 +903,6 @@ if (!primaryInstance) {
           console.error('desktop checkpoint: open-time restore prompt failed', error)
         })
     }
-    harnessHome = process.env.DSH_HOME ?? resolveHarnessHome(app.getPath('home'))
     // Pending restores confirmed during the last run execute in this pre-Host
     // window; then stat-diff + vN scan + worker confirmation surface foreign
     // writes and offer an in-place restore before the Host can read live data.
@@ -926,16 +938,6 @@ if (!primaryInstance) {
       onError: (error) => { console.error('desktop checkpoint: startup session maintenance failed', error) },
     })
     if (!canStart) return
-    if (process.platform === 'win32' && app.isPackaged) {
-      void mergeLaunchPathHistory({
-        installDir: dirname(process.execPath),
-        appDataDir: app.getPath('appData'),
-        userData: userDataPath,
-        dshHome: harnessHome,
-      }).catch((error: unknown) => {
-        console.error('desktop path history recording failed', error)
-      })
-    }
     const shim = prepareToolchainShims({ userData: userDataPath, harnessHome }, toolchains, process.platform)
     const toolchainPolicy: DesktopToolchainPolicy = {
       version: 2,

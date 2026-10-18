@@ -14,8 +14,9 @@ $installer = (Resolve-Path -LiteralPath $InstallerPath -ErrorAction Stop).Path
 $userData = Join-Path $env:APPDATA 'Rivetdeck'
 $updaterCache = Join-Path $env:LOCALAPPDATA 'rivetdeck-updater'
 $residueLog = Join-Path $env:APPDATA 'Rivetdeck-uninstall-residue.log'
-$migratedHistory = Join-Path $env:APPDATA 'rivetdeck-path-history.ini'
-$historyName = 'rivetdeck-path-history.ini'
+# The path-history record lives beside the default userData so the app can always write
+# it; it survives install-directory removal by design.
+$historyFile = Join-Path $env:APPDATA 'rivetdeck-path-history.ini'
 
 function Assert-Exists([string]$Path, [string]$Because) {
   if (-not (Test-Path -LiteralPath $Path)) { throw "Missing $Path ($Because)" }
@@ -32,7 +33,7 @@ function Assert-Residue([string]$Pattern) {
 
 # A scenario always starts from a clean machine state so leftovers cannot mask a skip.
 function Reset-State {
-  foreach ($path in @($userData, $updaterCache, $residueLog, $migratedHistory)) {
+  foreach ($path in @($userData, $updaterCache, $residueLog, $historyFile)) {
     Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue
   }
 }
@@ -42,7 +43,7 @@ function Install-To([string]$Dir) {
   if ($install.ExitCode -ne 0) { throw "Installer exited with code $($install.ExitCode)." }
   Assert-Exists (Join-Path $Dir 'Rivetdeck.exe') 'install must complete'
   Assert-Exists (Join-Path $Dir 'Uninstall Rivetdeck.exe') 'install must complete'
-  Assert-Exists (Join-Path $Dir $historyName) 'a fresh install seeds the path-history record'
+  Assert-Exists $historyFile 'a fresh install seeds the path-history record'
 }
 
 function Uninstall-From([string]$Dir, [string[]]$ExtraArgs = @()) {
@@ -82,7 +83,7 @@ try {
   Reset-State
   Install-To $installDirectory
   Plant-UserData
-  Set-Content -LiteralPath (Join-Path $installDirectory $historyName) -Value "complete=0`r`n"
+  Set-Content -LiteralPath $historyFile -Value "complete=0`r`n"
   Uninstall-From $installDirectory '--delete-app-data'
   Assert-Exists (Join-Path $userData 'desktop-preferences.json') 'incomplete history never fully removes userData'
   Assert-Exists (Join-Path $userData 'Cookies') 'incomplete history never fully removes userData'
@@ -93,7 +94,7 @@ try {
   Reset-State
   Install-To $installDirectory
   Plant-UserData
-  Set-Content -LiteralPath (Join-Path $installDirectory $historyName) -Value "complete=1`r`ndshHome=relative\path`r`n"
+  Set-Content -LiteralPath $historyFile -Value "complete=1`r`ndshHome=relative\path`r`n"
   New-Item -ItemType Directory -Force -Path (Join-Path $updaterCache 'pending') | Out-Null
   Uninstall-From $installDirectory '--delete-app-data'
   Assert-Exists (Join-Path $userData 'Cache\data_0') 'an unresolvable protection claim blocks every deletion'
@@ -107,7 +108,7 @@ try {
   Uninstall-From $installDirectory '--updated'
   Assert-Exists (Join-Path $userData 'Cache\data_0') 'updates never delete data'
   Assert-Exists (Join-Path $userData 'Cookies') 'updates never delete data'
-  Assert-Exists $migratedHistory 'the record migrates for the succeeding install'
+  Assert-Exists $historyFile 'the record survives for the succeeding install'
 
   # Scenario 5: /KEEP_APP_DATA, passed when the installer replaces an old uninstaller, preserves all data.
   Reset-State
@@ -115,7 +116,7 @@ try {
   Plant-UserData
   Uninstall-From $installDirectory '/KEEP_APP_DATA'
   Assert-Exists (Join-Path $userData 'Cache\data_0') 'uninstaller replacement never deletes data'
-  Assert-Exists $migratedHistory 'the record migrates for the succeeding install'
+  Assert-Exists $historyFile 'the record survives for the succeeding install'
 
   # Scenario 6: a locked file inside a removal target is tolerated and reported.
   Reset-State
@@ -153,7 +154,7 @@ try {
   Set-Content -LiteralPath (Join-Path $extraRoot 'Cache\data_0') -Value 'x'
   Set-Content -LiteralPath (Join-Path $extraRoot 'Local State') -Value 'x'
   Set-Content -LiteralPath (Join-Path $extraRoot 'desktop-preferences.json') -Value '{}'
-  Add-Content -LiteralPath (Join-Path $installDirectory $historyName) -Value "userData=$extraRoot"
+  Add-Content -LiteralPath $historyFile -Value "userData=$extraRoot"
   Uninstall-From $installDirectory
   Assert-Missing (Join-Path $extraRoot 'Cache') 'recorded userData roots get tiered cleanup'
   Assert-Exists (Join-Path $extraRoot 'desktop-preferences.json') 'recorded userData roots keep protected data'
@@ -164,9 +165,9 @@ try {
   # which branch the uninstaller took (skipped vs tiered vs full removal).
   Write-Output "residue log: $(Test-Path -LiteralPath $residueLog)"
   if (Test-Path -LiteralPath $residueLog) { Get-Content -LiteralPath $residueLog }
-  Write-Output "history seed: $(Test-Path -LiteralPath (Join-Path $installDirectory $historyName))"
-  if (Test-Path -LiteralPath (Join-Path $installDirectory $historyName)) {
-    Get-Content -LiteralPath (Join-Path $installDirectory $historyName)
+  Write-Output "history record: $(Test-Path -LiteralPath $historyFile)"
+  if (Test-Path -LiteralPath $historyFile) {
+    Get-Content -LiteralPath $historyFile
   }
   Write-Output "userData contents:"
   Get-ChildItem -LiteralPath $userData -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object { Write-Output $_.FullName }
