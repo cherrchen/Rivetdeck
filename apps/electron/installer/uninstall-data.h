@@ -40,6 +40,38 @@ inline bool Normalize(LPCWSTR input, std::wstring& result) {
     return true;
 }
 
+// Resolve links in a protected path, retaining the nearest existing directory handle
+// until cleanup finishes. Missing suffixes inherit that directory's resolved location;
+// broken links and inaccessible ancestors cannot establish a safe cleanup location.
+inline DWORD ResolveProtectionPath(const std::wstring& path, std::wstring& resolved, Handles& handles) {
+    std::wstring ancestor = path, suffix;
+    for (;;) {
+        const std::wstring extended = L"\\\\?\\" + ancestor;
+        HANDLE handle = CreateFileW(extended.c_str(), FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+        if (handle != INVALID_HANDLE_VALUE) {
+            handles.values.push_back(handle);
+            WCHAR buffer[32768];
+            DWORD length = GetFinalPathNameByHandleW(handle, buffer, ARRAYSIZE(buffer), FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+            if (!length) return GetLastError();
+            if (length >= ARRAYSIZE(buffer)) return ERROR_FILENAME_EXCED_RANGE;
+            std::wstring finalPath(buffer, length);
+            if (finalPath.compare(0, 4, L"\\\\?\\") != 0) return ERROR_INVALID_NAME;
+            finalPath.erase(0, 4);
+            if (finalPath.size() == 3 && !suffix.empty()) finalPath.pop_back();
+            return Normalize((finalPath + suffix).c_str(), resolved) ? ERROR_SUCCESS : ERROR_INVALID_NAME;
+        }
+        const DWORD error = GetLastError();
+        if (error != ERROR_FILE_NOT_FOUND && error != ERROR_PATH_NOT_FOUND) return error;
+        if (GetFileAttributesW(extended.c_str()) != INVALID_FILE_ATTRIBUTES || ancestor.size() <= 3)
+            return error;
+        const size_t separator = ancestor.rfind(L'\\');
+        suffix = ancestor.substr(separator) + suffix;
+        ancestor.resize(separator == 2 ? 3 : separator);
+    }
+}
+
 // Listing access takes part in share checks, so the open handle refuses the DELETE access a rename or removal needs.
 inline DWORD Pin(const std::wstring& path, Handles& handles) {
     HANDLE handle = CreateFileW((L"\\\\?\\" + path).c_str(), FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES,
@@ -101,11 +133,15 @@ inline DWORD Remove(LPCWSTR input, LPCWSTR installation, LPCWSTR protectedRoot) 
     std::wstring path, install;
     if (!Normalize(input, path) || !Normalize(installation, install)) return ERROR_INVALID_NAME;
     if (Contains(path, install) || Contains(install, path)) return ERROR_ACCESS_DENIED;
+    Handles protectedHandles;
     if (protectedRoot && *protectedRoot) {
-        std::wstring home;
+        std::wstring home, resolvedHome;
         // An unusable protected root cannot establish separation from retained data.
         if (!Normalize(protectedRoot, home)) return ERROR_INVALID_NAME;
         if (Contains(path, home) || Contains(home, path)) return ERROR_ACCESS_DENIED;
+        const DWORD error = ResolveProtectionPath(home, resolvedHome, protectedHandles);
+        if (error) return error;
+        if (Contains(path, resolvedHome) || Contains(resolvedHome, path)) return ERROR_ACCESS_DENIED;
     }
     struct ComScope {
         HRESULT result = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);

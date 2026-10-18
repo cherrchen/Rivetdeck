@@ -317,6 +317,7 @@ struct CleanupRequest {
 struct CleanupState {
     std::vector<std::wstring> entries;
     std::vector<std::wstring> protection;
+    uninstall_data::Handles protectedHandles;
     int removed = 0;
     DWORD firstError = ERROR_SUCCESS;
 
@@ -326,6 +327,15 @@ struct CleanupState {
 
     void skip(const std::wstring& path, const wchar_t* reason) {
         entries.push_back(path + L'\t' + reason);
+    }
+
+    bool protect(const std::wstring& path) {
+        PushUnique(protection, path);
+        std::wstring resolved;
+        const DWORD error = uninstall_data::ResolveProtectionPath(path, resolved, protectedHandles);
+        if (error) return false;
+        PushUnique(protection, resolved);
+        return true;
     }
 
     bool overlapsProtection(const std::wstring& path) const {
@@ -350,22 +360,27 @@ struct CleanupState {
     }
 };
 
-// Removes every name-keyed pure cache directory that exists directly below `root`.
+// Cache names alone cannot exclude an unrecorded Harness home in legacy data.
+// Without complete history each existing cache stays whole and is reported.
 inline void RemoveNamedCaches(CleanupState& state, const std::wstring& root,
-                              const std::wstring& installation, const std::wstring& protectedHome) {
+                              const std::wstring& installation, const std::wstring& protectedHome,
+                              bool completeHistory) {
     static const wchar_t* caches[] = {
         L"Cache", L"Code Cache", L"GPUCache", L"DawnGraphiteCache", L"DawnWebGPUCache",
     };
     for (const wchar_t* cache : caches) {
         const std::wstring path = root + L'\\' + cache;
-        if (PathExists(path)) state.remove(path, installation, protectedHome);
+        if (!PathExists(path)) continue;
+        if (completeHistory) state.remove(path, installation, protectedHome);
+        else state.skip(path, L"cache isolation requires complete history");
     }
 }
 
 // Tiered cleanup of one userData root: rebuildable toolchains, command shims, and pure
 // caches. Foreign or unverifiable targets are skipped whole and reported.
 inline void CleanupUserDataTiered(CleanupState& state, const std::wstring& root,
-                                  const std::wstring& installation, const std::wstring& protectedHome) {
+                                  const std::wstring& installation, const std::wstring& protectedHome,
+                                  bool completeHistory) {
     const std::wstring toolchains = root + L"\\managed-toolchains";
     if (PathExists(toolchains)) {
         if (VerifyManagedToolchains(toolchains)) state.remove(toolchains, installation, protectedHome);
@@ -384,14 +399,14 @@ inline void CleanupUserDataTiered(CleanupState& state, const std::wstring& root,
             state.skip(shims, L"unexpected content");
         }
     }
-    RemoveNamedCaches(state, root, installation, protectedHome);
+    RemoveNamedCaches(state, root, installation, protectedHome, completeHistory);
     // Session partitions hold non-cache browser data; only their pure cache directories
     // go. A partition tree that exists but cannot be listed leaves caches behind, so the
     // root itself lands in the residue report.
     const std::wstring partitions = root + L"\\Partitions";
     if (!ForEachEntry(partitions, [&](const WIN32_FIND_DATAW& entry) {
         if (!IsDirectory(entry) || (entry.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) return true;
-        RemoveNamedCaches(state, partitions + L'\\' + entry.cFileName, installation, protectedHome);
+        RemoveNamedCaches(state, partitions + L'\\' + entry.cFileName, installation, protectedHome, completeHistory);
         return true;
     })) {
         state.skip(partitions, L"could not enumerate partition caches");
@@ -419,17 +434,18 @@ inline DWORD Cleanup(const CleanupRequest& request) {
     if (request.protectedHome != nullptr && request.protectedHome[0] != L'\0') {
         if (!uninstall_data::Normalize(request.protectedHome, protectedHome))
             unresolvable = true;
-        else
-            PushUnique(state.protection, protectedHome);
+        else if (!state.protect(protectedHome))
+            unresolvable = true;
     }
-    for (const std::wstring& home : history.homes) PushUnique(state.protection, home);
+    for (const std::wstring& home : history.homes)
+        if (!state.protect(home)) unresolvable = true;
 
     std::vector<std::wstring> roots;
     if (userDataOk) PushUnique(roots, userData);
     for (const std::wstring& recorded : history.userData) PushUnique(roots, recorded);
 
-    const bool mayRemoveAll = request.deleteAppData != 0
-        && history.present && history.complete && !history.damaged && !unresolvable;
+    const bool completeHistory = history.present && history.complete && !history.damaged && !unresolvable;
+    const bool mayRemoveAll = request.deleteAppData != 0 && completeHistory;
 
     if (unresolvable) {
         for (const std::wstring& root : roots)
@@ -449,7 +465,7 @@ inline DWORD Cleanup(const CleanupRequest& request) {
                 state.remove(root, installation, protectedHome);
                 continue;
             }
-            CleanupUserDataTiered(state, root, installation, protectedHome);
+            CleanupUserDataTiered(state, root, installation, protectedHome, completeHistory);
         }
         if (updaterOk && PathExists(updaterCache)) {
             if (VerifyUpdaterCache(updaterCache)) state.remove(updaterCache, installation, protectedHome);

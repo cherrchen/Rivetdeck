@@ -6,7 +6,7 @@ This guide lists the files Rivetdeck leaves behind after removal and how to dele
 
 ## Windows (NSIS installer)
 
-The assisted NSIS uninstaller removes the install directory, `managed-toolchains/`, `electron/toolchains/bin`, named Chromium cache directories (`Cache/`, `Code Cache/`, `GPUCache/`, `DawnGraphiteCache/`, `DawnWebGPUCache/`, and their per-partition equivalents), and `%LOCALAPPDATA%\rivetdeck-updater`. Updates and uninstaller replacement delete no data at all.
+The assisted NSIS uninstaller removes the install directory, `managed-toolchains/`, `electron/toolchains/bin`, named Chromium cache directories (`Cache/`, `Code Cache/`, `GPUCache/`, `DawnGraphiteCache/`, `DawnWebGPUCache/`, and their per-partition equivalents), and `%LOCALAPPDATA%\rivetdeck-updater`. Named caches are removed only with complete path history; missing or incomplete history leaves them intact and lists them in the residue report. Reinstalling over legacy user data keeps history incomplete. Updates and uninstaller replacement delete no data at all.
 
 | Location | Contents | After uninstall |
 | --- | --- | --- |
@@ -15,7 +15,7 @@ The assisted NSIS uninstaller removes the install directory, `managed-toolchains
 | `%LOCALAPPDATA%\rivetdeck-updater` | Downloaded update packages | Removed by the uninstaller |
 | `%APPDATA%\rivetdeck-path-history.ini` | Record of every `userData` and `DSH_HOME` root the product used | Preserved — it is what lets a later uninstall protect or remove the right roots; delete manually if unwanted |
 
-Running `"Uninstall Rivetdeck.exe" --delete-app-data` requests removal of the whole `%APPDATA%\Rivetdeck`. It proceeds only when the install's path-history record exists and is complete; otherwise the directory is skipped and reported in the residue log. To delete it regardless, remove `%APPDATA%\Rivetdeck` manually.
+Running `"Uninstall Rivetdeck.exe" --delete-app-data` requests removal of the whole `%APPDATA%\Rivetdeck`. It proceeds only when the install's path-history record exists and is complete; otherwise full removal is skipped, named caches are retained, and the residue log reports both. To delete it regardless, remove `%APPDATA%\Rivetdeck` manually.
 
 ## macOS
 

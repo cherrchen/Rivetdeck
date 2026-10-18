@@ -87,7 +87,7 @@ try {
   Uninstall-From $installDirectory '--delete-app-data'
   Assert-Exists (Join-Path $userData 'desktop-preferences.json') 'incomplete history never fully removes userData'
   Assert-Exists (Join-Path $userData 'Cookies') 'incomplete history never fully removes userData'
-  Assert-Missing (Join-Path $userData 'Cache') 'tiered cleanup still applies'
+  Assert-Exists (Join-Path $userData 'Cache\data_0') 'incomplete history cannot prove cache isolation'
   Assert-Residue 'Rivetdeck'
 
   # Scenario 3: --delete-app-data with a damaged protection claim refuses every target.
@@ -158,6 +158,38 @@ try {
   Uninstall-From $installDirectory
   Assert-Missing (Join-Path $extraRoot 'Cache') 'recorded userData roots get tiered cleanup'
   Assert-Exists (Join-Path $extraRoot 'desktop-preferences.json') 'recorded userData roots keep protected data'
+
+  # An older uninstall leaves data without registration or a history record.
+  Reset-State
+  Plant-UserData
+  $legacyHome = Join-Path $userData 'Cache\shared-home'
+  New-Item -ItemType Directory -Force -Path $legacyHome | Out-Null
+  Set-Content -LiteralPath (Join-Path $legacyHome 'sessions.jsonl') -Value 'retained'
+  Install-To $installDirectory
+  if (-not (Select-String -LiteralPath $historyFile -Pattern '^complete=0$' -Quiet)) {
+    throw 'Reinstall over legacy user data must seed incomplete history.'
+  }
+  Uninstall-From $installDirectory '--delete-app-data'
+  Assert-Exists (Join-Path $legacyHome 'sessions.jsonl') 'legacy homes inside caches stay protected'
+  Assert-Residue 'Cache'
+
+  # A recorded home alias outside userData protects its real target inside userData.
+  Reset-State
+  Install-To $installDirectory
+  Plant-UserData
+  $sharedHome = Join-Path $userData 'Cache\shared-home'
+  New-Item -ItemType Directory -Force -Path $sharedHome | Out-Null
+  Set-Content -LiteralPath (Join-Path $sharedHome 'sessions.jsonl') -Value 'retained'
+  $homeAlias = Join-Path $scratch 'home-alias'
+  New-Item -ItemType Junction -Path $homeAlias -Target $sharedHome | Out-Null
+  try {
+    Add-Content -LiteralPath $historyFile -Value "dshHome=$homeAlias"
+    Uninstall-From $installDirectory '--delete-app-data'
+    Assert-Exists (Join-Path $sharedHome 'sessions.jsonl') 'a junction alias protects its target'
+    Assert-Residue 'protected'
+  } finally {
+    [IO.Directory]::Delete($homeAlias)
+  }
 
   Write-Output 'All uninstall data-cleanup scenarios passed.'
 } catch {

@@ -77,7 +77,8 @@ export function renderPathHistory(record: PathHistoryRecord): string {
  * @param options appDataDir (fixed roaming root that survives install-directory removal)
  *   plus this launch's resolved roots.
  * @returns The merged record.
- * @throws ENOENT-free read or write failures; nothing is persisted on failure.
+ * @throws Read or write failures other than an absent record. Callers must stop startup
+ *   on failure so an older complete record never omits a home this launch starts using.
  */
 export async function mergeLaunchPathHistory(options: {
   appDataDir: string

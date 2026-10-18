@@ -114,17 +114,20 @@ function renderUninstallNsh({ helperDll, updaterCacheName }) {
   ; Electron application data is always per-user: under an all-users install this section
   ; runs with the "all" shell context, where $APPDATA resolves to ProgramData, so the
   ; seed must switch back to the current user's context exactly like the uninstall side.
-  ; $installationDir stays populated when uninstallOldVersion just removed an earlier
-  ; install: a record seeded now could not prove which roots that install used, so it
-  ; must start incomplete exactly like a record created after an update.
+  ; A prior installation or surviving userData may hold an unrecorded Harness home,
+  ; including after an older version was uninstalled. Neither permits a complete seed.
   ${'${if}'} $installMode == "all"
     SetShellVarContext current
   ${'${endif}'}
   ${'${IfNot}'} ${'${isUpdated}'}
-  ${'${AndIf}'} $installationDir == ""
   ${'${AndIfNot}'} ${'${FileExists}'} "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}"
     FileOpen $0 "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}" w
-    FileWrite $0 "complete=1$\\r$\\n"
+    ${'${If}'} $installationDir == ""
+    ${'${AndIfNot}'} ${'${FileExists}'} "$APPDATA\\${'${APP_FILENAME}'}"
+      FileWrite $0 "complete=1$\\r$\\n"
+    ${'${Else}'}
+      FileWrite $0 "complete=0$\\r$\\n"
+    ${'${EndIf}'}
     FileClose $0
   ${'${EndIf}'}
   ${'${if}'} $installMode == "all"

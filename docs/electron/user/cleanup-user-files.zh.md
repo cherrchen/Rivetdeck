@@ -6,7 +6,7 @@
 
 ## Windows（NSIS 安装包）
 
-assisted NSIS 卸载器会删除安装目录、`managed-toolchains/`、`electron/toolchains/bin`、具名 Chromium 缓存目录（`Cache/`、`Code Cache/`、`GPUCache/`、`DawnGraphiteCache/`、`DawnWebGPUCache/` 及各分区的对应目录）和 `%LOCALAPPDATA%\rivetdeck-updater`。更新与卸载器替换完全不删除数据。
+assisted NSIS 卸载器会删除安装目录、`managed-toolchains/`、`electron/toolchains/bin`、具名 Chromium 缓存目录（`Cache/`、`Code Cache/`、`GPUCache/`、`DawnGraphiteCache/`、`DawnWebGPUCache/` 及各分区的对应目录）和 `%LOCALAPPDATA%\rivetdeck-updater`。只有路径历史完整时才会删除具名缓存；历史缺失或不完整时会整体保留缓存，并将其列入残留报告。在遗留用户数据上重装会保持历史不完整。更新与卸载器替换完全不删除数据。
 
 | 位置 | 内容 | 卸载后 |
 | --- | --- | --- |
@@ -15,7 +15,7 @@ assisted NSIS 卸载器会删除安装目录、`managed-toolchains/`、`electron
 | `%LOCALAPPDATA%\rivetdeck-updater` | 下载的更新包 | 由卸载器删除 |
 | `%APPDATA%\rivetdeck-path-history.ini` | 产品使用过的全部 `userData` 与 `DSH_HOME` 根目录记录 | 保留——后续卸载依靠它保护或删除正确的根目录；不需要时可手动删除 |
 
-运行 `"Uninstall Rivetdeck.exe" --delete-app-data` 会请求删除整个 `%APPDATA%\Rivetdeck`。仅当该安装的路径历史记录存在且完整时才会执行；否则该目录被跳过并写入残留日志。如需强制删除，请手动移除 `%APPDATA%\Rivetdeck`。
+运行 `"Uninstall Rivetdeck.exe" --delete-app-data` 会请求删除整个 `%APPDATA%\Rivetdeck`。仅当该安装的路径历史记录存在且完整时才会执行；否则会跳过完整删除、保留具名缓存，并将两者写入残留日志。如需强制删除，请手动移除 `%APPDATA%\Rivetdeck`。
 
 ## macOS
 

@@ -793,21 +793,19 @@ if (!primaryInstance) {
   app.quit()
 } else {
   void app.whenReady().then(async () => {
-    installRendererProtocol(resolveRendererRoot(app.getAppPath()), transport.harnessProxy)
     const appPath = app.getAppPath()
     const userDataPath = app.getPath('userData')
     harnessHome = process.env.DSH_HOME ?? resolveHarnessHome(app.getPath('home'))
-    // Record the resolved roots before the fallible startup steps: a launch that dies in
-    // network or runtime preparation must still leave this launch's paths in history.
+    // Startup must stop if protection cannot be persisted: an older complete record
+    // cannot authorize cleanup after this launch starts using an unrecorded home.
     if (process.platform === 'win32' && app.isPackaged) {
       await mergeLaunchPathHistory({
         appDataDir: app.getPath('appData'),
         userData: userDataPath,
         dshHome: harnessHome,
-      }).catch((error: unknown) => {
-        console.error('desktop path history recording failed', error)
       })
     }
+    installRendererProtocol(resolveRendererRoot(appPath), transport.harnessProxy)
     network = new DesktopNetworkController({
       userDataPath,
       preferences: new DesktopPreferencesStore(userDataPath),

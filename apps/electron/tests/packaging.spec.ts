@@ -127,10 +127,10 @@ it('wires the layered data-cleanup uninstaller through the native helper', async
     expect(nsh).toContain('FileOpen $0 "$APPDATA\\${RIVETDECK_PATH_HISTORY}" w')
     expect(nsh).not.toContain('$hasPerUserInstallation')
     const installMacro = nsh.slice(nsh.indexOf('!macro customInstall'), nsh.indexOf('!macro customUnInstall'))
-    // A seed claims coverage only on a truly fresh install: when uninstallOldVersion
-    // just removed an earlier install it leaves $installationDir set, and a record
-    // seeded now could not prove which roots that install used.
-    expect(installMacro).toContain('${AndIf} $installationDir == ""')
+    // Unregistered legacy installs can still leave data containing an unrecorded home.
+    expect(installMacro).toContain('${If} $installationDir == ""')
+    expect(installMacro).toContain('${AndIfNot} ${FileExists} "$APPDATA\\${APP_FILENAME}"')
+    expect(installMacro).toContain('FileWrite $0 "complete=0$\\r$\\n"')
     // Electron data is always per-user: under an all-users install the section runs in
     // the "all" shell context where $APPDATA is ProgramData, so the seed brackets its
     // write with the same context switch the uninstall side uses.

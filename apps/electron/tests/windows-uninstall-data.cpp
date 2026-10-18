@@ -356,17 +356,113 @@ int wmain(int argc, wchar_t** argv) {
     File(junctionTarget + L"\\keep.me");
     assert(MakeJunction(cache3 + L"\\linked", junctionTarget));
     {
-        const std::wstring missingHistory = root + L"\\missing.ini";
+        const std::wstring cacheHistory = root + L"\\cache-history.ini";
+        WriteText(cacheHistory, "complete=1\r\n");
         uninstall_cleanup::CleanupRequest request;
         request.userData = userData3.c_str();
         request.installation = installation.c_str();
         request.protectedHome = L"";
-        request.historyFile = missingHistory.c_str();
+        request.historyFile = cacheHistory.c_str();
         request.updaterCache = updater.c_str();
         request.residueReport = report.c_str();
         assert(uninstall_cleanup::Cleanup(request) == ERROR_SUCCESS);
         assert(!Exists(cache3));
         assert(Exists(junctionTarget + L"\\keep.me"));
+    }
+
+    // Legacy history cannot exclude a Harness home inside a cache, even without a purge flag.
+    for (bool missingHistory : {false, true}) {
+        for (int purge : {0, 1}) {
+            const std::wstring legacy = root + L"\\legacy-" + (missingHistory ? L"missing-" : L"incomplete-")
+                + std::to_wstring(purge);
+            Mkdir(legacy);
+            File(legacy + L"\\Local State");
+            Mkdir(legacy + L"\\Cache");
+            Mkdir(legacy + L"\\Cache\\shared-home");
+            File(legacy + L"\\Cache\\shared-home\\sessions.jsonl");
+            Mkdir(legacy + L"\\Partitions");
+            Mkdir(legacy + L"\\Partitions\\worker");
+            Mkdir(legacy + L"\\Partitions\\worker\\GPUCache");
+            File(legacy + L"\\Partitions\\worker\\GPUCache\\.credentials.yaml");
+            Mkdir(legacy + L"\\managed-toolchains");
+            SeedToolchains(legacy + L"\\managed-toolchains");
+            const std::wstring record = legacy + L"\\history.ini";
+            if (!missingHistory) WriteText(record, "complete=0\r\n");
+            uninstall_cleanup::CleanupRequest request;
+            request.userData = legacy.c_str();
+            request.installation = installation.c_str();
+            request.historyFile = record.c_str();
+            request.updaterCache = updater.c_str();
+            request.residueReport = report.c_str();
+            request.deleteAppData = purge;
+            int residue = 0;
+            request.residue = &residue;
+            assert(uninstall_cleanup::Cleanup(request) == ERROR_SUCCESS);
+            assert(Exists(legacy + L"\\Cache\\shared-home\\sessions.jsonl"));
+            assert(Exists(legacy + L"\\Partitions\\worker\\GPUCache\\.credentials.yaml"));
+            assert(!Exists(legacy + L"\\managed-toolchains"));
+            assert(residue >= 2);
+        }
+    }
+
+    // Protection may enter a real deletion directory through a junction outside it.
+    const std::wstring aliasData = root + L"\\alias-data";
+    const std::wstring aliasHome = aliasData + L"\\Cache\\shared-home";
+    const std::wstring homeAlias = root + L"\\home-alias";
+    const std::wstring aliasHistory = root + L"\\alias-history.ini";
+    Mkdir(aliasData);
+    File(aliasData + L"\\Local State");
+    Mkdir(aliasData + L"\\Cache");
+    Mkdir(aliasHome);
+    File(aliasHome + L"\\sessions.jsonl");
+    assert(MakeJunction(homeAlias, aliasHome));
+    assert(uninstall_data::Remove((aliasData + L"\\Cache").c_str(), installation.c_str(), homeAlias.c_str())
+        == ERROR_ACCESS_DENIED);
+    {
+        uninstall_data::Handles handles;
+        std::wstring resolved;
+        assert(uninstall_data::ResolveProtectionPath(homeAlias + L"\\missing\\child", resolved, handles) == ERROR_SUCCESS);
+        assert(uninstall_cleanup::EqualPath(resolved, aliasHome + L"\\missing\\child"));
+    }
+    for (bool recordedHome : {false, true}) {
+        for (int purge : {0, 1}) {
+            WriteText(aliasHistory, "complete=1\r\n" + (recordedHome
+                ? "dshHome=" + Narrow(homeAlias) + "\r\n" : std::string()));
+            uninstall_cleanup::CleanupRequest request;
+            request.userData = aliasData.c_str();
+            request.installation = installation.c_str();
+            request.protectedHome = recordedHome ? L"" : homeAlias.c_str();
+            request.historyFile = aliasHistory.c_str();
+            request.updaterCache = updater.c_str();
+            request.residueReport = report.c_str();
+            request.deleteAppData = purge;
+            int residue = 0;
+            request.residue = &residue;
+            assert(uninstall_cleanup::Cleanup(request) == ERROR_SUCCESS);
+            assert(Exists(aliasHome + L"\\sessions.jsonl"));
+            assert(residue > 0);
+        }
+    }
+
+    const std::wstring brokenTarget = root + L"\\removed-home";
+    const std::wstring brokenAlias = root + L"\\broken-alias";
+    Mkdir(brokenTarget);
+    assert(MakeJunction(brokenAlias, brokenTarget));
+    assert(RemoveDirectoryW(brokenTarget.c_str()));
+    WriteText(aliasHistory, "complete=1\r\ndshHome=" + Narrow(brokenAlias) + "\r\n");
+    {
+        uninstall_cleanup::CleanupRequest request;
+        request.userData = aliasData.c_str();
+        request.installation = installation.c_str();
+        request.historyFile = aliasHistory.c_str();
+        request.updaterCache = updater.c_str();
+        request.residueReport = report.c_str();
+        request.deleteAppData = 1;
+        int residue = 0;
+        request.residue = &residue;
+        assert(uninstall_cleanup::Cleanup(request) == ERROR_SUCCESS);
+        assert(Exists(aliasHome + L"\\sessions.jsonl"));
+        assert(residue > 0);
     }
 
     assert(RemoveDirectoryW(installation.c_str()));
