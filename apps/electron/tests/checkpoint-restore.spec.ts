@@ -218,7 +218,7 @@ describe('restoreSession', () => {
       files: { 'session.v4.jsonl.zstd': 'VERIFIED' },
     }])
     const outcome = await restore(home, 'session-parent-1', { hostRunning: () => true }).run
-    expect(outcome.kind === 'refused' ? outcome.reason : '').toContain('Host')
+    expect(outcome).toMatchObject({ kind: 'refused', reason: { key: 'host-running' } })
   })
 
   it('refuses a checkpoint whose manifest lacks related-source headers', async () => {
@@ -235,7 +235,7 @@ describe('restoreSession', () => {
       }],
     }))
     const outcome = await restore(home, 'session-parent-1').run
-    expect(outcome.kind === 'refused' ? outcome.reason : '').toContain('header')
+    expect(outcome).toMatchObject({ kind: 'refused', reason: { key: 'incomplete-headers' } })
     expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('LIVE')
   })
 
@@ -250,7 +250,7 @@ describe('restoreSession', () => {
       home, sessionId: 'session-parent-1', acquireLease: fakeLeases().acquire,
       validate: fakeValidator(new Set([SESSION_DIR])),
     })
-    expect(outcome.kind === 'refused' ? outcome.reason : '').toContain('no longer validates')
+    expect(outcome).toMatchObject({ kind: 'refused', reason: { key: 'revalidation-failed', dirs: [SESSION_DIR] } })
     expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('LIVE')
   })
 

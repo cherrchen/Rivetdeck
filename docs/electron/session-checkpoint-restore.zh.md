@@ -2,7 +2,7 @@
 
 [English](session-checkpoint-restore.md) | 中文
 
-> 本文所述机制已在 `apps/electron/src/checkpoint/` 实现。[机制事实](#mechanism-facts)记录其所依托的上游行为;备选方案、待决问题与验收用例各节保留产生该设计的评审记录。
+> 本文所述机制已在 `apps/electron/src/checkpoint/` 实现;[机制事实](#mechanism-facts)记录其所依托的上游行为。设计依据与待办事项归 [Agent Note](../../.agents/notes/implemented/feature/2026-10-18-session-checkpoint-restore.zh.md) 所有。
 
 ## Summary
 
@@ -14,10 +14,7 @@ Rivetdeck 与 CLI `dsh --profile web` 共享同一个 `$DSH_HOME`,因此新版 h
 - [机制事实](#mechanism-facts)
 - [失败模式](#failure-modes)
 - [设计](#design)
-- [备选方案对比](#alternatives-considered)
 - [局限与风险](#limits-and-risks)
-- [待决问题](#open-questions)
-- [验收用例](#acceptance-cases)
 - [源码索引](#source-index)
 
 <a id="background"></a>
@@ -26,7 +23,7 @@ Rivetdeck 与 CLI `dsh --profile web` 共享同一个 `$DSH_HOME`,因此新版 h
 
 桌面应用监督一个跑在共享 `web` profile 上的 Harness Host:`apps/electron/src/main.ts` 从 `DSH_HOME` 或 `~/.dsh` 解析 `harnessHome`,`apps/electron/src/host.ts` 在 `$DSH_HOME/profiles/web` 启动该 profile。CLI `dsh --profile web` 打开的是同一个 home。两侧读写同一份 session 存储、profile 组合、settings、credentials 和 KV storages;只有 `$DSH_HOME/electron/` 是桌面端私有的。
 
-因此新版 CLI 可能写入内置 Harness 读不了的数据。目前唯一的补救是在更新的主机上打开受影响的数据——这正是促成本次评审的事故报告所记录的(dsh-plugin-git PR #20:`session.v4.jsonl.zstd` 内 seq 24 处的 `job/registered`)。[共享 Harness Home](shared-dsh-home.zh.md) 描述了当前面向用户的行为。
+因此新版 CLI 可能写入内置 Harness 读不了的数据。没有 checkpoint 时唯一的补救是在更新的主机上打开受影响的数据——这正是促成本机制的事故报告所记录的(dsh-plugin-git PR #20:`session.v4.jsonl.zstd` 内 seq 24 处的 `job/registered`)。[共享 Harness Home](shared-dsh-home.zh.md) 描述了当前面向用户的行为。
 
 <a id="mechanism-facts"></a>
 
@@ -74,22 +71,9 @@ Rivetdeck 与 CLI `dsh --profile web` 共享同一个 `$DSH_HOME`,因此新版 h
 
 **Profile 恢复独立且属 post-v1。** Profile 作用于所有 session,不能随单个 session 隐式回滚。其恢复是独立事务:上述受管理文件集加 home patch,在共享 profile 写锁(`withFileLock(package.json)` 先例)下应用,依赖重建通过内置包管理器遵守 `pnpm-lock.yaml`——现有 `prepareCoreProfile` 在 `package.json` 存在时直接返回,不能充当该路径——安装失败时回退,包括已被安装过程改过的 `node_modules` 树。v1 备份这些文件,但不宣称覆盖模式 C。
 
-**恢复范围如实说明。** 恢复一个 session 不会恢复周围的世界:workspace 文件、外部工具副作用、覆盖集外的插件存储保持较新状态,持久 schedule 仍可能向恢复后的 session 投递。确认 UI 要写明 checkpoint 时间、将被隐藏的数据范围、quarantine 位置与这些限制;恢复后首次启动能否立即执行后台任务列为下方待决。
+**恢复范围如实说明。** 恢复一个 session 不会恢复周围的世界:workspace 文件、外部工具副作用、覆盖集外的插件存储保持较新状态,持久 schedule 仍可能向恢复后的 session 投递。确认 UI 要写明 checkpoint 时间、将被隐藏的数据范围、quarantine 位置与这些限制;恢复后首次启动能否立即执行后台任务在 Agent Note 中留作待办。
 
 **需要传达的语义。** 恢复是回滚,不是合并。新版 harness 写入的事件对内置 build 不可见(换回 quarantine 可恢复);如果内置 build 随后写这个回滚过的 session,历史就永久分叉——格式设计上没有从后继代回退到前代的路径。
-
-<a id="alternatives-considered"></a>
-
-## 备选方案对比
-
-| 方案 | 覆盖 A | 覆盖 B | 代价 / 缺陷 |
-| ---- | ------ | ------ | ----------- |
-| 本提案:经校验的退出 checkpoint + journaled per-session 恢复 | 是 | 是 | Main 进程实现;回滚语义;需用户确认 |
-| 桌面端独立 sessions root(一行 overlay) | 免疫 | 免疫 | 桌面端与 CLI 不再共享会话历史——违背需求 |
-| 启动时清扫、隐藏未来代文件 | 是 | 否——污染在共享的当前代文件内部 | 静默截断可见历史 |
-| sanitize-fork:解码、剔除未知事件、写成新 Session 副本 | 是 | 是 | 剔除事件可能留下悬空引用且需重排 seq;无安全性保证——可作恢复工具,不宜作主通路 |
-| 保持内置 Harness 与 CLI 版本对齐 | 是 | 是 | 运营手段而非机制;错位会复发 |
-| 不做(上游结论) | 否 | 否 | 该事故的唯一补救仍是"在更新的主机上打开" |
 
 <a id="limits-and-risks"></a>
 
@@ -103,36 +87,6 @@ Rivetdeck 与 CLI `dsh --profile web` 共享同一个 `$DSH_HOME`,因此新版 h
 6. 范围只覆盖桌面应用链路;纯 CLI 用户遇到同样错位时此机制无解——上游"插件侧无法修复"的结论不变。
 7. stat-diff 会标出任何外部写入,包括完全兼容的;检测中的解析确认步骤保证弹窗精确。
 8. 崩溃或强退不晋升任何内容;上一份已验证 checkpoint 仍在,因此一次恢复可能丢掉整轮 session 增量。
-
-<a id="open-questions"></a>
-
-## 待决问题
-
-1. v1 覆盖集:备份纳入 profile 配置文件,profile 恢复独立设计——评审同意;v1 不宣称覆盖模式 C。
-2. 恢复粒度:per session——评审同意;profile 与全局设置不得隐式跟随。
-3. 触发 UX:启动弹窗加打开报错入口——评审同意;默认绝不静默,确认页展示 checkpoint 时间、将被隐藏的数据范围、quarantine 位置与限制。
-4. 保留策略:轮换只限制空间;每个 session 的最后一份已验证副本受保护——评审同意。
-5. `node_modules`:排除——评审同意,前提是有按 lockfile 的可复现安装、离线资源与安装失败回退。
-6. 无已验证副本的 session:v1 拒绝恢复并原位保留;是否另设需独立确认的 quarantine 功能留作待定。
-7. 恢复后首次启动:持久 schedule/后台任务能否立即对恢复后的状态运行?(未定。)
-8. 被强杀 run 中校验通过的文件可否晋升:v1 已定——绝不;其他策略留作后续。
-9. 前提之外的缓存一致性:`CheckpointIdentity` 中加入 epoch 或等价的上游改动,才能让陈旧写回被拒绝,而不是依赖进程不在场。(post-v1。)
-
-<a id="acceptance-cases"></a>
-
-## 验收用例
-
-1. 污染后连续两次正常退出,仍保留污染前的已验证副本。
-2. 外部写入者持有 `session.lock` 时拒绝恢复;与 acquire 竞争的写入者失败;无已验证副本且外部持锁的 session,其 live 数据原位保留。
-3. 每个切换阶段的并发 read-open 要么完成、要么瞬时失败,提交后必须成功。
-4. 在 staging、quarantine 移动、发布各阶段中断,下次启动都能安全收敛;若中断期间外部 CLI 追加过数据,journal 续做会复核文件指纹、检出漂移并停止而非覆盖。
-5. journal 提交后、缓存失效完成前退出,下次启动仍先完成失效——然后才删除 journal——再拉起 Host。
-6. 本地 Host 存活时、目标 session 租约竞争时、用户未确认退出其他实例时,恢复均须拒绝;违例且不可检测的外部读者——例如失效之后才落盘的 `coldSnapshot` 写回——属于明确的不保证情形,而非覆盖用例。
-7. drain 失败、超时、强杀与启动失败都不会淘汰好备份。
-8. 未知事件注入与 `session.vN` 注入各自在恢复后可打开。
-9. 恢复后继续写入、再换回 quarantine,两个分支的数据都保留。
-10. 无 checkpoint 时的降级:没有已验证副本时,报错信息保持诚实。
-11. (post-v1)profile 依赖版本漂移、离线安装或安装失败时,失败的 profile 恢复后原环境仍可取回——包括被安装过程改过的 `node_modules` 树。
 
 <a id="source-index"></a>
 

@@ -1,7 +1,7 @@
 /**
  * Acceptance coverage for session-checkpoint-restore cases that need the real
- * bundled backend or explicit fault injection (design doc acceptance cases
- * 1–9). Case 10 (honest refusal without a checkpoint) is covered by
+ * bundled backend or explicit fault injection (cases 1–9 of the feature's
+ * Agent Note). Case 10 (honest refusal without a checkpoint) is covered by
  * `checkpoint-detect.spec.ts`; case 11 is post-v1.
  */
 import { createHash } from 'node:crypto'
@@ -274,6 +274,11 @@ describe('acceptance case 4: interruption at each switch stage converges at next
 
 const APP_PATH = fileURLToPath(new URL('..', import.meta.url))
 const INSTALL_ANCHOR = join(APP_PATH, 'node_modules', '@deepseek-ai', 'dsh', 'package.json')
+// Production resolution re-anchors at the base bundle, which declares the
+// backend in its production dependency set (see backendRequire in validate.ts).
+const BACKEND_ANCHOR = existsSync(INSTALL_ANCHOR)
+  ? createRequire(INSTALL_ANCHOR).resolve('@deepseek-ai/dsh-base/package.json')
+  : INSTALL_ANCHOR
 const backendAvailable = existsSync(INSTALL_ANCHOR)
   && existsSync(join(fileURLToPath(new URL('../../..', import.meta.url)), 'packages', 'session', 'session-persistence-jsonl', 'lib', 'index.js'))
 
@@ -285,7 +290,7 @@ interface RealSession {
 
 /** Create one real session through the bundled backend write path. */
 async function createRealSession(home: string, id: string, cwd: string): Promise<RealSession> {
-  const req = createRequire(INSTALL_ANCHOR)
+  const req = createRequire(BACKEND_ANCHOR)
   const backend = await import(pathToFileURL(req.resolve('@deepseek-ai/dsh-session-persistence-jsonl')).href) as {
     default: unknown
   }

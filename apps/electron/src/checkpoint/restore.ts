@@ -196,6 +196,11 @@ async function resumeMember(
         }
         await mkdir(dirname(quarantinePath), { recursive: true })
         await moveFile(livePath, quarantinePath)
+        // The quarantine directory entry must be durable before the switch can
+        // be recorded committed: a crash that kept only the live-side removal
+        // would lose the file entirely, and resume would report a conflict
+        // over data the transaction promised to preserve.
+        await syncDirectory(quarantineMemberDir)
       } else if (!quarantined) {
         throw new RestoreConflict(join(member.dir, name), 'live file vanished during the interrupted restore')
       }
@@ -334,10 +339,21 @@ async function findCheckpoint(
   return undefined
 }
 
+/**
+ * Machine-readable refusal cause. Callers localize each key through the Main
+ * dictionary, so this union carries substitutions, not product copy.
+ */
+export type RestoreRefusal =
+  | { readonly key: 'host-running' }
+  | { readonly key: 'no-checkpoint' }
+  | { readonly key: 'incomplete-headers' }
+  | { readonly key: 'revalidation-failed'; readonly dirs: readonly string[] }
+  | { readonly key: 'lease-held'; readonly detail: string }
+
 export type RestoreOutcome =
   | { readonly kind: 'restored'; readonly checkpointId: string; readonly sessions: readonly string[]; readonly quarantine: string }
-  | { readonly kind: 'refused'; readonly reason: string }
-  | { readonly kind: 'conflicted'; readonly reason: string; readonly journalId: string }
+  | { readonly kind: 'refused'; readonly reason: RestoreRefusal }
+  | { readonly kind: 'conflicted'; readonly conflict: string; readonly journalId: string }
   | { readonly kind: 'failed'; readonly reason: string }
 
 export interface RestoreSessionOptions {
@@ -368,22 +384,22 @@ export interface RestoreSessionOptions {
 export async function restoreSession(options: RestoreSessionOptions): Promise<RestoreOutcome> {
   const log = options.log ?? (() => undefined)
   if (options.hostRunning?.() === true) {
-    return { kind: 'refused', reason: 'the local Harness Host is still running' }
+    return { kind: 'refused', reason: { key: 'host-running' } }
   }
   const found = await findCheckpoint(options.home, options.sessionId, options.checkpointId)
   if (found === undefined) {
-    return { kind: 'refused', reason: `no verified checkpoint copy exists for session ${options.sessionId}` }
+    return { kind: 'refused', reason: { key: 'no-checkpoint' } }
   }
   const members = resolveRestoreClosure(found.manifest, options.sessionId)
   if (members === undefined) {
-    return { kind: 'refused', reason: 'checkpoint does not record enough header data to derive the related-source closure' }
+    return { kind: 'refused', reason: { key: 'incomplete-headers' } }
   }
   // Re-validate under the current build: stored verification is validator-bound
   // and does not carry across upgrades or downgrades.
   const report = await options.validate(join(found.dir, 'sessions'), options.signal)
   const invalid = members.filter(member => !report.sessions.some(result => result.dir === member.dir && result.ok))
   if (invalid.length > 0) {
-    return { kind: 'refused', reason: `checkpoint copy no longer validates: ${invalid.map(member => member.dir).join(', ')}` }
+    return { kind: 'refused', reason: { key: 'revalidation-failed', dirs: invalid.map(member => member.dir) } }
   }
   const now = options.now ?? (() => Date.now())
   const journalId = `${now()}-${options.sessionId}`
@@ -438,7 +454,7 @@ export async function restoreSession(options: RestoreSessionOptions): Promise<Re
     if (journal.phase === 'conflicted') {
       return {
         kind: 'conflicted',
-        reason: `live data changed during the interrupted restore (${journal.conflict ?? 'unknown path'})`,
+        conflict: journal.conflict ?? 'unknown path',
         journalId: journal.id,
       }
     }
@@ -446,7 +462,7 @@ export async function restoreSession(options: RestoreSessionOptions): Promise<Re
     return { kind: 'restored', checkpointId: found.manifest.id, sessions: members.map(member => member.sessionId), quarantine: journal.quarantine }
   } catch (error) {
     if ((error as Error).name === 'SessionAlreadyOwnedError') {
-      return { kind: 'refused', reason: `session write lease is held by a live writer: ${(error as Error).message}` }
+      return { kind: 'refused', reason: { key: 'lease-held', detail: (error as Error).message } }
     }
     return { kind: 'failed', reason: error instanceof Error ? error.message : String(error) }
   } finally {

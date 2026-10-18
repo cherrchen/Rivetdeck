@@ -1,6 +1,7 @@
 /**
  * Read-only session validation through the bundled Harness's real read path.
- * The backend modules load through the supervised `dsh` install anchor, so the
+ * The backend modules resolve through the supervised install's `dsh-base`
+ * bundle — the package that declares them as production dependencies — so the
  * validating build is exactly the one the packaged Host mounts. The mounted
  * copy is never write-opened: `list` plus `open(id, 'read')` followed by full
  * pagination performs decompress, header admission, event admission, and the
@@ -86,16 +87,29 @@ interface SessionModule {
   readonly SESSION_FORMAT_VERSION: number
 }
 
+/**
+ * `createRequire` rooted at the install's `dsh-base` package. The `dsh` anchor
+ * reaches only the CLI's own production dependencies, while the backend lives
+ * in the base bundle's production set — resolving from the anchor directly
+ * cannot find it in a packaged install.
+ * @param installAnchor - `@deepseek-ai/dsh/package.json` of the supervised install.
+ * @returns A require that resolves the backend, cordis, and session modules.
+ */
+function backendRequire(installAnchor: string): NodeJS.Require {
+  const installRequire = createRequire(installAnchor)
+  return createRequire(installRequire.resolve('@deepseek-ai/dsh-base/package.json'))
+}
+
 /** Load the backend plus its own cordis/session copies, resolved from the supervised install. */
 async function loadBackendModules(installAnchor: string): Promise<{
   backend: BackendModule
   cordis: CordisModule
   session: SessionModule
 }> {
-  const backendRequire = createRequire(installAnchor)
-  const backend = await import(pathToFileURL(backendRequire.resolve('@deepseek-ai/dsh-session-persistence-jsonl')).href) as BackendModule
-  const cordis = await import(pathToFileURL(backendRequire.resolve('@deepseek-ai/cordis')).href) as CordisModule
-  const session = await import(pathToFileURL(backendRequire.resolve('@deepseek-ai/dsh-session')).href) as SessionModule
+  const requireFromBase = backendRequire(installAnchor)
+  const backend = await import(pathToFileURL(requireFromBase.resolve('@deepseek-ai/dsh-session-persistence-jsonl')).href) as BackendModule
+  const cordis = await import(pathToFileURL(requireFromBase.resolve('@deepseek-ai/cordis')).href) as CordisModule
+  const session = await import(pathToFileURL(requireFromBase.resolve('@deepseek-ai/dsh-session')).href) as SessionModule
   return { backend, cordis, session }
 }
 
@@ -106,9 +120,8 @@ async function loadBackendModules(installAnchor: string): Promise<{
  * @returns The format version the supervised build reads and writes.
  */
 export async function resolveSessionFormatVersion(installAnchor: string): Promise<number> {
-  const backendRequire = createRequire(installAnchor)
   const session = await import(
-    pathToFileURL(backendRequire.resolve('@deepseek-ai/dsh-session')).href,
+    pathToFileURL(backendRequire(installAnchor).resolve('@deepseek-ai/dsh-session')).href,
   ) as SessionModule
   return session.SESSION_FORMAT_VERSION
 }

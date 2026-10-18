@@ -7,6 +7,11 @@
  */
 
 import { formatDesktopMessage, type DesktopMainMessages } from '../locale.ts'
+import type { RestoreRefusal } from './restore.ts'
+
+function assertNever(value: never): never {
+  throw new Error(`unexpected restore refusal ${String(value)}`)
+}
 
 /** Facts one restore confirmation presents. */
 export interface RestoreDialogFacts {
@@ -84,6 +89,48 @@ export function buildNoCheckpointNotice(
     buttons: [messages.updateLater],
     defaultId: 0,
     cancelId: 0,
+  }
+}
+
+/**
+ * Render one typed restore refusal through the Main dictionary. The restore
+ * implementation returns the key plus substitutions; product copy lives here.
+ */
+export function formatRestoreRefusal(messages: DesktopMainMessages, refusal: RestoreRefusal): string {
+  switch (refusal.key) {
+    case 'host-running': return messages.sessionRestoreRefuseHostRunning
+    case 'no-checkpoint': return messages.sessionRestoreRefuseNoCheckpoint
+    case 'incomplete-headers': return messages.sessionRestoreRefuseHeaders
+    case 'revalidation-failed':
+      return formatDesktopMessage(messages.sessionRestoreRefuseValidation, { dirs: refusal.dirs.join(', ') })
+    case 'lease-held':
+      return formatDesktopMessage(messages.sessionRestoreRefuseLease, { detail: refusal.detail })
+    default: return assertNever(refusal)
+  }
+}
+
+/**
+ * Startup gate for restore journals convergence could not finish. Button 0
+ * retries convergence, button 1 boots with the journals still pending, button
+ * 2 quits — cancel resolves to quit so dismissing never boots silently over
+ * an unrecovered transaction.
+ */
+export function buildDeferredJournalsGate(
+  messages: DesktopMainMessages,
+  journalCount: number,
+): RestoreDialogOptions {
+  return {
+    type: 'warning',
+    title: messages.sessionRestoreDeferredTitle,
+    message: formatDesktopMessage(messages.sessionRestoreDeferredBody, { count: journalCount }),
+    detail: messages.sessionRestoreDeferredDetail,
+    buttons: [
+      messages.sessionRestoreDeferredRetry,
+      messages.sessionRestoreDeferredContinue,
+      messages.menuQuit,
+    ],
+    defaultId: 0,
+    cancelId: 2,
   }
 }
 

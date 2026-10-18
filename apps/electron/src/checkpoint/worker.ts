@@ -39,8 +39,12 @@ export async function runValidationWorker(
   let resultError: Error | undefined
   try {
     let buffered = ''
-    child.stdout.on('data', (chunk: Buffer) => {
-      buffered += chunk.toString('utf8')
+    // Stream-level decoding keeps a multibyte sequence split across chunks
+    // intact; per-chunk Buffer.toString would inject replacement characters
+    // into session ids, cwds, and error text inside the result JSON.
+    child.stdout.setEncoding('utf8')
+    child.stdout.on('data', (chunk: string) => {
+      buffered += chunk
       // A stdout chunk may split the result line mid-JSON; only complete
       // newline-terminated lines are parsed so a partial line never reaches
       // JSON.parse.
@@ -61,7 +65,10 @@ export async function runValidationWorker(
       }
     })
     child.stderr.on('data', (chunk: Buffer) => { process.stderr.write(chunk) })
-    const [code, signalCode] = await once(child, 'exit') as [number | null, NodeJS.Signals | null]
+    // 'exit' may fire while worker stdout still holds undelivered bytes; 'close'
+    // runs only after every stdio stream emitted its final data, so `buffered`
+    // is complete here even for large reports.
+    const [code, signalCode] = await once(child, 'close') as [number | null, NodeJS.Signals | null]
     // A worker that exited without a trailing newline may still have emitted a
     // complete result line; a truncated remainder fails the parse and reports
     // through the same malformed-result error below.

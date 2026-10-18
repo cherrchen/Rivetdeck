@@ -18,7 +18,15 @@ async function main(): Promise<void> {
     process.exit(2)
   }
   const report = await validateSessionsRoot({ sessionsRoot, installAnchor })
-  process.stdout.write(`RESULT ${JSON.stringify(report)}\n`)
+  // A report larger than the pipe's synchronous window stays queued inside the
+  // stream; exiting before the write callback runs would discard that tail, so
+  // the process may leave only after the bytes are handed to the OS.
+  await new Promise<void>((resolve, reject) => {
+    process.stdout.write(`RESULT ${JSON.stringify(report)}\n`, (error?: Error | null) => {
+      if (error) reject(error)
+      else resolve()
+    })
+  })
 }
 
 if (import.meta.main) {

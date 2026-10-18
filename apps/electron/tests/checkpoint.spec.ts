@@ -443,6 +443,35 @@ describe('runValidationWorker result framing', () => {
     expect(report).toEqual({ sessionFormatVersion: 4, sessions: [] })
   })
 
+  it('keeps a multibyte character split across chunks intact', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-worker-utf8-'))
+    roots.push(root)
+    const sessionId = 'session-😀-tail'
+    const fixture = stubWorker(root, `
+      const report = JSON.stringify({ sessionFormatVersion: 4, sessions: [{ sessionId: ${JSON.stringify(sessionId)}, dir: 'd', ok: true }] })
+      const line = Buffer.from('RESULT ' + report + '\\n')
+      const boundary = line.indexOf(0xF0)
+      process.stdout.write(line.subarray(0, boundary + 1))
+      setTimeout(() => { process.stdout.write(line.subarray(boundary + 1)) }, 30)
+    `)
+    const { runValidationWorker } = await import('../src/checkpoint/worker.ts')
+    const report = await runValidationWorker(fixture, root, join(root, 'anchor'), runtime)
+    expect(report.sessions[0]?.sessionId).toBe(sessionId)
+  })
+
+  it('parses a result larger than a single stdout window', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-worker-large-'))
+    roots.push(root)
+    const fixture = stubWorker(root, `
+      const sessions = Array.from({ length: 2000 }, (_, i) => ({ sessionId: 's-' + i, dir: 'p/s-' + i, ok: true }))
+      process.stdout.write('RESULT ' + JSON.stringify({ sessionFormatVersion: 4, sessions }) + '\\n')
+    `)
+    const { runValidationWorker } = await import('../src/checkpoint/worker.ts')
+    const report = await runValidationWorker(fixture, root, join(root, 'anchor'), runtime)
+    expect(report.sessions).toHaveLength(2000)
+    expect(report.sessions[1999]?.sessionId).toBe('s-1999')
+  })
+
   it('rejects a malformed result instead of throwing inside the stream callback', async () => {
     const root = mkdtempSync(join(tmpdir(), 'dsh-worker-bad-'))
     roots.push(root)

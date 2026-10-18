@@ -84,8 +84,10 @@ async function backendLeaseAcquirer(home: string, installAnchor: string): Promis
 
 /**
  * Converge leftover restore journals before the Host spawns. The no-journals
- * fast path returns without loading the backend; convergence failures are
- * logged and never block startup.
+ * fast path returns without loading the backend. Journals that cannot
+ * converge — held leases, missing checkpoints, per-journal failures — come
+ * back as `deferred` so the caller can gate startup on them; a throw means
+ * the sweep itself failed before inspecting every journal.
  */
 export async function convergeDesktopRestoreJournals(options: {
   readonly home: string

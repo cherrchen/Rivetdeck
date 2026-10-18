@@ -2,7 +2,7 @@
 
 English | [中文](session-checkpoint-restore.zh.md)
 
-> The mechanism described here is implemented in `apps/electron/src/checkpoint/`. [Mechanism facts](#mechanism-facts) records the upstream behavior it builds on; the alternatives, open questions, and acceptance cases record the review that produced the design.
+> The mechanism described here is implemented in `apps/electron/src/checkpoint/`; [Mechanism facts](#mechanism-facts) records the upstream behavior it builds on. The [Agent Note](../../.agents/notes/implemented/feature/2026-10-18-session-checkpoint-restore.md) owns the design rationale and the open follow-ups.
 
 ## Summary
 
@@ -14,10 +14,7 @@ Rivetdeck and CLI `dsh --profile web` share one `$DSH_HOME`, so sessions written
 - [Mechanism facts](#mechanism-facts)
 - [Failure modes](#failure-modes)
 - [Design](#design)
-- [Alternatives considered](#alternatives-considered)
 - [Limits and risks](#limits-and-risks)
-- [Open questions](#open-questions)
-- [Acceptance cases](#acceptance-cases)
 - [Source index](#source-index)
 
 <a id="background"></a>
@@ -26,7 +23,7 @@ Rivetdeck and CLI `dsh --profile web` share one `$DSH_HOME`, so sessions written
 
 The Desktop application supervises a Harness Host on the shared `web` profile: `apps/electron/src/main.ts` resolves `harnessHome` from `DSH_HOME` or `~/.dsh`, and `apps/electron/src/host.ts` boots the profile at `$DSH_HOME/profiles/web`. CLI `dsh --profile web` opens the same home. Both sides read and write the same session store, profile composition, settings, credentials, and KV storages, while `$DSH_HOME/electron/` stays Desktop-private.
 
-A newer CLI release can therefore write data the bundled Harness cannot read. Today the only recovery is opening the affected data on a newer host, as recorded in the incident report that motivated this review (dsh-plugin-git PR #20: `job/registered` at seq 24 inside `session.v4.jsonl.zstd`). [Sharing the Harness Home](shared-dsh-home.md) describes the current user-facing behavior.
+A newer CLI release can therefore write data the bundled Harness cannot read. Without a checkpoint the only recovery is opening the affected data on a newer host, as recorded in the incident report that motivated this mechanism (dsh-plugin-git PR #20: `job/registered` at seq 24 inside `session.v4.jsonl.zstd`). [Sharing the Harness Home](shared-dsh-home.md) describes the current user-facing behavior.
 
 <a id="mechanism-facts"></a>
 
@@ -74,22 +71,9 @@ Mode B is the reported incident: `0.2.1-alpha.3` added `job/registered` and `job
 
 **Profile restore is separate and post-v1.** The profile affects every session, so it cannot roll back implicitly with one session. Its restore is a distinct transaction: the managed file set above plus the home patch, applied under the shared profile writer lock (`withFileLock` on `package.json` precedent), with dependency rebuild honoring `pnpm-lock.yaml` through the bundled package manager — the current `prepareCoreProfile` path returns early when `package.json` exists and cannot serve — and a fallback that puts the previous files back when install fails, including a `node_modules` tree already mutated by the failed install. v1 backs up these files but does not claim mode C coverage.
 
-**Restore scope honesty.** Restoring a session does not restore the surrounding world: workspace files, external tool side effects, and plugin stores outside the covered set keep their newer state, and a persisted schedule may still deliver into a restored session. The confirmation UI names the checkpoint time, the data range that becomes hidden, the quarantine location, and these limits; whether the first launch after a restore may immediately run background tasks is an open question below.
+**Restore scope honesty.** Restoring a session does not restore the surrounding world: workspace files, external tool side effects, and plugin stores outside the covered set keep their newer state, and a persisted schedule may still deliver into a restored session. The confirmation UI names the checkpoint time, the data range that becomes hidden, the quarantine location, and these limits; whether the first launch after a restore may immediately run background tasks stays deferred in the Agent Note.
 
 **Semantics to communicate.** Restore rolls back; it does not merge. Events written by the newer harness become invisible to the bundled build (recoverable by swapping the quarantine back), and if the bundled build then writes to the rolled-back session, the histories diverge permanently — the format gives no fallback path from a successor generation to its predecessor.
-
-<a id="alternatives-considered"></a>
-
-## Alternatives considered
-
-| Option | Covers A | Covers B | Cost / defect |
-| ------ | -------- | -------- | ------------- |
-| This proposal: verified exit checkpoint + journaled per-session restore | Yes | Yes | Main-process implementation; rollback semantics; needs user confirmation |
-| Desktop-private sessions root (one overlay line) | Immune | Immune | Desktop and CLI stop sharing session history — against the requirement |
-| Startup sweep hiding future-generation files | Yes | No — pollution lives inside the shared current file | Silently truncates visible history |
-| Sanitize-fork: decode, drop unknown events, write a new Session copy | Yes | Yes | Dropped events can leave dangling references and need seq renumbering; no safety guarantee — a possible recovery tool, not the main path |
-| Keep the bundled Harness version-aligned with the CLI | Yes | Yes | Operational, not a mechanism; skew recurs |
-| Do nothing (upstream conclusion) | No | No | The incident's only remedy stays "open on a newer host" |
 
 <a id="limits-and-risks"></a>
 
@@ -103,36 +87,6 @@ Mode B is the reported incident: `0.2.1-alpha.3` added `job/registered` and `job
 6. Scope covers only the Desktop application's flow; a CLI-only user hitting the same skew has no recourse here — the upstream "no plugin-side fix" conclusion stands.
 7. Stat-diff flags any foreign write, including fully compatible ones; the confirm-by-parse step in detection keeps prompts precise.
 8. Crash or force-quit promotes nothing; the previous verified checkpoint remains, so a restore can drop a whole run's session growth.
-
-<a id="open-questions"></a>
-
-## Open questions
-
-1. Covered set for v1: sessions plus profile config files in the backup, with profile restore designed separately — agreed by review; v1 does not claim mode C coverage.
-2. Restore granularity: per session — agreed by review; profile and global settings must not follow implicitly.
-3. Trigger UX: startup prompt plus open-error entry — agreed by review; never silent by default, and the confirmation page shows checkpoint time, the data range that becomes hidden, the quarantine location, and the limits.
-4. Retention: rotations bound space only; every session's last verified copy is protected — agreed by review.
-5. `node_modules`: excluded — agreed by review, contingent on lockfile-pinned reproducible install, offline resources, and install-failure fallback.
-6. Sessions without a verified copy: v1 refuses to restore them and leaves live data in place; whether a separately confirmed quarantine feature is wanted stays open.
-7. Post-restore first launch: may scheduled/background tasks run immediately against restored state? (Open.)
-8. Whether validated files from a killed run may promote: resolved for v1 — never; other policies deferred.
-9. Cache coherence beyond the precondition: a `CheckpointIdentity` epoch or equivalent upstream change would let stale write-backs be rejected instead of relying on process absence. (Post-v1.)
-
-<a id="acceptance-cases"></a>
-
-## Acceptance cases
-
-1. Pollution followed by two clean exits still retains the pre-pollution verified copy.
-2. Restore is refused while a foreign writer holds `session.lock`; a writer racing the acquire loses; a session with no verified copy and a foreign lock holder keeps its live data in place.
-3. A concurrent read-open at each swap phase either completes or fails transiently, and succeeds after commit.
-4. Interruption at staging, quarantine move, or publish converges safely on the next startup; when a foreign CLI appended during the interruption, journal resume re-checks file fingerprints, detects the drift, and stops instead of overwriting.
-5. Exiting after the journal commits but before cache invalidation finishes still completes invalidation — and only then deletes the journal — before the next Host spawn.
-6. Restore refuses while the local Host is up, while the target session's lease contends, and while the user has not confirmed quitting other instances; an undetectable external reader that violates the precondition — for example a `coldSnapshot` write-back landing after invalidation — is a documented non-guarantee, not a covered case.
-7. Drain failure, timeout, kill, and failed boot do not evict a good backup.
-8. Unknown-event injection and `session.vN` injection each become openable after restore.
-9. Writing after a restore and then swapping the quarantine back preserves both branches' data.
-10. No-checkpoint degradation: the failure message stays honest when no verified copy exists.
-11. (Post-v1) Profile dependency drift, offline install, or install failure leaves the previous environment retrievable — including a `node_modules` tree mutated mid-install.
 
 <a id="source-index"></a>
 

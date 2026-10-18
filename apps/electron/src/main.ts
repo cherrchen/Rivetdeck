@@ -43,12 +43,14 @@ import {
   type DesktopSessionMaintenanceOptions,
 } from './checkpoint/index.ts'
 import { detectFormatRefusalFrame, type SessionRefusalHit } from './checkpoint/refusal.ts'
-import { readRestoreJournal, restoreJournalsDir } from './checkpoint/journal.ts'
+import { listRestoreJournals, readRestoreJournal, restoreJournalsDir } from './checkpoint/journal.ts'
 import { resolveRestoreClosure, type RestoreOutcome } from './checkpoint/restore.ts'
 import {
+  buildDeferredJournalsGate,
   buildNoCheckpointNotice,
   buildRestoreConfirm,
   buildRestoreNotice,
+  formatRestoreRefusal,
   refusalLabel,
   type RestoreDialogOptions,
 } from './checkpoint/dialog.ts'
@@ -389,10 +391,11 @@ async function notifyRestoreOutcome(sessionId: string, outcome: RestoreOutcome):
             { id: sessionId, checkpoint: outcome.checkpointId, quarantine: join(harnessHome ?? '', outcome.quarantine) }))
       case 'refused':
         return buildRestoreNotice(messages, messages.sessionRestoreRefusedTitle,
-          formatDesktopMessage(messages.sessionRestoreRefusedBody, { id: sessionId, reason: outcome.reason }))
+          formatDesktopMessage(messages.sessionRestoreRefusedBody,
+            { id: sessionId, reason: formatRestoreRefusal(messages, outcome.reason) }))
       case 'conflicted':
         return buildRestoreNotice(messages, messages.sessionRestoreConflictTitle,
-          formatDesktopMessage(messages.sessionRestoreConflictBody, { reason: outcome.reason }))
+          formatDesktopMessage(messages.sessionRestoreConflictBody, { conflict: outcome.conflict }))
       case 'failed':
         return buildRestoreNotice(messages, messages.sessionRestoreFailedTitle,
           formatDesktopMessage(messages.sessionRestoreFailedBody, { id: sessionId, reason: outcome.reason }))
@@ -781,7 +784,7 @@ if (!primaryInstance) {
     // Restore journals must converge before the Host spawns: a leftover
     // `intent` journal finishes its switch, a `committed` one completes
     // projcache invalidation, and either blocks nothing when absent.
-    const convergence = await convergeDesktopRestoreJournals({
+    let convergence = await convergeDesktopRestoreJournals({
       home: harnessHome,
       appPath,
       log: (message) => { console.error(`desktop checkpoint: ${message}`) },
@@ -789,6 +792,43 @@ if (!primaryInstance) {
       console.error('desktop checkpoint: journal convergence failed', error)
       return undefined
     })
+    // A deferred journal could not converge — a foreign writer holds a member
+    // lease or the referenced checkpoint is gone — and a failed sweep may
+    // leave journals it never inspected. An intent journal may mark a
+    // partially switched closure and a committed one still owes projcache
+    // invalidation, so the Host must not spawn over either state until the
+    // journal converges or the user explicitly chooses to proceed.
+    let deferredCount = convergence?.deferred.length
+      ?? await listRestoreJournals(harnessHome).then(paths => paths.length).catch(() => 1)
+    while (deferredCount > 0) {
+      const response = await presentRestoreDialog(
+        buildDeferredJournalsGate(
+          resolveDesktopMainLocale(app.getLocale()).messages,
+          deferredCount,
+        ),
+      )
+      if (response === 2) {
+        requestQuit()
+        return
+      }
+      if (response === 0) {
+        const retry = await convergeDesktopRestoreJournals({
+          home: harnessHome,
+          appPath,
+          log: (message) => { console.error(`desktop checkpoint: ${message}`) },
+        }).catch((error: unknown) => {
+          console.error('desktop checkpoint: journal convergence retry failed', error)
+          return undefined
+        })
+        if (retry !== undefined) convergence = retry
+        deferredCount = retry?.deferred.length ?? deferredCount
+        continue
+      }
+      console.error(
+        `desktop checkpoint: ${deferredCount} restore journal(s) left deferred by user choice`,
+      )
+      break
+    }
     // A conflicted journal means the interrupted switch stopped on live drift
     // with part of the closure possibly already replaced — surface it instead
     // of booting silently over a partially restored session.
@@ -797,7 +837,7 @@ if (!primaryInstance) {
         const journal = await readRestoreJournal(join(restoreJournalsDir(harnessHome), `${journalId}.json`))
         await notifyRestoreOutcome(journal?.targetSessionId ?? journalId, {
           kind: 'conflicted',
-          reason: journal?.conflict ?? `live files changed while restore journal ${journalId} was interrupted`,
+          conflict: journal?.conflict ?? journalId,
           journalId,
         }).catch((error: unknown) => {
           console.error('desktop checkpoint: conflict notice failed', error)
