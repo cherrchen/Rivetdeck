@@ -114,22 +114,28 @@ function isRelativePath(value: unknown): value is string {
   return typeof value === 'string' && value.split('/').every(isPathSegment)
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+/** Stored digest fields; journals reuse this guard for publish entries. */
+export function isCheckpointDigest(value: unknown): value is CheckpointDigest {
+  return isRecord(value) && typeof value.sha256 === 'string' && typeof value.size === 'number'
+}
+
 /**
  * Durable-boundary shape check: a version-1 record whose `files`/`sessions`
  * lists or session dirs do not fit is treated as unreadable, never half-read.
  */
 function isManifest(parsed: unknown): parsed is CheckpointManifest {
-  if (typeof parsed !== 'object' || parsed === null) return false
-  const record = parsed as CheckpointManifest
-  if (record.version !== 1 || typeof record.id !== 'string' || typeof record.capturedAt !== 'number'
-    || !Array.isArray(record.files) || !Array.isArray(record.sessions)) return false
-  for (const file of record.files) {
-    if (typeof file !== 'object' || file === null || !isRelativePath(file.path)
-      || typeof file.digest !== 'object' || file.digest === null
-      || typeof file.digest.sha256 !== 'string' || typeof file.digest.size !== 'number') return false
+  if (!isRecord(parsed)) return false
+  if (parsed.version !== 1 || typeof parsed.id !== 'string' || typeof parsed.capturedAt !== 'number'
+    || !Array.isArray(parsed.files) || !Array.isArray(parsed.sessions)) return false
+  for (const file of parsed.files) {
+    if (!isRecord(file) || !isRelativePath(file.path) || !isCheckpointDigest(file.digest)) return false
   }
-  for (const entry of record.sessions) {
-    if (typeof entry !== 'object' || entry === null
+  for (const entry of parsed.sessions) {
+    if (!isRecord(entry)
       || typeof entry.sessionId !== 'string' || !isRelativePath(entry.dir)) return false
   }
   return true

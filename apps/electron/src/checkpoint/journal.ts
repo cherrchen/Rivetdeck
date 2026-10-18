@@ -11,7 +11,7 @@
 import { readFile, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { writeDesktopFileAtomic } from '../atomic-file.ts'
-import { isPathSegment, type CheckpointDigest, type CheckpointSessionHeader } from './manifest.ts'
+import { isCheckpointDigest, isPathSegment, type CheckpointDigest, type CheckpointSessionHeader } from './manifest.ts'
 
 export type RestoreJournalPhase = 'intent' | 'committed' | 'finalized' | 'conflicted'
 
@@ -81,19 +81,17 @@ export async function deleteRestoreJournal(home: string, id: string): Promise<vo
   await rm(join(restoreJournalsDir(home), `${id}.json`), { force: true })
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
 function isFingerprint(value: unknown): value is RestoreFingerprint {
-  if (typeof value !== 'object' || value === null) return false
-  const entry = value as RestoreFingerprint
-  return isPathSegment(entry.name)
-    && typeof entry.size === 'number' && typeof entry.mtimeNs === 'string'
+  return isRecord(value) && isPathSegment(value.name)
+    && typeof value.size === 'number' && typeof value.mtimeNs === 'string'
 }
 
 function isPublish(value: unknown): value is RestorePublish {
-  if (typeof value !== 'object' || value === null) return false
-  const entry = value as RestorePublish
-  return isPathSegment(entry.name)
-    && typeof entry.digest === 'object' && entry.digest !== null
-    && typeof entry.digest.sha256 === 'string' && typeof entry.digest.size === 'number'
+  return isRecord(value) && isPathSegment(value.name) && isCheckpointDigest(value.digest)
 }
 
 /**
@@ -102,24 +100,23 @@ function isPublish(value: unknown): value is RestorePublish {
  * treated as unreadable, never half-read.
  */
 function isRestoreJournal(parsed: unknown): parsed is RestoreJournal {
-  if (typeof parsed !== 'object' || parsed === null) return false
-  const journal = parsed as RestoreJournal
-  if (journal.version !== 1) return false
-  if (journal.phase !== 'intent' && journal.phase !== 'committed'
-    && journal.phase !== 'finalized' && journal.phase !== 'conflicted') return false
-  if (!isPathSegment(journal.id)
-    || typeof journal.checkpointId !== 'string'
-    || typeof journal.targetSessionId !== 'string'
-    || typeof journal.createdAt !== 'number' || typeof journal.updatedAt !== 'number'
-    || typeof journal.quarantine !== 'string'
-    || !journal.quarantine.startsWith('electron/quarantine/')
-    || !isPathSegment(journal.quarantine.slice('electron/quarantine/'.length))
-    || !Array.isArray(journal.members)) return false
-  for (const member of journal.members) {
-    if (typeof member !== 'object' || member === null
+  if (!isRecord(parsed)) return false
+  if (parsed.version !== 1) return false
+  if (parsed.phase !== 'intent' && parsed.phase !== 'committed'
+    && parsed.phase !== 'finalized' && parsed.phase !== 'conflicted') return false
+  if (!isPathSegment(parsed.id)
+    || typeof parsed.checkpointId !== 'string'
+    || typeof parsed.targetSessionId !== 'string'
+    || typeof parsed.createdAt !== 'number' || typeof parsed.updatedAt !== 'number'
+    || typeof parsed.quarantine !== 'string'
+    || !parsed.quarantine.startsWith('electron/quarantine/')
+    || !isPathSegment(parsed.quarantine.slice('electron/quarantine/'.length))
+    || !Array.isArray(parsed.members)) return false
+  for (const member of parsed.members) {
+    if (!isRecord(member)
       || typeof member.sessionId !== 'string'
       || typeof member.dir !== 'string' || !member.dir.split('/').every(isPathSegment)
-      || typeof member.header !== 'object' || member.header === null
+      || !isRecord(member.header)
       || !Array.isArray(member.liveFiles) || !member.liveFiles.every(isFingerprint)
       || !Array.isArray(member.publish) || !member.publish.every(isPublish)) return false
   }

@@ -263,7 +263,7 @@ export async function detectUnreadableSessions(
 export async function filterIdleWriters(
   candidates: readonly ConfirmedUnreadable[],
   acquireLease: AcquireSessionLease,
-  log?: ((message: string) => void) | undefined,
+  log?: (message: string) => void,
 ): Promise<readonly ConfirmedUnreadable[]> {
   const confirmed: ConfirmedUnreadable[] = []
   for (const item of candidates) {
