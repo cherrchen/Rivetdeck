@@ -2,7 +2,7 @@
 
 English | [中文](cleanup-user-files.zh.md)
 
-This guide lists the files Rivetdeck leaves behind after removal and how to delete what remains on each platform. Uninstall removes the program and rebuildable data only; the locations below hold settings, credentials, browser storage, or shared agent data that are never deleted on their own. The full ownership and safety policy lives in the `uninstall-data-cleanup` design document in `docs/electron/`.
+This guide lists the files Rivetdeck leaves behind after removal and how to delete what remains on each platform. Uninstall removes the program and rebuildable data only; the locations below hold settings, credentials, browser storage, or shared agent data that are never deleted on their own. The full ownership and safety policy lives in the [Uninstall and Data Cleanup](../uninstall-data-cleanup.md) design document.
 
 ## Windows (NSIS installer)
 
@@ -19,17 +19,17 @@ Running `"Uninstall Rivetdeck.exe" --delete-app-data` requests removal of the wh
 
 ## macOS
 
-There is no uninstaller: drag `Rivetdeck.app` to the Trash. To remove the remaining data, delete `~/Library/Application Support/Rivetdeck`, which holds preferences, network secrets, and browser storage.
+There is no uninstaller: drag `Rivetdeck.app` to the Trash. To remove the remaining data, delete `~/Library/Application Support/Rivetdeck`, which holds preferences, network secrets, and browser storage, and `~/Library/Caches/rivetdeck-updater`, which holds downloaded update packages.
 
 ## Linux
 
-The AppImage is a single file — delete it. The DEB package removes `/opt/Rivetdeck`. To remove the remaining data, delete `~/.config/Rivetdeck`, which holds preferences, network secrets, and browser storage.
+The AppImage is a single file — delete it. The DEB package removes `/opt/Rivetdeck`. To remove the remaining data, delete `~/.config/Rivetdeck`, which holds preferences, network secrets, and browser storage, and `${XDG_CACHE_HOME:-~/.cache}/rivetdeck-updater`, which holds downloaded update packages.
 
 ## Shared roots — never removed
 
 The following locations belong to the Harness or to you and are never removed by any uninstall or cleanup flow:
 
-- `~/.dsh` (`$DSH_HOME`, overridable through the `DSH_HOME` environment variable; `%USERPROFILE%\.dsh` on Windows) — sessions, settings, `.credentials.yaml`, plugins, and `electron/` user-installed packages.
+- `~/.dsh` (`$DSH_HOME`, overridable through the `DSH_HOME` environment variable; `%USERPROFILE%\.dsh` on Windows) — sessions, settings, `.credentials.yaml`, plugins, and `electron/` user-installed packages. It is shared with other Harness-based tools, so delete it manually only when nothing else uses it.
 - `~/.agents` — skills shared across agent tools.
 - Workspace directories — your own projects.
 

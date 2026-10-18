@@ -2,7 +2,7 @@
 
 English | [中文](uninstall-data-cleanup.zh.md)
 
-> Status: **implemented for Windows NSIS — native install/uninstall verification pending in CI**
+> Status: **implemented for Windows NSIS — install/uninstall scenarios verified in Desktop CI**
 >
 > This document records CURRENT uninstall behavior, the upstream `apps/desktop` cleanup design, external agent-tool precedents, and the reviewed design that now ships. External review accepted three principles — protect `$DSH_HOME`, skip cleanup during updates, and delete without following links — and rejected unconditional `userData` deletion. The review conclusions below are the working contract; remaining open items are listed at the end.
 
@@ -12,7 +12,7 @@ The downstream Windows installer is an assisted NSIS build (`oneClick: false`, `
 
 Each packaged launch merges the resolved `userData` and `DSH_HOME` into a line-oriented record beside the default userData (`src/path-history.ts`, `%APPDATA%\rivetdeck-path-history.ini`) before the fallible startup steps run, so a launch that fails during network or runtime preparation still leaves its roots on record. The location stays writable by the installed app even for elevated installs, and it survives install-directory removal. Fresh installs seed the record `complete=1`; the first record after an upgrade stays incomplete because it cannot prove which roots ran before it existed.
 
-On uninstall, `customUnInstall` calls `un.RivetdeckCleanData`, which keeps all data when the uninstaller runs for an update (`--updated`) or a same-product replacement (`/KEEP_APP_DATA`); the record beside the default `userData` is outside `$INSTDIR`, so it already survives for the succeeding install. Otherwise the flow resolves the current `userData` root (`$APPDATA\Rivetdeck`), the updater cache (`%LOCALAPPDATA%\rivetdeck-updater`), the environment `DSH_HOME`, and the record, and hands them to the native `UninstallCleanup` entry point (`installer/uninstall-cleanup.h`). The helper applies the layered policy: `managed-toolchains/`, `electron/toolchains/bin`, named cache directories including per-partition equivalents, and the updater cache are removed after ownership and expected-inventory checks; `desktop-preferences.json`, `network-secrets/`, `network-startup-override.json`, and persisted browser storage stay. `--delete-app-data` removes the whole `userData` root only while the record is present and complete. Targets that fail verification or overlap a protected path are skipped whole; skips and removal failures land in `%APPDATA%\Rivetdeck-uninstall-residue.log` and the uninstaller details page.
+On uninstall, `customUnInstall` calls `un.RivetdeckCleanData`, which keeps all data when the uninstaller runs for an update (`--updated`) or a same-product replacement (`/KEEP_APP_DATA`); the record beside the default `userData` is outside `$INSTDIR`, so it already survives for the succeeding install. Otherwise the flow resolves the current `userData` root (`$APPDATA\Rivetdeck`), the updater cache (`%LOCALAPPDATA%\rivetdeck-updater`), the environment `DSH_HOME`, and the record, and hands them to the native `UninstallCleanup` entry point (exported by `installer/uninstall-data.cpp`; policy in `installer/uninstall-cleanup.h`). The helper applies the layered policy: `managed-toolchains/`, `electron/toolchains/bin`, named cache directories including per-partition equivalents, and the updater cache are removed after ownership and expected-inventory checks; `desktop-preferences.json`, `network-secrets/`, `network-startup-override.json`, and persisted browser storage stay. `--delete-app-data` removes the whole `userData` root only while the record is present and complete. Targets that fail verification or overlap a protected path are skipped whole; skips and removal failures land in `%APPDATA%\Rivetdeck-uninstall-residue.log` and the uninstaller details page.
 
 The macOS DMG/ZIP and Linux AppImage artifacts ship no uninstaller; the DEB removes only `/opt/Rivetdeck`. The MSIX (Store) build is removed by the operating system including virtualized per-package data, but non-virtualized pre-existing files persist, and `~/.dsh` is outside virtualization — see "Other platforms" for the verification gap.
 
@@ -154,3 +154,9 @@ Only Windows has an uninstaller. For parity the design should:
 - A legacy install with no history record — or a record marked incomplete — that once used a nested `DSH_HOME` inside `userData` cannot prove isolation; `--delete-app-data` skips the `userData` root and reports the residue instead of deleting historical sessions.
 - Locked files produce reported residue, not a failed or partial-silent uninstall.
 - The Store verification matrix (first install, existing NSIS data, custom external paths) runs before MSIX parity is claimed.
+
+## Known limitations
+
+- Application data is per-user even under an all-users install. Uninstalling under a different account than the one that used the product only reaches that account's `userData`, updater cache, and history record; other users' roots remain until each of them uninstalls or removes them.
+- Builds predating the `Rivetdeck` product name wrote `%APPDATA%\DeepSeek Harness`, a root no history record can name, so the uninstaller never reaches it. Removing it is a manual step.
+- Chromium directories outside the named cache list — `Crashpad`, `Service Worker`, and other diagnostic or registered-state directories — stay behind after tiered cleanup; they leave the root only under `--delete-app-data`.

@@ -3,20 +3,20 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/electron/user/cleanup-user-files.md
 /cleaning-up-rivetdeck-user-files:
-  en: 91f06213bfecbd43
-  zh: 71c090f667ce116a
+  en: afd06c68ecbe7ae8
+  zh: e396dce800537e87
 /cleaning-up-rivetdeck-user-files/windows-nsis-installer:
   en: a81916f728b188ab
   zh: ca5b39562e58adde
 /cleaning-up-rivetdeck-user-files/macos:
-  en: 31bb870352db8c17
-  zh: ccb8a45f90186490
+  en: f03f13ca4dc4de36
+  zh: 184d3aa27524626b
 /cleaning-up-rivetdeck-user-files/linux:
-  en: 2e44d871455a4734
-  zh: af9fac1430982baf
+  en: c5c803a65c3bf155
+  zh: b5b82a6d8b6473f0
 /cleaning-up-rivetdeck-user-files/shared-roots-never-removed:
-  en: eeaaddf98477023d
-  zh: 714ff6caffc03d76
+  en: 65f40dff1d57aab8
+  zh: 02305ed9ec87aa09
 /cleaning-up-rivetdeck-user-files/custom-locations:
   en: e46c1979bd4e676c
   zh: ac56dd3da79f5202

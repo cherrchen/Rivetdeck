@@ -28,6 +28,25 @@ static void Mkdir(const std::wstring& path) { assert(CreateDirectoryW(path.c_str
 
 static bool Exists(const std::wstring& path) { return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES; }
 
+// Best-effort recursive delete for the test's own scratch tree; reparse points are
+// unlinked rather than descended, matching the safety rules under test.
+static void RemoveAll(const std::wstring& path) {
+    WIN32_FIND_DATAW entry{};
+    HANDLE search = FindFirstFileW((path + L"\\*").c_str(), &entry);
+    if (search != INVALID_HANDLE_VALUE) {
+        do {
+            if (wcscmp(entry.cFileName, L".") == 0 || wcscmp(entry.cFileName, L"..") == 0) continue;
+            const std::wstring child = path + L'\\' + entry.cFileName;
+            const DWORD attributes = entry.dwFileAttributes;
+            if ((attributes & FILE_ATTRIBUTE_DIRECTORY) && !(attributes & FILE_ATTRIBUTE_REPARSE_POINT)) RemoveAll(child);
+            else if (attributes & FILE_ATTRIBUTE_DIRECTORY) RemoveDirectoryW(child.c_str());
+            else DeleteFileW(child.c_str());
+        } while (FindNextFileW(search, &entry));
+        FindClose(search);
+    }
+    RemoveDirectoryW(path.c_str());
+}
+
 // History lines are written as narrow text; test paths are ASCII.
 static std::string Narrow(const std::wstring& wide) {
     std::string narrow;
@@ -351,4 +370,7 @@ int wmain(int argc, wchar_t** argv) {
     }
 
     assert(RemoveDirectoryW(installation.c_str()));
+
+    RemoveAll(root);
+    assert(!Exists(root));
 }

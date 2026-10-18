@@ -3,11 +3,11 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/electron/uninstall-data-cleanup.md
 /uninstall-and-data-cleanup:
-  en: 8c4f405a5c23b5dc
-  zh: d506fd3ede514110
+  en: f5903fc61574c77b
+  zh: 06bf54f1019d1f7c
 /uninstall-and-data-cleanup/current-uninstall-behavior:
-  en: 363669dff5a04d4f
-  zh: 7b50db1f611dbdb9
+  en: 32414d676ba6ef7a
+  zh: 81f5c24e84dd9185
 /uninstall-and-data-cleanup/write-locations-and-ownership:
   en: 8e69c80c134d64a6
   zh: 8c00af062123021a
@@ -50,3 +50,6 @@
 /uninstall-and-data-cleanup/acceptance-criteria-for-implementation:
   en: e2ba75596650390f
   zh: f08ab882b78cd12f
+/uninstall-and-data-cleanup/known-limitations:
+  en: fc839bbc471a665a
+  zh: a7c044b4337b94de

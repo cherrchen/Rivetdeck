@@ -2,7 +2,7 @@
 
 [English](cleanup-user-files.md) | 中文
 
-本指南列出 Rivetdeck 移除后遗留的文件，以及各平台上删除剩余内容的方法。卸载只删除程序与可重建数据；下列位置保存设置、凭据、浏览器存储或共享代理数据，永远不会被自动删除。完整的归属与安全策略见 `docs/electron/` 下的 `uninstall-data-cleanup` 设计文档。
+本指南列出 Rivetdeck 移除后遗留的文件，以及各平台上删除剩余内容的方法。卸载只删除程序与可重建数据；下列位置保存设置、凭据、浏览器存储或共享代理数据，永远不会被自动删除。完整的归属与安全策略见[卸载与数据清理](../uninstall-data-cleanup.zh.md)设计文档。
 
 ## Windows（NSIS 安装包）
 
@@ -19,17 +19,17 @@ assisted NSIS 卸载器会删除安装目录、`managed-toolchains/`、`electron
 
 ## macOS
 
-没有卸载器：将 `Rivetdeck.app` 拖入废纸篓即可。如需删除剩余数据，请删除 `~/Library/Application Support/Rivetdeck`，其中保存偏好设置、网络凭据与浏览器存储。
+没有卸载器：将 `Rivetdeck.app` 拖入废纸篓即可。如需删除剩余数据，请删除 `~/Library/Application Support/Rivetdeck`（保存偏好设置、网络凭据与浏览器存储）和 `~/Library/Caches/rivetdeck-updater`（保存下载的更新包）。
 
 ## Linux
 
-AppImage 是单个文件——直接删除即可。DEB 包会移除 `/opt/Rivetdeck`。如需删除剩余数据，请删除 `~/.config/Rivetdeck`，其中保存偏好设置、网络凭据与浏览器存储。
+AppImage 是单个文件——直接删除即可。DEB 包会移除 `/opt/Rivetdeck`。如需删除剩余数据，请删除 `~/.config/Rivetdeck`（保存偏好设置、网络凭据与浏览器存储）和 `${XDG_CACHE_HOME:-~/.cache}/rivetdeck-updater`（保存下载的更新包）。
 
 ## 共享根目录——永不删除
 
 以下位置属于 Harness 或用户本人，任何卸载或清理流程都不会删除：
 
-- `~/.dsh`（`$DSH_HOME`，可通过 `DSH_HOME` 环境变量覆盖；Windows 上为 `%USERPROFILE%\.dsh`）——会话、设置、`.credentials.yaml`、插件以及 `electron/` 用户安装的包。
+- `~/.dsh`（`$DSH_HOME`，可通过 `DSH_HOME` 环境变量覆盖；Windows 上为 `%USERPROFILE%\.dsh`）——会话、设置、`.credentials.yaml`、插件以及 `electron/` 用户安装的包。它与其他 Harness 工具共享，仅在确认没有其他工具使用时才可手动删除。
 - `~/.agents`——跨代理工具共享的技能。
 - 工作区目录——你自己的项目。
 

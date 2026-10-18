@@ -1,13 +1,23 @@
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it } from 'vitest'
 import {
   PATH_HISTORY_FILE,
   mergeLaunchPathHistory,
   parsePathHistory,
   renderPathHistory,
 } from '../src/path-history.ts'
+
+const created: string[] = []
+async function freshAppDataDir() {
+  const dir = await mkdtemp(join(tmpdir(), 'path-history-appdata-'))
+  created.push(dir)
+  return dir
+}
+afterAll(async () => {
+  await Promise.all(created.map(dir => rm(dir, { recursive: true, force: true })))
+})
 
 describe('Electron path history', () => {
   it('round-trips records without dropping earlier roots', () => {
@@ -23,7 +33,7 @@ describe('Electron path history', () => {
   })
 
   it('carries lines it cannot parse through every rewrite', async () => {
-    const appDataDir = await mkdtemp(join(tmpdir(), 'path-history-appdata-'))
+    const appDataDir = await freshAppDataDir()
     const recordPath = join(appDataDir, PATH_HISTORY_FILE)
     // Unknown keys, malformed lines, and empty path claims may all hide protection
     // claims the uninstaller refuses to ignore; a merge must keep them verbatim.
@@ -46,7 +56,7 @@ describe('Electron path history', () => {
   })
 
   it('leaves an unreadable record untouched instead of overwriting it', async () => {
-    const appDataDir = await mkdtemp(join(tmpdir(), 'path-history-appdata-'))
+    const appDataDir = await freshAppDataDir()
     // A directory at the record path is a record this reader cannot inspect; replacing
     // it could erase claims the uninstaller would honor, so the merge refuses.
     await mkdir(join(appDataDir, PATH_HISTORY_FILE))
@@ -58,7 +68,7 @@ describe('Electron path history', () => {
   })
 
   it('marks a first-ever record incomplete', async () => {
-    const appDataDir = await mkdtemp(join(tmpdir(), 'path-history-appdata-'))
+    const appDataDir = await freshAppDataDir()
     const record = await mergeLaunchPathHistory({
       appDataDir,
       userData: 'D:\\data\\Rivetdeck',
@@ -71,7 +81,7 @@ describe('Electron path history', () => {
   })
 
   it('merges relocated roots and keeps the installer-seeded completeness', async () => {
-    const appDataDir = await mkdtemp(join(tmpdir(), 'path-history-appdata-'))
+    const appDataDir = await freshAppDataDir()
     await writeFile(join(appDataDir, PATH_HISTORY_FILE), 'complete=1\r\nuserData=C:\\first\r\n')
     const record = await mergeLaunchPathHistory({
       appDataDir,
@@ -83,7 +93,7 @@ describe('Electron path history', () => {
   })
 
   it('accumulates duplicate roots once', async () => {
-    const appDataDir = await mkdtemp(join(tmpdir(), 'path-history-appdata-'))
+    const appDataDir = await freshAppDataDir()
     await mergeLaunchPathHistory({ appDataDir, userData: 'C:\\same', dshHome: 'C:\\same-home' })
     const record = await mergeLaunchPathHistory({ appDataDir, userData: 'C:\\same', dshHome: 'C:\\same-home' })
     expect(record?.userData).toEqual(['C:\\same'])
