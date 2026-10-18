@@ -197,3 +197,11 @@ it('wires the layered data-cleanup uninstaller through the native helper', async
     expect(recorder).toContain("PATH_HISTORY_FILE = 'rivetdeck-path-history.ini'")
   } finally { await rm(projectDir, { recursive: true, force: true }) }
 })
+
+it('escapes NSIS metacharacters in generated LangStrings', async () => {
+  const { renderNsisStrings } = await import('../scripts/prepare-windows-installer.mjs')
+  // A literal $ doubles; quotes and line breaks use $\-escapes so the dictionary text
+  // cannot break out of its LangString or feed variables to the compiler.
+  const strings = renderNsisStrings({ MSG: { en: 'costs $5 "now"\r\nnext' } })
+  expect(strings).toContain('LangString MSG 1033 "costs $$5 $\\"now$\\"$\\r$\\nnext"')
+})

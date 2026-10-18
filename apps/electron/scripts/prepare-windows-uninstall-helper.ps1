@@ -19,6 +19,16 @@ if (-not $visualStudio) { throw 'Visual Studio C++ Build Tools are missing.' }
 $vcvars = Join-Path $visualStudio 'VC/Auxiliary/Build/vcvars32.bat'
 if (-not (Test-Path -LiteralPath $vcvars)) { throw "vcvars32.bat missing at $vcvars." }
 
+# cmd.exe parses .cmd files as ANSI bytes, and cl receives them through the same code
+# page: a path the system code page cannot represent would reach cl corrupted, so it
+# fails here with its real name instead of surfacing as a missing file inside cl.
+$ansi = [Text.Encoding]::Default
+foreach ($path in @($vcvars, $installerDir, $testsDir, $output)) {
+    if ($ansi.GetString($ansi.GetBytes($path)) -cne $path) {
+        throw "Path contains characters outside the system ANSI code page and cannot be compiled from here: $path"
+    }
+}
+
 $source = Join-Path $installerDir 'uninstall-data.cpp'
 $library = Join-Path $output 'rivetdeck-uninstall.dll'
 $compileScript = Join-Path $output 'compile-uninstall-helper.cmd'

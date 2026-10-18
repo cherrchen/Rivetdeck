@@ -69,14 +69,21 @@ function directoryUninstaller(uninstaller) {
  * @param messages Map of message id to per-language text from uninstall-messages.yml.
  * @returns uninstall-strings.nsh content.
  */
-function renderNsisStrings(messages) {
+export function renderNsisStrings(messages) {
   const lines = []
   for (const [id, variants] of Object.entries(messages)) {
     for (const lang of bundledLanguages) {
       const text = variants[toLangWithRegion(lang)] ?? variants[lang]
         ?? variants[lang.split('_')[0]] ?? variants.en
       if (text == null) throw new Error(`Uninstall message ${id} is missing an en fallback`)
-      lines.push(`LangString ${id} ${lcid[lang]} "${String(text).replaceAll('"', '$\\"').replaceAll('\n', '$\\r$\\n')}"`)
+      // Escape $ first: doubling a literal dollar must not disturb the $\-escapes
+      // emitted for quotes and newlines afterwards. ($$$$ in a JS replacement inserts
+      // two literal dollars.)
+      const escaped = String(text)
+        .replaceAll('$', '$$$$')
+        .replaceAll('"', '$\\"')
+        .replaceAll(/\r\n?|\n/g, '$\\r$\\n')
+      lines.push(`LangString ${id} ${lcid[lang]} "${escaped}"`)
     }
   }
   return lines.join('\n') + '\n'
