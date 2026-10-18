@@ -104,12 +104,21 @@ function renderUninstallNsh({ helperDll, updaterCacheName }) {
   ; always write — so a later complete-removal request can prove coverage; an existing
   ; record survives updates and reinstalls untouched. The installation-mode flags cannot
   ; detect a fresh install — /currentuser forces them during initMultiUser.
+  ; Electron application data is always per-user: under an all-users install this section
+  ; runs with the "all" shell context, where $APPDATA resolves to ProgramData, so the
+  ; seed must switch back to the current user's context exactly like the uninstall side.
+  ${'${if}'} $installMode == "all"
+    SetShellVarContext current
+  ${'${endif}'}
   ${'${IfNot}'} ${'${isUpdated}'}
   ${'${AndIfNot}'} ${'${FileExists}'} "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}"
     FileOpen $0 "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}" w
     FileWrite $0 "complete=1$\\r$\\n"
     FileClose $0
   ${'${EndIf}'}
+  ${'${if}'} $installMode == "all"
+    SetShellVarContext all
+  ${'${endif}'}
 !macroend
 
 !macro customUnInstall

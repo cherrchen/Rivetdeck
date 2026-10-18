@@ -125,6 +125,12 @@ it('wires the layered data-cleanup uninstaller through the native helper', async
     // install — /currentuser forces $hasPerUserInstallation to 1.
     expect(nsh).toContain('FileOpen $0 "$APPDATA\\${RIVETDECK_PATH_HISTORY}" w')
     expect(nsh).not.toContain('$hasPerUserInstallation')
+    // Electron data is always per-user: under an all-users install the section runs in
+    // the "all" shell context where $APPDATA is ProgramData, so the seed brackets its
+    // write with the same context switch the uninstall side uses.
+    const installMacro = nsh.slice(nsh.indexOf('!macro customInstall'), nsh.indexOf('!macro customUnInstall'))
+    expect(installMacro).toContain('SetShellVarContext current')
+    expect(installMacro).toContain('SetShellVarContext all')
 
     // History, env protection, tiered targets, and the updater cache reach the helper.
     expect(nsh).toContain('ReadEnvStr $UnHome DSH_HOME')
