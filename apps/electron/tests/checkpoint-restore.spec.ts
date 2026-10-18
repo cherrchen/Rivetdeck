@@ -321,6 +321,25 @@ describe('restoreSession', () => {
     expect(outcome).toMatchObject({ kind: 'restored', checkpointId: '1000' })
     expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('VERIFIED-1000')
   })
+
+  it('fails a checkpoint storing a nested session artifact', async () => {
+    const home = makeHome()
+    liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'POLLUTED' })
+    seedCheckpoint(home, '1000', [{
+      sessionId: 'session-parent-1', dir: SESSION_DIR, header: PARENT,
+      files: { 'session.v4.jsonl.zstd': 'VERIFIED' },
+    }])
+    const manifestPath = join(checkpointsRoot(home), '1000', 'manifest.json')
+    const manifest = JSON.parse(read(manifestPath)) as CheckpointManifest
+    const nested = { path: `sessions/${SESSION_DIR}/sub/nested.bin`, origin: 'captured' as const, digest: sha('X') }
+    mkdirSync(join(checkpointsRoot(home), '1000', 'sessions', SESSION_DIR, 'sub'), { recursive: true })
+    writeFileSync(join(checkpointsRoot(home), '1000', 'sessions', SESSION_DIR, 'sub', 'nested.bin'), 'X')
+    writeFileSync(manifestPath, JSON.stringify({ ...manifest, files: [...manifest.files, nested] }))
+    const outcome = await restore(home, 'session-parent-1').run
+    expect(outcome.kind).toBe('failed')
+    expect(outcome.kind === 'failed' && outcome.reason).toContain('nested session artifact')
+    expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('POLLUTED')
+  })
 })
 
 describe('convergeRestoreJournals', () => {

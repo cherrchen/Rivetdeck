@@ -16,7 +16,7 @@ import { constants } from 'node:fs'
 import { access, copyFile, mkdir, open, readFile, readdir, rm, stat, unlink } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { renameDesktopPath, writeDesktopFileAtomic } from '../atomic-file.ts'
-import { checkpointsRoot, readManifest, type CheckpointManifest, type CheckpointSessionEntry } from './manifest.ts'
+import { checkpointsRoot, isPathSegment, readManifest, type CheckpointManifest, type CheckpointSessionEntry } from './manifest.ts'
 import {
   deleteRestoreJournal,
   listRestoreJournals,
@@ -473,7 +473,15 @@ export async function restoreSession(options: RestoreSessionOptions): Promise<Re
         liveFiles: [],
         publish: found.manifest.files
           .filter(file => file.path.startsWith(`sessions/${entry.dir}/`))
-          .map(file => ({ name: file.path.slice(`sessions/${entry.dir}/`.length), digest: file.digest })),
+          .map((file) => {
+            // The transaction owns a flat session dir: every name it stages,
+            // fingerprints, or quarantines is a single segment.
+            const name = file.path.slice(`sessions/${entry.dir}/`.length)
+            if (!isPathSegment(name)) {
+              throw new Error(`checkpoint ${found.manifest.id} stores a nested session artifact ${file.path}`)
+            }
+            return { name, digest: file.digest }
+          }),
       }
       // Acquire before fingerprinting: the lease proves no live writer, so
       // the recorded pre-state cannot race a foreign append.
