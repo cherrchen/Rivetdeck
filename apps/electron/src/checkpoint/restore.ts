@@ -241,10 +241,16 @@ async function applySwitch(
   }
 }
 
+/** `SAFE_KEY_RE` in storage-json/src/per-record-unit.ts: a non-matching id can never own a row. */
+const SAFE_KEY = /^[A-Za-z0-9_-]+$/
+
 /** Invalidate the projcache rows of the target and its related-source closure; idempotent. */
 async function finalizeProjcache(home: string, journal: RestoreJournal): Promise<void> {
   const rowsDir = join(home, 'storages', 'session_projcache', 'sessions')
   for (const member of journal.members) {
+    // Unsafe ids are skipped rather than interpolated: the backend rejected
+    // them at write, so no row exists under their name.
+    if (!SAFE_KEY.test(member.sessionId)) continue
     await rm(join(rowsDir, `${member.sessionId}.json`), { force: true })
   }
   if (await pathExists(rowsDir)) await syncDirectory(rowsDir)
@@ -402,11 +408,20 @@ export async function restoreSession(options: RestoreSessionOptions): Promise<Re
     return { kind: 'refused', reason: { key: 'revalidation-failed', dirs: invalid.map(member => member.dir) } }
   }
   const now = options.now ?? (() => Date.now())
-  const journalId = `${now()}-${options.sessionId}`
+  // Session ids are unvalidated upstream strings, so journal and quarantine
+  // names derive from the backend-encoded dir tail, which is path-safe by
+  // construction.
+  const journalId = `${now()}-${members[0]?.dir.split('/').pop() ?? 'restore'}`
   const leases: SessionLease[] = []
   const journalMembers: RestoreJournalMember[] = []
   try {
     for (const entry of members) {
+      // Session dirs are always `<project>/<encoded id>`; anything else in a
+      // manifest would let memberDir() escape the sessions root.
+      const segments = entry.dir.split('/')
+      if (segments.some(part => part === '' || part === '.' || part === '..' || part.includes('\\'))) {
+        throw new Error(`checkpoint ${found.manifest.id} lists an unsafe session dir ${entry.dir}`)
+      }
       const member: RestoreJournalMember = {
         sessionId: entry.sessionId,
         dir: entry.dir,

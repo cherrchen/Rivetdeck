@@ -270,6 +270,42 @@ describe('restoreSession', () => {
     expect(read(join(home, 'electron', 'quarantine', '9000-session-parent-1', 'sessions', SESSION_DIR, 'session.v5.jsonl.zstd'))).toBe('FOREIGN-GEN')
     expect(read(join(liveDir, 'session.v4.jsonl.zstd'))).toBe('VERIFIED')
   })
+
+  it('keeps journal, quarantine, and projcache paths inside the home when the session id is hostile', async () => {
+    const home = makeHome()
+    const hostile = 'evil/../../x'
+    liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'POLLUTED' })
+    // Without the safe-key guard the row rm resolves to this planted file.
+    writeFile(join(home, 'storages', 'session_projcache', 'x.json'), '{}')
+    seedCheckpoint(home, '1000', [{
+      sessionId: hostile, dir: SESSION_DIR, header: { ...PARENT, id: hostile },
+      files: { 'session.v4.jsonl.zstd': 'VERIFIED' },
+    }])
+    const outcome = await restore(home, hostile).run
+    expect(outcome).toMatchObject({ kind: 'restored', quarantine: 'electron/quarantine/9000-session-parent-1' })
+    expect(read(join(home, 'electron', 'quarantine', '9000-session-parent-1', 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('POLLUTED')
+    expect(existsSync(join(home, 'electron', 'x'))).toBe(false)
+    expect(existsSync(join(home, 'storages', 'session_projcache', 'x.json'))).toBe(true)
+  })
+
+  it('fails a manifest whose session dir would escape the sessions root', async () => {
+    const home = makeHome()
+    liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'LIVE' })
+    seedCheckpoint(home, '1000', [{
+      sessionId: 'session-parent-1', dir: '../escape', header: PARENT,
+      files: { 'session.v4.jsonl.zstd': 'VERIFIED' },
+    }])
+    const outcome = await restore(home, 'session-parent-1', {
+      validate: async () => ({
+        sessionFormatVersion: 4,
+        sessions: [{ sessionId: 'session-parent-1', dir: '../escape', ok: true }],
+      }),
+    }).run
+    expect(outcome.kind).toBe('failed')
+    expect(outcome.kind === 'failed' && outcome.reason).toContain('unsafe session dir')
+    expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('LIVE')
+    expect(existsSync(join(home, 'escape'))).toBe(false)
+  })
 })
 
 describe('convergeRestoreJournals', () => {
