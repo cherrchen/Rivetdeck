@@ -3,7 +3,7 @@
 #define NOMINMAX
 #define UNICODE
 #include <windows.h>
-#include <winioctl.h>
+#include <stdlib.h>
 #include <cassert>
 #include "../installer/uninstall-data.h"
 #include "../installer/uninstall-cleanup.h"
@@ -37,31 +37,9 @@ static std::string Narrow(const std::wstring& wide) {
 }
 
 // A directory junction lets a link sit where a real directory is expected; cleanup must
-// unlink the junction root and never descend into the target.
+// unlink the junction root and never descend into the target. mklink /J needs no elevation.
 static bool MakeJunction(const std::wstring& link, const std::wstring& target) {
-    if (!CreateDirectoryW(link.c_str(), nullptr)) return false;
-    HANDLE handle = CreateFileW(link.c_str(), GENERIC_WRITE, 0, nullptr, OPEN_EXISTING,
-        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
-    if (handle == INVALID_HANDLE_VALUE) return false;
-    char buffer[2048]{};
-    REPARSE_DATA_BUFFER* reparse = reinterpret_cast<REPARSE_DATA_BUFFER*>(buffer);
-    reparse->ReparseTag = IO_REPARSE_TAG_MOUNT_POINT;
-    const std::wstring substitute = L"\\??\\" + target;
-    const size_t substituteBytes = substitute.size() * sizeof(wchar_t);
-    const size_t printBytes = target.size() * sizeof(wchar_t);
-    reparse->MountPointReparseBuffer.SubstituteNameOffset = 0;
-    reparse->MountPointReparseBuffer.SubstituteNameLength = static_cast<USHORT>(substituteBytes);
-    reparse->MountPointReparseBuffer.PrintNameOffset = static_cast<USHORT>(substituteBytes + sizeof(wchar_t));
-    reparse->MountPointReparseBuffer.PrintNameLength = static_cast<USHORT>(printBytes);
-    memcpy(reparse->MountPointReparseBuffer.PathBuffer, substitute.c_str(), substituteBytes + sizeof(wchar_t));
-    memcpy(reinterpret_cast<char*>(reparse->MountPointReparseBuffer.PathBuffer) + substituteBytes + sizeof(wchar_t),
-           target.c_str(), printBytes + sizeof(wchar_t));
-    reparse->ReparseDataLength = static_cast<USHORT>(substituteBytes + printBytes + 12);
-    DWORD returned = 0;
-    const BOOL ok = DeviceIoControl(handle, FSCTL_SET_REPARSE_POINT, reparse,
-        reparse->ReparseDataLength + REPARSE_GUID_DATA_BUFFER_HEADER_SIZE, nullptr, 0, &returned, nullptr);
-    CloseHandle(handle);
-    return ok == TRUE;
+    return _wsystem((L"cmd /c mklink /J \"" + link + L"\" \"" + target + L"\" >NUL 2>NUL").c_str()) == 0;
 }
 
 // Builds the managed-toolchains receipt tree the app produces.
