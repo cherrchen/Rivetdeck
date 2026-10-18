@@ -20,7 +20,7 @@ export interface RestoreDialogFacts {
   readonly capturedAt: number
   /** Related-source members the transaction restores with the target. */
   readonly memberCount: number
-  /** Absolute quarantine directory the replaced live files move to. */
+  /** Absolute quarantine root; the transaction files land in a journal-id subdirectory below it. */
   readonly quarantine: string
   /** The local Host is running, so restore happens through a relaunch. */
   readonly requiresRelaunch: boolean

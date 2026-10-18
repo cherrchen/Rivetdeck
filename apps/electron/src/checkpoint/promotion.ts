@@ -4,6 +4,12 @@
  * describe the same run — identical child pid — and both record a clean
  * outcome. Any missing section, pid mismatch, timeout, kill, or nonzero exit
  * refuses promotion.
+ *
+ * The binding is the pid alone, not a run token: a stale report could pass
+ * only if the OS recycled the exact pid of a run that had already written a
+ * promotable report. That residue is accepted — capture validates every file
+ * through the read path before commit, so a misattributed report cannot
+ * promote unverified bytes.
  */
 
 import type { ShutdownReport } from '../harness/shutdown-report.ts'

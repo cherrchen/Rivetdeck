@@ -120,6 +120,7 @@ async function copyIntoCandidate(
   let size = 0
   const read = createReadStream(sourcePath)
   const write = createWriteStream(destination, { mode: 0o600 })
+  let onAbort: (() => void) | undefined
   try {
     read.on('data', (chunk: string | Buffer) => {
       hash.update(chunk)
@@ -129,12 +130,16 @@ async function copyIntoCandidate(
       read.on('error', reject)
       write.on('error', reject)
       write.on('finish', resolve)
-      signal?.addEventListener('abort', () => {
-        reject(signal.reason instanceof Error ? signal.reason : new Error('checkpoint capture aborted'))
-      }, { once: true })
+      onAbort = () => {
+        reject(signal?.reason instanceof Error ? signal.reason : new Error('checkpoint capture aborted'))
+      }
+      signal?.addEventListener('abort', onAbort, { once: true })
       read.pipe(write)
     })
   } finally {
+    // The listener hangs on the shared deadline signal, not the stream, so it
+    // must be detached here or one copy leaks a listener per file.
+    if (onAbort !== undefined) signal?.removeEventListener('abort', onAbort)
     read.destroy()
     if (!write.closed) write.destroy()
   }
@@ -244,6 +249,7 @@ export async function carryForwardSession(
   previousDir: string,
   previous: CheckpointManifest,
   sessionDir: string,
+  signal?: AbortSignal,
 ): Promise<{ capturedAt: number; sourceCheckpointId: string } | undefined> {
   const prior = previous.sessions.find(entry => entry.dir === sessionDir)
   if (prior === undefined) return undefined
@@ -261,6 +267,7 @@ export async function carryForwardSession(
   await rm(join(candidate.dir, 'sessions', ...sessionDir.split('/')), { recursive: true, force: true })
   const prefix = `sessions/${sessionDir}/`
   for (const entry of previous.files) {
+    signal?.throwIfAborted()
     if (!entry.path.startsWith(prefix)) continue
     const source = join(previousDir, entry.path)
     const destination = join(candidate.dir, entry.path)
@@ -323,8 +330,10 @@ export async function commitCandidate(
  * Rotate old checkpoints. The newest commit and every checkpoint that uniquely
  * holds some session's last verified copy are protected; other committed
  * checkpoints past {@link CHECKPOINT_RETENTION_COUNT} are removed oldest-first.
+ * A checkpoint whose manifest cannot be read is always kept — its uniqueness
+ * cannot be judged, so retention errs on the side of keeping it.
  */
-export async function pruneCheckpoints(root: string): Promise<void> {
+export async function pruneCheckpoints(root: string, signal?: AbortSignal): Promise<void> {
   let names: string[]
   try {
     names = await readdir(root)
@@ -335,12 +344,14 @@ export async function pruneCheckpoints(root: string): Promise<void> {
   if (committed.length <= CHECKPOINT_RETENTION_COUNT) return
   const manifests = new Map<string, CheckpointManifest>()
   for (const name of committed) {
+    signal?.throwIfAborted()
     const manifest = await readManifest(join(root, name))
     if (manifest !== undefined) manifests.set(name, manifest)
   }
   const retainedIds = new Set<string>()
   let kept = 0
   for (const name of committed) {
+    signal?.throwIfAborted()
     const manifest = manifests.get(name)
     const unique = manifest === undefined
       ? false
@@ -420,6 +431,7 @@ export async function runExitCheckpoint(options: ExitCheckpointOptions): Promise
     if (failedDirs.size > 0) {
       const staged = candidate
       const exclude = async (dir: string): Promise<void> => {
+        options.signal?.throwIfAborted()
         log(`checkpoint ${id}: session ${dir} failed validation and has no verified copy; excluded`)
         const kept = staged.files.filter(entry => sessionDirOf(entry.path) !== dir)
         staged.files.length = 0
@@ -430,7 +442,7 @@ export async function runExitCheckpoint(options: ExitCheckpointOptions): Promise
         for (const dir of failedDirs) await exclude(dir)
       } else {
         for (const dir of failedDirs) {
-          const carried = await carryForwardSession(candidate, previous.dir, previous.manifest, dir)
+          const carried = await carryForwardSession(candidate, previous.dir, previous.manifest, dir, options.signal)
           if (carried === undefined) {
             await exclude(dir)
           } else {
@@ -476,7 +488,7 @@ export async function runExitCheckpoint(options: ExitCheckpointOptions): Promise
     }
     await commitCandidate(root, candidate, manifest)
     candidate = undefined
-    await pruneCheckpoints(root)
+    await pruneCheckpoints(root, options.signal)
     return { kind: 'committed', id, sessions: sessions.length }
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)

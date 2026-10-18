@@ -356,7 +356,7 @@ describe('restore dialog copy', () => {
     expect(spec.buttons).toEqual(['Restore Now', 'Not Now'])
     expect(spec.message).toContain('"aaaa-1111"')
     expect(spec.message).toContain('Rivetdeck')
-    expect(spec.detail).toContain('quarantine at /home/u/.dsh/electron/quarantine')
+    expect(spec.detail).toContain('under quarantine /home/u/.dsh/electron/quarantine')
     expect(spec.detail).toContain('other DeepSeek Harness or Rivetdeck instance')
     expect(spec.detail).toContain('workspace files')
     expect(spec.detail).toContain('related subagent sessions')

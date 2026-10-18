@@ -165,10 +165,14 @@ async function modeLeaseProbe() {
 // --- fixtures ----------------------------------------------------------------
 
 // Mirrors projectKey() in packages/session/session-persistence-jsonl/src/format.ts.
+// Both encoders must iterate UTF-16 code units (charCodeAt), not code points —
+// astral characters escape as two surrogate units upstream.
 function projectKey(cwd) {
   let readable = ''
   let separatorRun = false
-  for (const ch of cwd) {
+  for (let i = 0; i < cwd.length; i++) {
+    const code = cwd.charCodeAt(i)
+    const ch = String.fromCharCode(code)
     if (ch === '/' || ch === '\\' || ch === ':') {
       if (!separatorRun) readable += '-'
       separatorRun = true
@@ -176,7 +180,7 @@ function projectKey(cwd) {
       readable += ch
       separatorRun = false
     } else {
-      readable += '~' + ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')
+      readable += '~' + code.toString(16).toUpperCase().padStart(4, '0')
       separatorRun = false
     }
   }
@@ -187,10 +191,12 @@ function encodeSegment(raw) {
   if (raw === '.') return '~002E'
   if (raw === '..') return '~002E~002E'
   let out = ''
-  for (const ch of raw) {
+  for (let i = 0; i < raw.length; i++) {
+    const code = raw.charCodeAt(i)
+    const ch = String.fromCharCode(code)
     out += /^[A-Za-z0-9._-]$/.test(ch) && ch !== '~'
       ? ch
-      : '~' + ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')
+      : '~' + code.toString(16).toUpperCase().padStart(4, '0')
   }
   return out
 }
