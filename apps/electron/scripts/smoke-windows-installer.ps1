@@ -11,6 +11,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Compile the uninstall data helper and run its native safety tests first; the helper
+# is rebuilt here even though beforePack already built it, so the safety suite runs
+# wherever this smoke runs.
+& (Join-Path $PSScriptRoot 'prepare-windows-uninstall-helper.ps1') -TestCleanup
+
 $installer = (Resolve-Path -LiteralPath $InstallerPath -ErrorAction Stop).Path
 $installDirectory = Join-Path $env:RUNNER_TEMP "dsh-installer-smoke-$Architecture"
 # Exercise package members beyond MAX_PATH while keeping the launcher path short enough for NSIS.
@@ -83,6 +88,35 @@ try {
     throw "Installed Desktop failed zero-runtime startup with code $LASTEXITCODE."
   }
 } finally {
+  # Layered cleanup coverage: rebuildables and pure caches go, preferences and browser
+  # persistence stay; a foreign entry skips the whole inventory-checked target; a recorded
+  # DSH_HOME overlapping a candidate protects it entirely.
+  $userData = Join-Path $env:APPDATA 'Rivetdeck'
+  $updaterCache = Join-Path $env:LOCALAPPDATA 'rivetdeck-updater'
+  $residueLog = Join-Path $env:APPDATA 'Rivetdeck-uninstall-residue.log'
+  $historyFile = Join-Path $installDirectory 'rivetdeck-path-history.ini'
+  if (-not (Test-Path -LiteralPath $historyFile -PathType Leaf)) {
+    throw "Installer did not seed the path-history record: $historyFile"
+  }
+
+  New-Item -ItemType Directory -Force -Path (Join-Path $userData 'managed-toolchains\node') | Out-Null
+  Set-Content -LiteralPath (Join-Path $userData 'managed-toolchains\node\active.json') -Value '{}'
+  # A foreign entry must fail inventory verification so the whole target is skipped.
+  Set-Content -LiteralPath (Join-Path $userData 'managed-toolchains\foreign.exe') -Value 'x'
+  New-Item -ItemType Directory -Force -Path (Join-Path $userData 'Cache') | Out-Null
+  Set-Content -LiteralPath (Join-Path $userData 'Cache\data_0') -Value 'x'
+  # A recorded DSH_HOME overlapping a cleanup candidate protects it entirely.
+  Add-Content -LiteralPath $historyFile -Value "dshHome=$(Join-Path $userData 'Cache')"
+  New-Item -ItemType Directory -Force -Path (Join-Path $userData 'Partitions\worker_1\GPUCache') | Out-Null
+  Set-Content -LiteralPath (Join-Path $userData 'Partitions\worker_1\GPUCache\gpu.bin') -Value 'x'
+  New-Item -ItemType Directory -Force -Path (Join-Path $userData 'Partitions\worker_1\IndexedDB') | Out-Null
+  Set-Content -LiteralPath (Join-Path $userData 'Partitions\worker_1\IndexedDB\db') -Value 'x'
+  Set-Content -LiteralPath (Join-Path $userData 'Local State') -Value 'x'
+  Set-Content -LiteralPath (Join-Path $userData 'desktop-preferences.json') -Value '{}'
+  Set-Content -LiteralPath (Join-Path $userData 'Cookies') -Value 'x'
+  New-Item -ItemType Directory -Force -Path (Join-Path $updaterCache 'pending') | Out-Null
+  Set-Content -LiteralPath (Join-Path $updaterCache 'installer.exe') -Value 'x'
+
   $uninstall = Start-Process -FilePath $uninstaller -ArgumentList @('/S', '/currentuser') -WindowStyle Hidden -Wait -PassThru
   if ($uninstall.ExitCode -ne 0) {
     throw "Uninstaller exited with code $($uninstall.ExitCode)."
@@ -94,5 +128,29 @@ try {
   }
   if (Test-Path -LiteralPath $application) {
     throw "Uninstaller left the application executable in place: $application"
+  }
+
+  foreach ($removed in @(
+      (Join-Path $userData 'Partitions\worker_1\GPUCache'),
+      $updaterCache)) {
+    if (Test-Path -LiteralPath $removed) { throw "Uninstaller left a cleanup target: $removed" }
+  }
+  foreach ($kept in @(
+      (Join-Path $userData 'desktop-preferences.json'),
+      (Join-Path $userData 'Cookies'),
+      (Join-Path $userData 'Local State'),
+      (Join-Path $userData 'Partitions\worker_1\IndexedDB\db'),
+      (Join-Path $userData 'managed-toolchains'),
+      (Join-Path $userData 'Cache'))) {
+    if (-not (Test-Path -LiteralPath $kept)) { throw "Uninstaller removed preserved data: $kept" }
+  }
+  if (-not (Test-Path -LiteralPath $residueLog -PathType Leaf)) {
+    throw "Skipped cleanup targets produced no residue report: $residueLog"
+  }
+  if (-not (Select-String -LiteralPath $residueLog -Pattern 'managed-toolchains' -Quiet)) {
+    throw "Residue report does not list the inventory-skipped target."
+  }
+  if (-not (Select-String -LiteralPath $residueLog -Pattern 'Cache' -Quiet)) {
+    throw "Residue report does not list the protection-overlapped target."
   }
 }

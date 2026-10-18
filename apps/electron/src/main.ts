@@ -7,7 +7,7 @@
 import { readFileSync } from 'node:fs'
 import type { ChildProcessByStdio } from 'node:child_process'
 import type { Readable } from 'node:stream'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import {
   app,
   BrowserWindow,
@@ -65,6 +65,7 @@ import { readDesktopManifest, resolveUpdateRepository, usesStoreUpdates } from '
 import { microsoftStoreUpdateMenu } from './store-update-menu.ts'
 import { RENDERER_ENTRY_URL, RENDERER_ORIGIN } from './bridge-types.ts'
 import { DesktopPreferencesStore, loadUpdateChannel, saveUpdateChannel, type UpdateChannel } from './preferences.ts'
+import { mergeLaunchPathHistory } from './path-history.ts'
 import { DesktopNetworkController } from './network/controller.ts'
 import { ElectronProxyApplier } from './network/electron-proxy.ts'
 import { presentNetworkFailure } from './network/failure-dialog.ts'
@@ -925,6 +926,16 @@ if (!primaryInstance) {
       onError: (error) => { console.error('desktop checkpoint: startup session maintenance failed', error) },
     })
     if (!canStart) return
+    if (process.platform === 'win32' && app.isPackaged) {
+      void mergeLaunchPathHistory({
+        installDir: dirname(process.execPath),
+        appDataDir: app.getPath('appData'),
+        userData: userDataPath,
+        dshHome: harnessHome,
+      }).catch((error: unknown) => {
+        console.error('desktop path history recording failed', error)
+      })
+    }
     const shim = prepareToolchainShims({ userData: userDataPath, harnessHome }, toolchains, process.platform)
     const toolchainPolicy: DesktopToolchainPolicy = {
       version: 2,

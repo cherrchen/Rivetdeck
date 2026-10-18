@@ -81,6 +81,8 @@ it('generates checked Windows ZIP extraction while retaining default NSIS compil
     expect(extraction).not.toContain('nsisunz::Unzip')
     const include = await readFile(join(projectDir, '.electron-build/nsis/include.nsh'), 'utf8')
     expect(include).toContain('!cd')
+    expect(include).toContain(`!include "${join(projectDir, '.electron-build/nsis/uninstall-strings.nsh')}"`)
+    expect(include).toContain(`!include "${join(projectDir, '.electron-build/nsis/uninstall.nsh')}"`)
     const section = await readFile(join(projectDir, '.electron-build/nsis/installSection.nsh'), 'utf8')
     expect(section).toContain(`!include "${join(projectDir, '.electron-build/nsis/installer.nsh')}"`)
     const installer = await readFile(join(projectDir, '.electron-build/nsis/installer.nsh'), 'utf8')
@@ -89,5 +91,83 @@ it('generates checked Windows ZIP extraction while retaining default NSIS compil
     const uninstaller = await readFile(join(projectDir, '.electron-build/nsis/uninstaller.nsh'), 'utf8')
     expect(uninstaller).toContain('Function un.onInit')
     expect(uninstaller).toContain('Section "un.${UNINSTALL_SECTION_NAME}"')
+    // The stock --delete-app-data bypass must be gone; install-dir removal keeps
+    // the extended-length prefix so deep installation directories still clean.
+    expect(uninstaller).not.toContain('isDeleteAppData')
+    expect(uninstaller).not.toContain('RMDir /r "$APPDATA')
+    expect(uninstaller).toContain('RMDir /r "\\\\?\\$INSTDIR"')
+  } finally { await rm(projectDir, { recursive: true, force: true }) }
+})
+
+it('wires the layered data-cleanup uninstaller through the native helper', async () => {
+  const { mkdtemp, rm } = await import('node:fs/promises')
+  const { tmpdir } = await import('node:os')
+  const { prepareWindowsInstallerScript } = await import('../scripts/prepare-windows-installer.mjs')
+  const electronRoot = join(import.meta.dirname, '..')
+  const projectDir = await mkdtemp(join(tmpdir(), 'dsh-nsis-'))
+  try {
+    await prepareWindowsInstallerScript(projectDir, 'C:\\tools\\7za.exe',
+      { helperDll: 'C:\\build\\rivetdeck-uninstall.dll', updaterCacheName: 'rivetdeck-updater' })
+    const output = join(projectDir, '.electron-build/nsis')
+    const nsh = await readFile(join(output, 'uninstall.nsh'), 'utf8')
+
+    // Replacement and update flows keep data; the record migrates for the successor install.
+    expect(nsh).toContain('${isUpdated}')
+    expect(nsh).toContain('/KEEP_APP_DATA')
+    expect(nsh).toContain('CopyFiles /SILENT "$INSTDIR\\${RIVETDECK_PATH_HISTORY}" "$APPDATA\\${RIVETDECK_PATH_HISTORY}"')
+    expect(nsh).toContain('FileWrite $0 "complete=1$\\r$\\n"')
+    // Fresh installs seed the record; reinstalls and updates do not re-seed.
+    expect(nsh).toContain('$hasPerUserInstallation == "0"')
+
+    // History, env protection, tiered targets, and the updater cache reach the helper.
+    expect(nsh).toContain('ReadEnvStr $UnHome DSH_HOME')
+    expect(nsh).toContain('StrCpy $UnTarget "$APPDATA\\${APP_FILENAME}"')
+    expect(nsh).toContain('StrCpy $UnReport "$INSTDIR\\${RIVETDECK_PATH_HISTORY}"')
+    expect(nsh).toContain('$LOCALAPPDATA\\${RIVETDECK_UPDATER_CACHE}')
+    expect(nsh).toContain('!define RIVETDECK_UPDATER_CACHE "rivetdeck-updater"')
+    expect(nsh).toContain('File "/oname=$PLUGINSDIR\\rivetdeck-uninstall.dll" "${RIVETDECK_UNINSTALL_HELPER}"')
+    expect(nsh).toContain('UninstallCleanup(w "$UnTarget", w "$INSTDIR", w "$UnHome", w "$UnReport"')
+    expect(nsh).toContain('${isDeleteAppData}')
+    expect(nsh).toContain('DetailPrint "$(RIVETDECK_UNINSTALL_RESIDUE)"')
+    expect(nsh).toContain('!macro customUnInstall')
+    expect(nsh).toContain('!macro customInstall')
+    expect(nsh).toContain('Call un.RivetdeckCleanData')
+    expect(nsh).not.toContain('RMDir')
+
+    // Localized residue text is generated from the owned dictionary, not hardcoded.
+    const strings = await readFile(join(output, 'uninstall-strings.nsh'), 'utf8')
+    expect(strings).toContain('LangString RIVETDECK_UNINSTALL_RESIDUE 1033 ')
+    expect(strings).toContain('LangString RIVETDECK_UNINSTALL_RESIDUE 2052 ')
+    const messages = await readFile(join(electronRoot, 'installer/uninstall-messages.yml'), 'utf8')
+    expect(messages).toContain('RIVETDECK_UNINSTALL_RESIDUE')
+    expect(messages).toContain('zh:')
+
+    // The native helper and its orchestration exist and export the System::Call entry.
+    const helper = await readFile(join(electronRoot, 'installer/uninstall-data.cpp'), 'utf8')
+    expect(helper).toContain('UninstallCleanup')
+    expect(helper).toContain('__cdecl')
+    const orchestration = await readFile(join(electronRoot, 'installer/uninstall-cleanup.h'), 'utf8')
+    for (const claim of ['managed-toolchains', 'active.json', 'Partitions', 'GPUCache',
+      'L"userData"', 'L"dshHome"', 'L"complete"', 'installation.pending']) {
+      expect(orchestration).toContain(claim)
+    }
+    for (const required of ['LoadHistory', 'VerifyManagedToolchains', 'VerifyShimDirectory',
+      'VerifyUpdaterCache', 'IsAttributedUserData', 'unresolvableProtection',
+      'desktop-preferences.json', 'network-secrets']) {
+      expect(orchestration).toContain(required)
+    }
+    const primitives = await readFile(join(electronRoot, 'installer/uninstall-data.h'), 'utf8')
+    for (const required of ['FILE_FLAG_OPEN_REPARSE_POINT', 'Pin', 'RemoveTree',
+      'RemoveEmptyParents', 'Contains']) {
+      expect(primitives).toContain(required)
+    }
+    expect(existsSync(join(electronRoot, 'tests/windows-uninstall-data.cpp'))).toBe(true)
+    expect(existsSync(join(electronRoot, 'scripts/prepare-windows-uninstall-helper.ps1'))).toBe(true)
+
+    // The launch-time recorder writes the same file the uninstaller reads.
+    const main = await readFile(join(electronRoot, 'src/main.ts'), 'utf8')
+    expect(main).toContain('mergeLaunchPathHistory')
+    const recorder = await readFile(join(electronRoot, 'src/path-history.ts'), 'utf8')
+    expect(recorder).toContain("PATH_HISTORY_FILE = 'rivetdeck-path-history.ini'")
   } finally { await rm(projectDir, { recursive: true, force: true }) }
 })

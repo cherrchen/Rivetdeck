@@ -1,0 +1,5 @@
+# Rivetdeck uninstaller messages. `uninstall-strings.nsh` is generated from this file by
+# scripts/prepare-windows-installer.mjs; languages missing an entry fall back to `en`.
+RIVETDECK_UNINSTALL_RESIDUE:
+  en: 'Some application data could not be removed; the residue report lists what remains:'
+  zh: '部分应用数据未能删除，残留报告列出了剩余项：'
