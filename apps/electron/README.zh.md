@@ -69,7 +69,7 @@ Electron 应用是私有安装程序，不作为 npm 发布成员。依赖同步
 
 随包提供的 Desktop 网络子进程插件在运行时导入已安装的 `dsh-subprocess-local` 和 `dsh-subprocess` 包。它们必须与 Host 共用“找不到可执行文件”的错误类，终端 shell 发现流程才能跳过未安装的候选项。
 
-原生页面右键菜单根据 Chromium 当前的编辑能力提供剪切、复制、粘贴、全选和刷新；开发构建还提供 DevTools。应用菜单和托盘菜单提供桌面端自有的“关于”窗口、更新通道选择和手动更新检查入口。
+原生页面右键菜单根据 Chromium 当前的编辑能力提供剪切、复制、粘贴、全选和刷新；开发构建还提供 DevTools。应用菜单和托盘菜单提供桌面端自有的“关于”窗口、更新通道选择、手动更新检查，以及“恢复会话…”入口——后者扫描 session checkpoint，并可以把内置 Harness 已读不了的 session 回滚到最近一次已验证副本。
 
 托盘使用从受版本控制的 `assets/tray/deepseek.svg`（LobeHub lobe-icons，MIT）栅格化的单色 DeepSeek 图形。`pnpm run build:tray` 会在 `build/tray/` 下生成各 DPI 的 PNG；Windows 和 Linux 在原生浅色主题下选择黑色图形、在深色主题下选择白色图形，并按主显示器缩放因子选取最近的打包像素尺寸，在 Electron 报告主题或 display-metrics 变化时刷新。macOS 使用预渲染的 template PNG，由操作系统控制菜单栏对比度。
 

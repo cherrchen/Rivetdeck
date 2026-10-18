@@ -266,6 +266,30 @@ describe('runExitCheckpoint', () => {
     expect(readdirSync(checkpointsRoot(home)).filter(name => name.endsWith('.tmp'))).toEqual([])
   })
 
+  it('excludes a failed session the previous checkpoint never held instead of aborting', async () => {
+    const home = makeHome()
+    await writeReport(home)
+    const sessionDir = populateHome(home)
+    const extra = '--work--/session-bbbb-2222'
+    writeFile(join(home, 'sessions', extra, 'session.v4.jsonl.zstd'), 'POLLUTED-NEW')
+    seedCheckpoint(home, '1000', sessionDir, 'VERIFIED-OLD')
+    let calls = 0
+    const failing = fakeValidator(new Set([extra]))
+    const validate: ValidateSessions = async (root) => {
+      calls += 1
+      return calls === 1 ? failing(root) : fakeValidator()(root)
+    }
+    const outcome = await runExitCheckpoint({
+      home, childPid: CHILD_PID, appVersion: '1.0.0', validate, now: () => 2000,
+    })
+    expect(outcome).toMatchObject({ kind: 'committed', id: '2000' })
+    const committed = join(checkpointsRoot(home), '2000')
+    expect(existsSync(join(committed, 'sessions', ...extra.split('/')))).toBe(false)
+    const manifest = await readManifest(committed)
+    expect(manifest?.files.some(entry => entry.path.startsWith(`sessions/${extra}/`))).toBe(false)
+    expect(manifest?.sessions.map(entry => entry.dir)).toEqual([sessionDir])
+  })
+
   it('aborts on cancellation without committing', async () => {
     const home = makeHome()
     populateHome(home)
@@ -395,4 +419,45 @@ describe('validateSessionsRoot (real bundled backend)', () => {
       expect(report.sessions).toEqual([])
       expect(typeof report.sessionFormatVersion).toBe('number')
     })
+})
+
+describe('runValidationWorker result framing', () => {
+  const runtime = { executable: process.execPath, env: {} }
+
+  function stubWorker(root: string, script: string): string {
+    const fixture = join(root, 'fake-worker.mjs')
+    writeFileSync(fixture, script)
+    return fixture
+  }
+
+  it('parses a RESULT line split across stdout chunks', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-worker-split-'))
+    roots.push(root)
+    const fixture = stubWorker(root, `
+      const report = JSON.stringify({ sessionFormatVersion: 4, sessions: [] })
+      process.stdout.write('RESULT ' + report.slice(0, 12))
+      setTimeout(() => { process.stdout.write(report.slice(12) + '\\n') }, 30)
+    `)
+    const { runValidationWorker } = await import('../src/checkpoint/worker.ts')
+    const report = await runValidationWorker(fixture, root, join(root, 'anchor'), runtime)
+    expect(report).toEqual({ sessionFormatVersion: 4, sessions: [] })
+  })
+
+  it('rejects a malformed result instead of throwing inside the stream callback', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-worker-bad-'))
+    roots.push(root)
+    const fixture = stubWorker(root, 'process.stdout.write("RESULT {not-json\\n")')
+    const { runValidationWorker } = await import('../src/checkpoint/worker.ts')
+    await expect(runValidationWorker(fixture, root, join(root, 'anchor'), runtime))
+      .rejects.toThrow('malformed result')
+  })
+
+  it('rejects a worker that exits without a result', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-worker-none-'))
+    roots.push(root)
+    const fixture = stubWorker(root, 'process.stdout.write("noise\\n")')
+    const { runValidationWorker } = await import('../src/checkpoint/worker.ts')
+    await expect(runValidationWorker(fixture, root, join(root, 'anchor'), runtime))
+      .rejects.toThrow('without a result')
+  })
 })

@@ -1,0 +1,40 @@
+# Bilingual-pair consistency record for session-checkpoint-restore.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/electron/session-checkpoint-restore.md
+/session-data-checkpoint-and-restore:
+  en: 2a6a158fa43ef4b7
+  zh: 6c88bf7d62d2aac5
+/session-data-checkpoint-and-restore/summary:
+  en: 69ca49377228df6d
+  zh: 8c5ba0f90d13db7a
+/session-data-checkpoint-and-restore/contents:
+  en: 64f8fd058aa1eed0
+  zh: fa22938556153328
+/session-data-checkpoint-and-restore/background:
+  en: d238854dd9fb89e6
+  zh: 6e385fd57e7ac681
+/session-data-checkpoint-and-restore/mechanism-facts:
+  en: d399bb4940c84e46
+  zh: 1e48b3b21abc6141
+/session-data-checkpoint-and-restore/failure-modes:
+  en: a21290ccb40cad26
+  zh: 058f71346e21fa2a
+/session-data-checkpoint-and-restore/design:
+  en: 4db7b089a521f13b
+  zh: 7810396f7d1666a4
+/session-data-checkpoint-and-restore/alternatives-considered:
+  en: 9fcbd464eecc4eb5
+  zh: 392968f684c1426e
+/session-data-checkpoint-and-restore/limits-and-risks:
+  en: 76a995126e4ea822
+  zh: 6f24d5bcaf6667b0
+/session-data-checkpoint-and-restore/open-questions:
+  en: 2e452dfd9794bc34
+  zh: a72a9bca37f020e7
+/session-data-checkpoint-and-restore/acceptance-cases:
+  en: 8701a19946e9f247
+  zh: a2210884c6007455
+/session-data-checkpoint-and-restore/source-index:
+  en: d4d8bb36f33b1f40
+  zh: d16087e4523a3eff

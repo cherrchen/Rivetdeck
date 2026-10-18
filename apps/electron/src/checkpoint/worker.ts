@@ -36,20 +36,48 @@ export async function runValidationWorker(
   const onAbort = (): void => { child.kill('SIGTERM') }
   signal?.addEventListener('abort', onAbort, { once: true })
   let result: CheckpointValidationReport | undefined
+  let resultError: Error | undefined
   try {
-    let output = ''
+    let buffered = ''
     child.stdout.on('data', (chunk: Buffer) => {
-      output += chunk.toString('utf8')
-      const line = output.split('\n').find(entry => entry.startsWith('RESULT '))
-      if (line !== undefined) {
-        result = JSON.parse(line.slice('RESULT '.length)) as CheckpointValidationReport
+      buffered += chunk.toString('utf8')
+      // A stdout chunk may split the result line mid-JSON; only complete
+      // newline-terminated lines are parsed so a partial line never reaches
+      // JSON.parse.
+      let newline = buffered.indexOf('\n')
+      while (newline >= 0) {
+        const line = buffered.slice(0, newline)
+        buffered = buffered.slice(newline + 1)
+        if (line.startsWith('RESULT ')) {
+          try {
+            result = JSON.parse(line.slice('RESULT '.length)) as CheckpointValidationReport
+          } catch (error) {
+            resultError = new Error(
+              `validation worker returned a malformed result (${error instanceof Error ? error.message : String(error)})`,
+            )
+          }
+        }
+        newline = buffered.indexOf('\n')
       }
     })
     child.stderr.on('data', (chunk: Buffer) => { process.stderr.write(chunk) })
     const [code, signalCode] = await once(child, 'exit') as [number | null, NodeJS.Signals | null]
+    // A worker that exited without a trailing newline may still have emitted a
+    // complete result line; a truncated remainder fails the parse and reports
+    // through the same malformed-result error below.
+    if (result === undefined && resultError === undefined && buffered.startsWith('RESULT ')) {
+      try {
+        result = JSON.parse(buffered.slice('RESULT '.length)) as CheckpointValidationReport
+      } catch (error) {
+        resultError = new Error(
+          `validation worker returned a malformed result (${error instanceof Error ? error.message : String(error)})`,
+        )
+      }
+    }
     if (signal?.aborted) {
       throw signal.reason instanceof Error ? signal.reason : new Error('checkpoint validation aborted')
     }
+    if (resultError !== undefined) throw resultError
     if (result === undefined) {
       throw new Error(`validation worker exited without a result (code ${String(code)}, signal ${String(signalCode)})`)
     }

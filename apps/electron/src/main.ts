@@ -43,6 +43,7 @@ import {
   type DesktopSessionMaintenanceOptions,
 } from './checkpoint/index.ts'
 import { detectFormatRefusalFrame, type SessionRefusalHit } from './checkpoint/refusal.ts'
+import { readRestoreJournal, restoreJournalsDir } from './checkpoint/journal.ts'
 import { resolveRestoreClosure, type RestoreOutcome } from './checkpoint/restore.ts'
 import {
   buildNoCheckpointNotice,
@@ -780,13 +781,29 @@ if (!primaryInstance) {
     // Restore journals must converge before the Host spawns: a leftover
     // `intent` journal finishes its switch, a `committed` one completes
     // projcache invalidation, and either blocks nothing when absent.
-    await convergeDesktopRestoreJournals({
+    const convergence = await convergeDesktopRestoreJournals({
       home: harnessHome,
       appPath,
       log: (message) => { console.error(`desktop checkpoint: ${message}`) },
     }).catch((error: unknown) => {
       console.error('desktop checkpoint: journal convergence failed', error)
+      return undefined
     })
+    // A conflicted journal means the interrupted switch stopped on live drift
+    // with part of the closure possibly already replaced — surface it instead
+    // of booting silently over a partially restored session.
+    if (convergence !== undefined) {
+      for (const journalId of convergence.conflicted) {
+        const journal = await readRestoreJournal(join(restoreJournalsDir(harnessHome), `${journalId}.json`))
+        await notifyRestoreOutcome(journal?.targetSessionId ?? journalId, {
+          kind: 'conflicted',
+          reason: journal?.conflict ?? `live files changed while restore journal ${journalId} was interrupted`,
+          journalId,
+        }).catch((error: unknown) => {
+          console.error('desktop checkpoint: conflict notice failed', error)
+        })
+      }
+    }
     // Pending restores confirmed during the last run execute in this pre-Host
     // window; then stat-diff + vN scan + worker confirmation surface foreign
     // writes and offer an in-place restore before the Host can read live data.

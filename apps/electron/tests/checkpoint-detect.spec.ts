@@ -10,7 +10,11 @@ import {
   type CheckpointSessionEntry,
 } from '../src/checkpoint/manifest.ts'
 import { detectCheckpointDrift, confirmUnreadable, type DriftDetection } from '../src/checkpoint/detect.ts'
-import { consumePendingRestores, enqueuePendingRestore } from '../src/checkpoint/pending.ts'
+import {
+  dequeuePendingRestore,
+  enqueuePendingRestore,
+  listPendingRestores,
+} from '../src/checkpoint/pending.ts'
 import { detectFormatRefusalFrame } from '../src/checkpoint/refusal.ts'
 import { resolveSessionRefusal } from '../src/checkpoint/index.ts'
 import { buildNoCheckpointNotice, buildRestoreConfirm } from '../src/checkpoint/dialog.ts'
@@ -223,21 +227,36 @@ describe('confirmUnreadable', () => {
 })
 
 describe('pending restores', () => {
-  it('queues, dedupes, and consumes requests atomically', async () => {
+  it('queues, dedupes, and dequeues requests atomically', async () => {
     const home = makeHome()
     await enqueuePendingRestore(home, 'one')
     await enqueuePendingRestore(home, 'two')
     await enqueuePendingRestore(home, 'one')
-    const first = await consumePendingRestores(home)
+    const first = await listPendingRestores(home)
     expect(first.map(request => request.sessionId).sort()).toEqual(['one', 'two'])
-    expect(await consumePendingRestores(home)).toEqual([])
+    await dequeuePendingRestore(home, 'one')
+    expect((await listPendingRestores(home)).map(request => request.sessionId)).toEqual(['two'])
+    await dequeuePendingRestore(home, 'two')
+    expect(await listPendingRestores(home)).toEqual([])
     expect(existsSync(join(home, 'electron', 'pending-restore.json'))).toBe(false)
+  })
+
+  it('keeps unprocessed requests when a mid-queue dequeue never runs', async () => {
+    const home = makeHome()
+    await enqueuePendingRestore(home, 'one')
+    await enqueuePendingRestore(home, 'two')
+    await dequeuePendingRestore(home, 'one')
+    expect((await listPendingRestores(home)).map(request => request.sessionId)).toEqual(['two'])
+    // A request enqueued between listing and dequeue survives the rewrite.
+    await enqueuePendingRestore(home, 'three')
+    await dequeuePendingRestore(home, 'two')
+    expect((await listPendingRestores(home)).map(request => request.sessionId)).toEqual(['three'])
   })
 
   it('tolerates a corrupt pending file', async () => {
     const home = makeHome()
     writeFile(join(home, 'electron', 'pending-restore.json'), 'not-json')
-    expect(await consumePendingRestores(home)).toEqual([])
+    expect(await listPendingRestores(home)).toEqual([])
   })
 })
 

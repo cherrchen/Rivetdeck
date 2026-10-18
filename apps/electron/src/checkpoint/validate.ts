@@ -20,16 +20,18 @@ interface BackendModule {
 }
 
 // The bundled lib is a single-file build: `sessionDir` is not re-exported, so
-// the session-directory mapping below mirrors `format.ts` exactly — keep it in
-// sync with `encodeSegment`/`projectKey`/`sessionDir` upstream.
+// the session-directory mapping below mirrors `format.ts` exactly — including
+// its UTF-16 code-unit iteration (`charCodeAt`), which emits `~D83D~DE00` for a
+// non-BMP character, never a single `~1F600`. Keep it in sync upstream.
 function encodeSegment(raw: string): string {
+  if (raw.length === 0) throw new Error('cannot encode an empty path segment')
   if (raw === '.') return '~002E'
   if (raw === '..') return '~002E~002E'
   let out = ''
-  for (const ch of raw) {
-    // codePointAt is defined for every unit of a non-empty string.
-    const code = ch.codePointAt(0) ?? 0
-    out += /^[A-Za-z0-9._-]$/.test(ch) && ch !== '~'
+  for (let i = 0; i < raw.length; i++) {
+    const code = raw.charCodeAt(i)
+    const ch = String.fromCharCode(code)
+    out += ch !== '~' && /^[A-Za-z0-9._-]$/.test(ch)
       ? ch
       : `~${code.toString(16).toUpperCase().padStart(4, '0')}`
   }
@@ -37,17 +39,20 @@ function encodeSegment(raw: string): string {
 }
 
 function projectKey(cwd: string): string {
+  if (cwd.length === 0) throw new Error('cannot encode an empty project path')
   let readable = ''
   let separatorRun = false
-  for (const ch of cwd) {
+  for (let i = 0; i < cwd.length; i++) {
+    const code = cwd.charCodeAt(i)
+    const ch = String.fromCharCode(code)
     if (ch === '/' || ch === '\\' || ch === ':') {
       if (!separatorRun) readable += '-'
       separatorRun = true
-    } else if (/^[A-Za-z0-9._-]$/.test(ch) && ch !== '~') {
+    } else if (ch !== '~' && /^[A-Za-z0-9._-]$/.test(ch)) {
       readable += ch
       separatorRun = false
     } else {
-      readable += `~${(ch.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, '0')}`
+      readable += `~${code.toString(16).toUpperCase().padStart(4, '0')}`
       separatorRun = false
     }
   }

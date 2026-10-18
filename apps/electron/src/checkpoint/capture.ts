@@ -236,8 +236,8 @@ export async function discardCandidate(candidate: StagedCandidate): Promise<void
  * Replace one session's copied files with the verified copy carried from a
  * previous checkpoint. Byte-identical materialization prefers a hard link —
  * both directories share one `$DSH_HOME` volume — and falls back to a copy.
- * @returns The provenance recorded for the session, or undefined when the
- *          previous checkpoint holds no verified copy of it.
+ * @returns The carried copy's `{capturedAt, sourceCheckpointId}`, or undefined
+ *          when the previous checkpoint holds no verified copy of it.
  */
 export async function carryForwardSession(
   candidate: StagedCandidate,
@@ -416,23 +416,25 @@ export async function runExitCheckpoint(options: ExitCheckpointOptions): Promise
     for (const dir of candidate.sessionDirs) {
       if (!first.sessions.some(result => result.dir === dir)) failedDirs.add(dir)
     }
-    const provenance = new Map<string, { capturedAt: number; sourceCheckpointId: string }>()
+    const carriedByDir = new Map<string, { capturedAt: number; sourceCheckpointId: string }>()
     if (failedDirs.size > 0) {
+      const staged = candidate
+      const exclude = async (dir: string): Promise<void> => {
+        log(`checkpoint ${id}: session ${dir} failed validation and has no verified copy; excluded`)
+        const kept = staged.files.filter(entry => sessionDirOf(entry.path) !== dir)
+        staged.files.length = 0
+        staged.files.push(...kept)
+        await rm(join(staged.dir, 'sessions', ...dir.split('/')), { recursive: true, force: true })
+      }
       if (previous === undefined) {
-        for (const dir of failedDirs) {
-          log(`checkpoint ${id}: session ${dir} failed validation and has no verified copy; excluded`)
-          const kept = candidate.files.filter(entry => sessionDirOf(entry.path) !== dir)
-          candidate.files.length = 0
-          candidate.files.push(...kept)
-          await rm(join(candidate.dir, 'sessions', ...dir.split('/')), { recursive: true, force: true })
-        }
+        for (const dir of failedDirs) await exclude(dir)
       } else {
         for (const dir of failedDirs) {
           const carried = await carryForwardSession(candidate, previous.dir, previous.manifest, dir)
           if (carried === undefined) {
-            log(`checkpoint ${id}: session ${dir} failed validation and has no verified copy; excluded`)
+            await exclude(dir)
           } else {
-            provenance.set(dir, carried)
+            carriedByDir.set(dir, carried)
             log(`checkpoint ${id}: session ${dir} kept previous verified copy from ${previous.manifest.id}`)
           }
         }
@@ -454,7 +456,7 @@ export async function runExitCheckpoint(options: ExitCheckpointOptions): Promise
       sessionFormatVersion: finalReport.sessionFormatVersion,
     }
     const sessions: CheckpointSessionEntry[] = finalReport.sessions.map((result) => {
-      const carried = provenance.get(result.dir)
+      const carried = carriedByDir.get(result.dir)
       return {
         sessionId: result.sessionId,
         dir: result.dir,

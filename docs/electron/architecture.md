@@ -906,6 +906,8 @@ upstream credentials/storage
 
 Do not create parallel Electron-owned copies of these concepts.
 
+Because Desktop and CLI share the Harness home, a newer external `dsh` can write session data the bundled Harness cannot read. [Sharing the Harness Home](shared-dsh-home.md) documents the current shared-state behavior, and [Session Checkpoint and Restore](session-checkpoint-restore.md) documents the checkpoint/restore mechanism that rolls one session back to its last verified copy.
+
 ## 30. Electron state
 
 Electron-specific data may live in Electron `userData`, such as:

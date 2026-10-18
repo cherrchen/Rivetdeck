@@ -3,8 +3,9 @@
  * A restore confirmed while the local Host is up cannot run in place — the
  * entry refuses a live Host — so the confirmed intent is recorded here and
  * consumed on the next launch, inside the same pre-Host window where restore
- * journals converge. Consuming deletes the file once the transaction begins;
- * the journal is the durable record past that point.
+ * journals converge. Each request is dequeued only after its restore attempt
+ * resolves, so a crash mid-queue leaves the unprocessed remainder durable;
+ * the journal is the durable record once a transaction begins.
  */
 
 import { readFile, rm } from 'node:fs/promises'
@@ -68,12 +69,29 @@ export async function enqueuePendingRestore(home: string, sessionId: string): Pr
 }
 
 /**
- * Read every queued request and delete the file before any restore runs; a
- * crash after consumption is covered by the restore journal itself.
+ * Read every queued request without removing it. Entries stay durable until
+ * {@link dequeuePendingRestore} runs, which callers do once that request's
+ * restore attempt has resolved — so an interruption mid-queue re-presents the
+ * unprocessed remainder on the next launch.
  */
-export async function consumePendingRestores(home: string): Promise<readonly PendingRestoreRequest[]> {
-  const pending = await readPendingRestores(home)
-  if (pending.requests.length === 0) return []
-  await rm(pendingRestorePath(home), { force: true })
-  return pending.requests
+export async function listPendingRestores(home: string): Promise<readonly PendingRestoreRequest[]> {
+  return (await readPendingRestores(home)).requests
+}
+
+/**
+ * Remove one request after its restore attempt resolved. The rewrite goes
+ * through the desktop writer lock, so a request enqueued between list and
+ * dequeue is preserved.
+ */
+export async function dequeuePendingRestore(home: string, sessionId: string): Promise<void> {
+  const path = pendingRestorePath(home)
+  await withDesktopFileWriter(path, async () => {
+    const requests = (await readPendingRestores(home)).requests
+      .filter(request => request.sessionId !== sessionId)
+    if (requests.length === 0) {
+      await rm(path, { force: true })
+      return
+    }
+    await writeDesktopFileAtomic(path, `${JSON.stringify({ version: 1, requests }, undefined, 2)}\n`)
+  })
 }

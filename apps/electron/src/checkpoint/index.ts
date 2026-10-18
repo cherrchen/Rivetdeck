@@ -11,7 +11,7 @@ import { listRestoreJournals } from './journal.ts'
 import { convergeRestoreJournals, restoreSession, type AcquireSessionLease, type RestoreOutcome } from './restore.ts'
 import { resolveDshInstallAnchor, resolveHostRuntime, type HostRuntime } from '../runtime.ts'
 import { detectCheckpointDrift, confirmUnreadable, type ConfirmedUnreadable } from './detect.ts'
-import { consumePendingRestores, enqueuePendingRestore } from './pending.ts'
+import { dequeuePendingRestore, enqueuePendingRestore, listPendingRestores } from './pending.ts'
 import { checkpointsRoot, readManifest, type CheckpointManifest, type CheckpointSessionEntry } from './manifest.ts'
 import { mountSessionsBackend, resolveSessionFormatVersion } from './validate.ts'
 import { runValidationWorker, validateWorkerModule } from './worker.ts'
@@ -196,8 +196,11 @@ export async function consumePendingSessionRestores(
   options: DesktopSessionMaintenanceOptions,
 ): Promise<PendingRestoreResult[]> {
   const results: PendingRestoreResult[] = []
-  for (const request of await consumePendingRestores(options.home)) {
+  for (const request of await listPendingRestores(options.home)) {
     const outcome = await restoreCheckpointSession(restoreOptions(options, request.sessionId))
+    // The entry leaves the queue only after the attempt resolves: a crash
+    // here keeps this and every later request durable for the next launch.
+    await dequeuePendingRestore(options.home, request.sessionId)
     results.push({ sessionId: request.sessionId, outcome })
     options.log?.(`pending restore ${request.sessionId}: ${outcome.kind}`)
   }

@@ -906,6 +906,8 @@ upstream credentials/storage
 
 不要为这些概念创建并行的 Electron 自有副本。
 
+由于桌面端与 CLI 共享 Harness home,外部新版 `dsh` 可能写入内置 Harness 无法读取的 session 数据。[共享 Harness Home](shared-dsh-home.zh.md) 记录当前的共享状态行为,[Session Checkpoint 与 Restore](session-checkpoint-restore.zh.md) 记录 checkpoint/restore 机制:把单个 session 回滚到最近一次已验证副本。
+
 ## 30. Electron 状态
 
 Electron 专属数据可放在 Electron `userData` 中，例如：
