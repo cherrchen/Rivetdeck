@@ -262,6 +262,8 @@ describe('pending restores', () => {
 
 describe('detectFormatRefusalFrame', () => {
   const rawLog = '(raw log: /home/u/.dsh/sessions/--work--/session-aaaa-1111/session.v5.jsonl.zstd)'
+  // Messages below are verbatim copies of the upstream refusal text in
+  // packages/session/session-persistence/src/{errors,storage-contract}.ts.
   it('extracts the raw session id from a version-refusal frame', () => {
     const frame = JSON.stringify({
       type: 'error',
@@ -277,22 +279,43 @@ describe('detectFormatRefusalFrame', () => {
     expect(hit?.dirTail).toBe('session-aaaa-1111')
   })
 
-  it('extracts the encoded dir tail from an unknown-event refusal', () => {
+  it('extracts the session id from an unknown-event refusal', () => {
     const frame = JSON.stringify({
       type: 'error',
       streamId: 's2',
       error: {
         code: 'gateway/internal',
-        message: `format v4 contains unknown event type "future/event" at seq 12 ${rawLog}`,
+        message: `session "aaaa-1111" contains event type "job/registered" (seq 24) unknown to this harness and not marked ignorable; refusing to interpret the log — it was likely written by a newer harness ${rawLog}`,
         details: {},
       },
     })
     const hit = detectFormatRefusalFrame(frame)
-    expect(hit?.sessionId).toBeUndefined()
+    expect(hit?.sessionId).toBe('aaaa-1111')
     expect(hit?.dirTail).toBe('session-aaaa-1111')
   })
 
-  it('ignores unrelated frames, item traffic, and malformed payloads', () => {
+  it('extracts the session id from the retired request/header refusal', () => {
+    const frame = JSON.stringify({
+      type: 'error',
+      streamId: 's3',
+      error: {
+        code: 'gateway/internal',
+        message: `session "aaaa-1111" contains a request/header event (seq 7) with the unsupported legacy reason "fallback"; refusing to interpret the log — it was written by a retired pre-release harness ${rawLog}`,
+        details: {},
+      },
+    })
+    const hit = detectFormatRefusalFrame(frame)
+    expect(hit?.sessionId).toBe('aaaa-1111')
+    expect(hit?.dirTail).toBe('session-aaaa-1111')
+  })
+
+  it('ignores corruption reports, unrelated frames, item traffic, and malformed payloads', () => {
+    // A malformed-header report carries the same `raw log:` suffix but is
+    // corruption, not a format refusal.
+    expect(detectFormatRefusalFrame(JSON.stringify({
+      type: 'error', streamId: 's4',
+      error: { code: 'gateway/internal', message: `session "aaaa-1111": stored log has a malformed header ${rawLog}`, details: {} },
+    }))).toBeUndefined()
     expect(detectFormatRefusalFrame(JSON.stringify({ type: 'item', streamId: 's', value: 1 }))).toBeUndefined()
     expect(detectFormatRefusalFrame(JSON.stringify({ type: 'error', streamId: 's', error: { code: 'session/not-found', message: 'gone', details: {} } }))).toBeUndefined()
     expect(detectFormatRefusalFrame('not json')).toBeUndefined()

@@ -3,11 +3,17 @@
  * bundled Host serializes `SessionFormatUnsupportedError` onto the Remote
  * stream as `{type:'error', error:{code:'gateway/internal', message}}` — the
  * error class does not survive the wire, so this module recognizes the stable
- * refusal text. The id-bearing forms come from `sessionFormatVersionRefusal`
- * (`session "<id>" uses log format …`); event-admission refusals name only the
- * raw log, whose session directory carries the backend-encoded session id.
- * Frames that do not match are ignored; a hit is only ever a prompt hint —
- * the restore transaction itself re-validates before touching live files.
+ * refusal text. Both upstream forms name `session "<id>"` verbatim:
+ * `sessionFormatVersionRefusal` emits `session "<id>" uses log format vN, but
+ * this harness reads only vN: …` (errors.ts), and event admission emits
+ * `session "<id>" contains event type "…" (seq N) unknown to this harness and
+ * not marked ignorable; refusing to interpret the log` — the retired
+ * `request/header` "fallback" shape follows the same `contains … (seq N) …
+ * refusing to interpret the log` pattern (storage-contract.ts). The `raw log:`
+ * suffix supplies the backend-encoded session directory as fallback
+ * attribution. Frames that do not match are ignored; a hit is only ever a
+ * prompt hint — the restore transaction itself re-validates before touching
+ * live files.
  */
 
 import { basename, dirname } from 'node:path'
@@ -21,7 +27,10 @@ export interface SessionRefusalHit {
 }
 
 const SESSION_VERSION_REFUSAL = /session "([^"]+)" uses log format v\d+, but this harness reads only v\d+/
-const EVENT_REFUSAL = /format v\d+ contains unknown event type/
+// Both event-admission refusals — unknown required type and the retired
+// request/header "fallback" shape — share the `contains … (seq N) … refusing
+// to interpret the log` skeleton.
+const EVENT_REFUSAL = /session "([^"]+)" contains .+ \(seq \d+\) .+refusing to interpret the log/
 const RAW_LOG_SUFFIX = /\(raw log: (.+)\)\s*$/
 
 /**
@@ -47,10 +56,11 @@ export function detectFormatRefusalFrame(data: string): SessionRefusalHit | unde
   const rawLog = RAW_LOG_SUFFIX.exec(message)?.[1]
   const dirTail = rawLog === undefined ? undefined : basename(dirname(rawLog))
   const sessionId = SESSION_VERSION_REFUSAL.exec(message)?.[1]
+    ?? EVENT_REFUSAL.exec(message)?.[1]
   if (sessionId !== undefined) {
     return { sessionId, ...(dirTail === undefined ? {} : { dirTail }) }
   }
-  if (dirTail !== undefined && (EVENT_REFUSAL.test(message) || message.includes('uses log format'))) {
+  if (dirTail !== undefined && message.includes('uses log format')) {
     return { dirTail }
   }
   return undefined
