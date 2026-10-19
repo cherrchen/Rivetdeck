@@ -144,7 +144,8 @@ async function copyIntoCandidate(
     read.destroy()
     if (!write.closed) write.destroy()
   }
-  const handle = await open(destination, 'r')
+  // Windows FlushFileBuffers requires write access to the staged copy.
+  const handle = await open(destination, 'r+')
   try {
     await handle.sync()
   } finally {

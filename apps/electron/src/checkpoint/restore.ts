@@ -115,7 +115,8 @@ async function stagePublishFile(
   if (actual.sha256 !== publish.digest.sha256 || actual.size !== publish.digest.size) {
     throw new Error(`checkpoint file ${publish.name} no longer matches the manifest digest`)
   }
-  const handle = await open(staged, 'r')
+  // Windows FlushFileBuffers requires write access to the staged copy.
+  const handle = await open(staged, 'r+')
   try {
     await handle.sync()
   } finally {

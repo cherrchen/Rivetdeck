@@ -5,7 +5,7 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   pruneCheckpoints,
   runExitCheckpoint,
@@ -13,6 +13,7 @@ import {
 } from '../src/checkpoint/capture.ts'
 import { checkpointsRoot, readManifest, type CheckpointManifest } from '../src/checkpoint/manifest.ts'
 import { isPromotableReport } from '../src/checkpoint/promotion.ts'
+import { requireWritableFileSync } from './checkpoint-file-sync.ts'
 import {
   mergeMainShutdownFacts,
   shutdownReportPath,
@@ -20,6 +21,10 @@ import {
   type HostShutdownSection,
   type MainShutdownSection,
 } from '../src/harness/shutdown-report.ts'
+
+vi.mock('node:fs/promises', async importOriginal => ({
+  ...await importOriginal<typeof import('node:fs/promises')>(),
+}))
 
 const roots: string[] = []
 
@@ -176,6 +181,7 @@ describe('runExitCheckpoint', () => {
   })
 
   it('commits a validated checkpoint over the covered set', async () => {
+    requireWritableFileSync()
     const home = makeHome()
     const sessionDir = populateHome(home)
     await writeReport(home)

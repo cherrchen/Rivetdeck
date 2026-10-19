@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os'
 import { stat } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   listRestoreJournals,
   readRestoreJournal,
@@ -19,6 +19,11 @@ import {
   type AcquireSessionLease,
 } from '../src/checkpoint/restore.ts'
 import type { ValidateSessions } from '../src/checkpoint/capture.ts'
+import { requireWritableFileSync } from './checkpoint-file-sync.ts'
+
+vi.mock('node:fs/promises', async importOriginal => ({
+  ...await importOriginal<typeof import('node:fs/promises')>(),
+}))
 
 const roots: string[] = []
 
@@ -149,6 +154,7 @@ afterEach(() => {
 
 describe('restoreSession', () => {
   it('replaces live files with verified checkpoint bytes and invalidates projcache', async () => {
+    requireWritableFileSync()
     const home = makeHome()
     liveSession(home, SESSION_DIR, { 'session.jsonl.zstd': 'OLD', 'session.v4.jsonl.zstd': 'POLLUTED' })
     const row = projcacheRow(home, 'session-parent-1')

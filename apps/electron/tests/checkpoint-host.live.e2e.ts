@@ -57,7 +57,7 @@ it('commits a checkpoint after the real Host cooperatively drains over IPC', asy
     const outcome = await captureExitCheckpoint({
       home, childPid: pid, appPath, resourcesPath: appPath, packaged: false, appVersion: 'test', hostRuntime: runtime,
     })
-    expect(outcome.kind).toBe('committed')
+    expect(outcome.kind, JSON.stringify(outcome)).toBe('committed')
     if (outcome.kind !== 'committed') throw new Error('Clean Host did not commit a checkpoint')
     expect(await readManifest(join(checkpointsRoot(home), outcome.id))).toMatchObject({
       shutdown: { host: { requestedBy: 'ipc', dispose: 'clean' }, main: { timeout: false, kill: false } },
