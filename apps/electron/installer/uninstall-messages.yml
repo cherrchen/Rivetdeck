@@ -3,3 +3,15 @@
 RIVETDECK_UNINSTALL_RESIDUE:
   en: 'Some application data could not be removed; the residue report lists what remains:'
   zh: '部分应用数据未能删除，残留报告列出了剩余项：'
+RIVETDECK_UNINSTALL_HELPER_ERROR:
+  en: 'Application data cleanup could not start. Program removal will continue. Cleanup status:'
+  zh: '应用数据清理无法启动，程序卸载将继续。清理状态：'
+RIVETDECK_UNINSTALL_ERROR:
+  en: 'Application data cleanup encountered an error. Program removal will continue. Windows error:'
+  zh: '应用数据清理遇到错误，程序卸载将继续。Windows 错误码：'
+RIVETDECK_UNINSTALL_SKIPPED:
+  en: 'Skipped targets:'
+  zh: '跳过的目标数：'
+RIVETDECK_UNINSTALL_REPORT_ERROR:
+  en: 'The residue report is unavailable. Check remaining user files manually. Windows error:'
+  zh: '残留报告不可用，请手动检查剩余用户文件。Windows 错误码：'

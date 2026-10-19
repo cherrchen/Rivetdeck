@@ -10,9 +10,9 @@
 
 下游 Windows 安装包是由 `apps/electron/scripts/prepare-windows-installer.mjs` 生成的辅助式 NSIS 安装器（`oneClick: false`、`allowToChangeInstallationDirectory: true`、ZIP 载荷）。在 Windows 打包机上，该脚本还会通过 `scripts/prepare-windows-uninstall-helper.ps1` 将 `installer/uninstall-data.cpp` 编译为 `rivetdeck-uninstall.dll`，投影默认模板时剥离 `--delete-app-data` 的 `RMDir /r` 数据删除旁路，并生成 `customInstall`/`customUnInstall` 宏以及由 `installer/uninstall-messages.yml` 生成的 LangString。
 
-每次打包后启动时，应用在执行可能失败的网络与运行时初始化之前，先把解析后的 `userData` 与 `DSH_HOME` 合并进默认 `userData` 旁的逐行记录（`src/path-history.ts`，`%APPDATA%\rivetdeck-path-history.ini`），保证中途失败的启动也留下本次的根目录记录。记录位于安装目录之外，无需安装权限即可写入。如果无法读取或更新记录，启动会报告错误，并在初始化服务或打开 Harness home 之前停止。仅当没有先前注册的安装且默认 `userData` 不存在时才以 `complete=1` 播种；升级或在遗留用户数据上重装会生成不完整记录，因为此前的根目录未知。
+每次打包后启动时，应用在执行可能失败的网络与运行时初始化之前，先把解析后的 `userData` 与 `DSH_HOME` 合并进默认 `userData` 旁的逐行记录（`src/path-history.ts`，`%APPDATA%\rivetdeck-path-history.ini`），保证中途失败的启动也留下本次的根目录记录。记录位于安装目录之外，无需安装权限即可写入。跨进程写锁覆盖每次读取、合并与写入，使使用不同 `userData` 根的并发启动保留全部路径声明。如果无法读取或更新记录，启动会报告错误，并在初始化服务或打开 Harness home 之前停止。仅当没有先前注册的安装且默认 `userData` 不存在时才以 `complete=1` 播种；升级或在遗留用户数据上重装会生成不完整记录，因为此前的根目录未知。
 
-卸载时 `customUnInstall` 调用 `un.RivetdeckCleanData`：当卸载器因更新（`--updated`）或同产品替换（`/KEEP_APP_DATA`）而运行时保留全部数据；记录位于默认 `userData` 旁、`$INSTDIR` 之外，本来就能留存给后续安装。否则该流程解析当前 `userData` 根（`$APPDATA\Rivetdeck`）、更新器缓存（`%LOCALAPPDATA%\rivetdeck-updater`）、环境 `DSH_HOME` 与记录文件，交给原生 `UninstallCleanup` 入口（由 `installer/uninstall-data.cpp` 导出，策略在 `installer/uninstall-cleanup.h`）。辅助程序执行分层策略：通过归属与预期清单校验后删除 `managed-toolchains/`、`electron/toolchains/bin`、具名缓存目录（含各分区对应目录）与更新器缓存；保留 `desktop-preferences.json`、`network-secrets/`、`network-startup-override.json` 与持久化浏览器存储。`--delete-app-data` 仅在记录存在且完整时删除整个 `userData` 根。具名缓存要求完整历史；否则整体保留，因为仅凭名称无法排除未记录的 Harness home。保护范围同时包含记录的路径及其解析后的 junction 或符号链接目标；无法访问或已失效的链接会阻止清理。校验失败或与保护路径重叠的目标整体跳过；跳过项与删除失败写入 `%APPDATA%\Rivetdeck-uninstall-residue.log` 并显示在卸载器详情页。
+卸载时 `customUnInstall` 调用 `un.RivetdeckCleanData`：当卸载器因更新（`--updated`）或同产品替换（`/KEEP_APP_DATA`）而运行时保留全部数据；记录位于默认 `userData` 旁、`$INSTDIR` 之外，本来就能留存给后续安装。否则该流程解析当前 `userData` 根（`$APPDATA\Rivetdeck`）、更新器缓存（`%LOCALAPPDATA%\rivetdeck-updater`）、环境 `DSH_HOME` 与记录文件，交给原生 `UninstallCleanup` 入口（由 `installer/uninstall-data.cpp` 导出，策略在 `installer/uninstall-cleanup.h`）。辅助程序执行分层策略：通过归属与预期清单校验后删除 `managed-toolchains/`、`electron/toolchains/bin`、具名缓存目录（含各分区对应目录）与更新器缓存；保留 `desktop-preferences.json`、`network-secrets/`、`network-startup-override.json` 与持久化浏览器存储。`--delete-app-data` 仅在记录存在且完整时删除整个 `userData` 根。具名缓存、托管运行时目录树与更新器缓存要求完整历史；否则整体保留，因为清单无法排除任意子树中未记录的 Harness home。保护范围同时包含记录的路径及其解析后的 junction 或符号链接目标；无法访问或已失效的链接会阻止清理。校验失败或与保护路径重叠的目标整体跳过；跳过项与删除失败写入 `%APPDATA%\Rivetdeck-uninstall-residue.log` 并显示在卸载器详情页。枚举错误会拒绝部分清单。清理错误与辅助程序调用失败也会显示本地化警告；报告写入失败时显示 Windows 错误码与跳过的目标数，不指向不可用的报告。
 
 macOS 的 DMG/ZIP 与 Linux 的 AppImage 不带卸载器；DEB 只移除 `/opt/Rivetdeck`。MSIX（应用商店）构建由操作系统卸载并连带其虚拟化的包内数据，但预先存在的非虚拟化文件会保留，`~/.dsh` 也在虚拟化范围之外——验证缺口见"其他平台"一节。
 
@@ -111,7 +111,7 @@ Windows NSIS 卸载器的决策空间由四个设计覆盖；四者都共享同�
 2. **记录路径按用途分工。** 历史 `DSH_HOME` 一律进入保护集合。历史 `userData` 用于定位并验证清理候选，本身不构成保护——其中的设置与持久化存储通过与当前根目录相同的分层策略得到保留。
 3. **删除候选验证归属。** 删除目标必须可归因于本产品且匹配预期清单——例如 `desktop-preferences.json` 或 `managed-toolchains/{node,python}/active.json`——不能只凭路径字符串信任。
 4. **保护路径不要求归属标记。** 记录中的 `DSH_HOME` 无条件进入保护集合；共享 Harness home 可能完全不含 Electron 标记。记录异常或无法解析不构成丢弃保护声明的理由——它会阻止一切无法证明安全的删除。
-5. **安全须证明而非假设。** "未发现重叠"不等于"不存在重叠"：历史记录缺失或不完整时，无法排除过去曾把 `DSH_HOME` 放在 `userData` 内部，因此没有证据不构成删除授权。每个删除目标都必须证明自身隔离——`--delete-app-data` 完整删除 `userData` 需要完整的历史记录证明其中从未存在受保护路径；需要清单校验的分层目标必须匹配预期内容，出现外来内容时整体跳过而不是连同一起清空。具名缓存没有封闭的内容清单，因此历史不完整时始终整体保留并报告。任一与受保护路径重叠——记录所得或环境所得——的删除目标同样整体跳过，并在报告的残留中体现。无记录的存量安装——或记录标记历史不完整的安装——以"环境加默认值"做保护并适用同样的证明要求，因此只能清理验证通过的目标。
+5. **安全须证明而非假设。** "未发现重叠"不等于"不存在重叠"：历史记录缺失或不完整时，无法排除过去曾把 `DSH_HOME` 放在 `userData` 内部，因此没有证据不构成删除授权。每个删除目标都必须证明自身隔离——`--delete-app-data` 完整删除 `userData` 需要完整的历史记录证明其中从未存在受保护路径；需要清单校验的分层目标必须匹配预期内容，出现外来内容时整体跳过而不是连同一起清空。具名缓存、运行时 generation 与 staging、更新器 staging 没有封闭的内容清单，因此历史不完整时整体保留并报告对应清理目标。任一与受保护路径重叠——记录所得或环境所得——的删除目标同样整体跳过，并在报告的残留中体现。无记录的存量安装——或记录标记历史不完整的安装——以"环境加默认值"做保护并适用同样的证明要求，因此只能清理验证通过的目标。
 
 ## 安全要求
 
@@ -144,7 +144,7 @@ Windows NSIS 卸载器的决策空间由四个设计覆盖；四者都共享同�
 
 ## 实现验收标准
 
-- 普通交互式与静默卸载删除经过验证的可重建目标，保留设置、凭据与持久化浏览器存储；具名缓存还要求完整历史。
+- 普通交互式与静默卸载删除经过验证的可重建目标，保留设置、凭据与持久化浏览器存储；具名缓存、托管运行时目录树与更新器缓存还要求完整历史。
 - 更新与换装到不同目录保留全部数据。
 - 早期启动用过、后来切换走的 `DSH_HOME` 在卸载时仍受保护，因为历史集合保留了它。
 - `--user-data-dir` 切换后遗留的历史目录适用同一分层策略：设置与持久化存储默认保留，可重建子目录仍被清理。

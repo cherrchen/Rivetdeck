@@ -90,6 +90,41 @@ try {
   Assert-Exists (Join-Path $userData 'Cache\data_0') 'incomplete history cannot prove cache isolation'
   Assert-Residue 'Rivetdeck'
 
+  # Legacy homes can occupy updater staging or a managed runtime generation.
+  foreach ($purge in @($false, $true)) {
+    Reset-State
+    Install-To $installDirectory
+    Plant-UserData
+    Set-Content -LiteralPath $historyFile -Value "complete=0`r`n"
+    $updaterHome = Join-Path $updaterCache 'pending\home'
+    $runtimeHome = Join-Path $userData 'managed-toolchains\node\24.5.0\win32-x64\3f8a1c2e-0000-4abc-9def-0123456789ab\home'
+    foreach ($home in @($updaterHome, $runtimeHome)) {
+      New-Item -ItemType Directory -Force -Path $home | Out-Null
+      Set-Content -LiteralPath (Join-Path $home 'sessions.jsonl') -Value 'retained'
+    }
+    if ($purge) { Uninstall-From $installDirectory '--delete-app-data' }
+    else { Uninstall-From $installDirectory }
+    Assert-Exists (Join-Path $updaterHome 'sessions.jsonl') 'incomplete history preserves updater subtrees'
+    Assert-Exists (Join-Path $runtimeHome 'sessions.jsonl') 'incomplete history preserves runtime subtrees'
+    Assert-Residue 'updater isolation requires complete history'
+    Assert-Residue 'runtime isolation requires complete history'
+  }
+
+  # An unwritable report must not prevent program removal or remove retained user data.
+  Reset-State
+  Install-To $installDirectory
+  Plant-UserData
+  Set-Content -LiteralPath $historyFile -Value "complete=0`r`n"
+  Set-Content -LiteralPath $residueLog -Value 'old report'
+  $heldReport = [IO.File]::Open($residueLog, 'Open', 'Read', 'None')
+  try {
+    Uninstall-From $installDirectory
+  } finally {
+    $heldReport.Dispose()
+  }
+  Assert-Exists (Join-Path $userData 'Cache\data_0') 'failed reporting does not permit cache deletion'
+  if ((Get-Content -LiteralPath $residueLog -Raw).Trim() -ne 'old report') { throw 'Locked residue report was replaced.' }
+
   # Scenario 3: --delete-app-data with a damaged protection claim refuses every target.
   Reset-State
   Install-To $installDirectory

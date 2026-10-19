@@ -10,11 +10,12 @@
 
 // Parameters: userData root, installation dir, env DSH_HOME (may be empty), path-history
 // file, updater cache dir, residue report path, deleteAppData flag, out removed count,
-// out residue count. Returns the first Win32 error seen, or 0.
+// out residue count, out report error. Returns the first Win32 error seen, or 0;
+// report error independently states whether the residue report could be written.
 extern "C" __declspec(dllexport) DWORD __cdecl UninstallCleanup(
     LPCWSTR userData, LPCWSTR installation, LPCWSTR protectedHome,
     LPCWSTR historyFile, LPCWSTR updaterCache, LPCWSTR residueReport,
-    int deleteAppData, int* removed, int* residue) {
+    int deleteAppData, int* removed, int* residue, DWORD* reportError) {
     uninstall_cleanup::CleanupRequest request;
     request.userData = userData;
     request.installation = installation;
@@ -25,5 +26,6 @@ extern "C" __declspec(dllexport) DWORD __cdecl UninstallCleanup(
     request.deleteAppData = deleteAppData;
     request.removed = removed;
     request.residue = residue;
+    request.reportError = reportError;
     return uninstall_cleanup::Cleanup(request);
 }

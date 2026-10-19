@@ -150,8 +150,9 @@ inline bool ForEachEntry(const std::wstring& root, const std::function<bool(cons
             break;
         }
     } while (FindNextFileW(search, &entry));
+    const DWORD error = GetLastError();
     FindClose(search);
-    return ok;
+    return ok && error == ERROR_NO_MORE_FILES;
 }
 
 // Every entry must satisfy `visit`; reparse points always fail verification.
@@ -283,8 +284,9 @@ inline bool PathExists(const std::wstring& path) {
 // Reports are UTF-8 `skipped\t<path>\t<reason>` lines consumed by people and smoke tests.
 inline DWORD WriteResidue(const std::wstring& reportPath, const std::vector<std::wstring>& entries) {
     if (entries.empty()) {
-        DeleteFileW(reportPath.c_str());
-        return ERROR_SUCCESS;
+        if (DeleteFileW(reportPath.c_str())) return ERROR_SUCCESS;
+        const DWORD error = GetLastError();
+        return error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND ? ERROR_SUCCESS : error;
     }
     std::string bytes;
     for (const std::wstring& entry : entries) {
@@ -297,7 +299,8 @@ inline DWORD WriteResidue(const std::wstring& reportPath, const std::vector<std:
     if (file == INVALID_HANDLE_VALUE) return GetLastError();
     DWORD written = 0;
     const BOOL ok = WriteFile(file, bytes.data(), static_cast<DWORD>(bytes.size()), &written, nullptr);
-    const DWORD error = ok ? ERROR_SUCCESS : GetLastError();
+    const DWORD error = !ok ? GetLastError()
+        : written == bytes.size() ? ERROR_SUCCESS : ERROR_WRITE_FAULT;
     CloseHandle(file);
     return error;
 }
@@ -312,6 +315,8 @@ struct CleanupRequest {
     int deleteAppData = 0;
     int* removed = nullptr;
     int* residue = nullptr;
+    // Independent report outcome: a cleanup error can coexist with a usable report.
+    DWORD* reportError = nullptr;
 };
 
 struct CleanupState {
@@ -383,7 +388,8 @@ inline void CleanupUserDataTiered(CleanupState& state, const std::wstring& root,
                                   bool completeHistory) {
     const std::wstring toolchains = root + L"\\managed-toolchains";
     if (PathExists(toolchains)) {
-        if (VerifyManagedToolchains(toolchains)) state.remove(toolchains, installation, protectedHome);
+        if (!completeHistory) state.skip(toolchains, L"runtime isolation requires complete history");
+        else if (VerifyManagedToolchains(toolchains)) state.remove(toolchains, installation, protectedHome);
         else state.skip(toolchains, L"unexpected content");
     }
     const std::wstring shims = root + L"\\electron\\toolchains\\bin";
@@ -417,6 +423,7 @@ inline DWORD Cleanup(const CleanupRequest& request) {
     CleanupState state;
     if (request.removed) *request.removed = 0;
     if (request.residue) *request.residue = 0;
+    if (request.reportError) *request.reportError = ERROR_SUCCESS;
 
     std::wstring installation, userData, updaterCache, protectedHome, residueReport;
     if (!uninstall_data::Normalize(request.installation, installation))
@@ -468,12 +475,15 @@ inline DWORD Cleanup(const CleanupRequest& request) {
             CleanupUserDataTiered(state, root, installation, protectedHome, completeHistory);
         }
         if (updaterOk && PathExists(updaterCache)) {
-            if (VerifyUpdaterCache(updaterCache)) state.remove(updaterCache, installation, protectedHome);
+            if (!completeHistory) state.skip(updaterCache, L"updater isolation requires complete history");
+            else if (VerifyUpdaterCache(updaterCache)) state.remove(updaterCache, installation, protectedHome);
             else state.skip(updaterCache, L"unexpected content");
         }
     }
 
-    if (reportOk) state.note(WriteResidue(residueReport, state.entries));
+    const DWORD reportError = reportOk ? WriteResidue(residueReport, state.entries) : ERROR_INVALID_NAME;
+    if (request.reportError) *request.reportError = reportError;
+    state.note(reportError);
     if (request.removed) *request.removed = state.removed;
     if (request.residue) *request.residue = static_cast<int>(state.entries.size());
     if (!userDataOk || !updaterOk) state.note(ERROR_INVALID_NAME);

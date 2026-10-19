@@ -147,6 +147,17 @@ it('wires the layered data-cleanup uninstaller through the native helper', async
     expect(nsh).toContain('UninstallCleanup(w "$UnTarget", w "$INSTDIR", w "$UnHome", w "$UnHistory"')
     expect(nsh).toContain('${GetOptions} $R0 "--delete-app-data"')
     expect(nsh).toContain('DetailPrint "$(RIVETDECK_UNINSTALL_RESIDUE)"')
+    expect(nsh).toContain('*i .R7, *i .R9) i .R8 ?cr')
+    expect(nsh).toContain('Pop $R5')
+    expect(nsh).toContain('${If} $R5 != "ok"')
+    expect(nsh).toContain('${If} $R8 != 0')
+    expect(nsh).toContain('${OrIf} $R9 != 0')
+    expect(nsh).toContain('${If} $R7 > 0\n  ${AndIf} $R9 == 0')
+    for (const key of ['HELPER_ERROR', 'ERROR', 'REPORT_ERROR', 'SKIPPED']) {
+      expect(nsh).toContain(`$(RIVETDECK_UNINSTALL_${key})`)
+    }
+    expect(nsh).toContain('SetDetailsView show')
+    expect(nsh).toContain('MessageBox MB_OK|MB_ICONEXCLAMATION')
     expect(nsh).toContain('!macro customUnInstall')
     expect(nsh).toContain('!macro customInstall')
     expect(nsh).toContain('Call un.RivetdeckCleanData')
@@ -164,6 +175,11 @@ it('wires the layered data-cleanup uninstaller through the native helper', async
     const strings = await readFile(join(output, 'uninstall-strings.nsh'), 'utf8')
     expect(strings).toContain('LangString RIVETDECK_UNINSTALL_RESIDUE 1033 ')
     expect(strings).toContain('LangString RIVETDECK_UNINSTALL_RESIDUE 2052 ')
+    for (const language of [1033, 2052]) {
+      for (const key of ['HELPER_ERROR', 'ERROR', 'REPORT_ERROR', 'SKIPPED']) {
+        expect(strings).toContain(`LangString RIVETDECK_UNINSTALL_${key} ${language} `)
+      }
+    }
     const messages = await readFile(join(electronRoot, 'installer/uninstall-messages.yml'), 'utf8')
     expect(messages).toContain('RIVETDECK_UNINSTALL_RESIDUE')
     expect(messages).toContain('zh:')

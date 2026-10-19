@@ -2,9 +2,10 @@
  * userData root (including --user-data-dir relocations) and every DSH_HOME. The Windows
  * uninstaller merges it into protection and cleanup-candidate sets; a full-removal
  * request proceeds only while the record can prove no unrecorded roots existed. */
-import { readFile } from 'node:fs/promises'
+import { mkdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { withDesktopFileWriter, writeDesktopFileAtomic } from './atomic-file.ts'
+import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
+import { writeDesktopFileAtomic } from './atomic-file.ts'
 
 /** Record file stored beside the default userData (`%APPDATA%`), a location the app can
  * always write. */
@@ -69,8 +70,10 @@ export function renderPathHistory(record: PathHistoryRecord): string {
 /**
  * Merge this launch's resolved userData and DSH_HOME into the install's durable record.
  * Values accumulate — earlier roots are never overwritten or dropped, and lines this
- * version cannot parse are carried through verbatim. The record lives beside the default
- * userData so an unelevated process can always update it. With no record at all the
+ * version cannot parse are carried through verbatim. A cross-process writer lock covers
+ * the entire read-modify-write cycle, including launches with different userData roots.
+ * The record lives beside the default userData so an unelevated process can always
+ * update it. With no record at all the
  * launch starts a new record marked incomplete, because the first record cannot prove
  * which roots ran before it existed. A record that exists but cannot be read is left
  * untouched — overwriting it could erase claims the uninstaller would otherwise honor.
@@ -86,7 +89,8 @@ export async function mergeLaunchPathHistory(options: {
   dshHome: string
 }): Promise<PathHistoryRecord> {
   const recordPath = join(options.appDataDir, PATH_HISTORY_FILE)
-  return withDesktopFileWriter(recordPath, async () => {
+  await mkdir(options.appDataDir, { recursive: true, mode: 0o700 })
+  return withFileLock(recordPath, async () => {
     const record: PathHistoryRecord = (await readRecord(recordPath))
       ?? { complete: false, userData: [], dshHome: [], unrecognized: [] }
     pushUnique(record.userData, options.userData)

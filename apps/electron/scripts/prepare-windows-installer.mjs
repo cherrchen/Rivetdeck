@@ -152,7 +152,6 @@ Var UnHome
 Var UnTarget
 Var UnHistory
 Var UnResidue
-Var UnSkipped
 Var UnMode
 
 ; A replaced or updating uninstaller never deletes data. The record beside the default
@@ -184,9 +183,33 @@ Function un.RivetdeckCleanData
   StrCpy $UnHistory "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}"
   InitPluginsDir
   File "/oname=$PLUGINSDIR\\rivetdeck-uninstall.dll" "${'${RIVETDECK_UNINSTALL_HELPER}'}"
-  System::Call '$PLUGINSDIR\\rivetdeck-uninstall.dll::UninstallCleanup(w "$UnTarget", w "$INSTDIR", w "$UnHome", w "$UnHistory", w "$LOCALAPPDATA\\${'${RIVETDECK_UPDATER_CACHE}'}", w "$UnResidue", i $UnMode, *i .R6, *i .R7) i .R8 ?c'
-  StrCpy $UnSkipped $R7
-  ${'${If}'} $UnSkipped > 0
+  ; Always pop System's call status: DLL loading or symbol lookup can fail before entry.
+  System::Call '\"$PLUGINSDIR\\rivetdeck-uninstall.dll\"::UninstallCleanup(w "$UnTarget", w "$INSTDIR", w "$UnHome", w "$UnHistory", w "$LOCALAPPDATA\\${'${RIVETDECK_UPDATER_CACHE}'}", w "$UnResidue", i $UnMode, *i .R6, *i .R7, *i .R9) i .R8 ?cr'
+  Pop $R5
+  ${'${If}'} $R5 != "ok"
+    SetDetailsView show
+    DetailPrint "$(RIVETDECK_UNINSTALL_HELPER_ERROR) $R5"
+    MessageBox MB_OK|MB_ICONEXCLAMATION "$(RIVETDECK_UNINSTALL_HELPER_ERROR) $R5" /SD IDOK
+    Return
+  ${'${EndIf}'}
+  ${'${If}'} $R8 != 0
+  ${'${OrIf}'} $R9 != 0
+    SetDetailsView show
+    DetailPrint "$(RIVETDECK_UNINSTALL_ERROR) $R8"
+    DetailPrint "$(RIVETDECK_UNINSTALL_SKIPPED) $R7"
+    ${'${If}'} $R9 != 0
+      DetailPrint "$(RIVETDECK_UNINSTALL_REPORT_ERROR) $R9"
+      MessageBox MB_OK|MB_ICONEXCLAMATION "$(RIVETDECK_UNINSTALL_ERROR) $R8$\\r$\\n$(RIVETDECK_UNINSTALL_SKIPPED) $R7$\\r$\\n$(RIVETDECK_UNINSTALL_REPORT_ERROR) $R9" /SD IDOK
+    ${'${Else}'}
+      ${'${If}'} $R7 > 0
+        MessageBox MB_OK|MB_ICONEXCLAMATION "$(RIVETDECK_UNINSTALL_ERROR) $R8$\\r$\\n$(RIVETDECK_UNINSTALL_SKIPPED) $R7$\\r$\\n$UnResidue" /SD IDOK
+      ${'${Else}'}
+        MessageBox MB_OK|MB_ICONEXCLAMATION "$(RIVETDECK_UNINSTALL_ERROR) $R8$\\r$\\n$(RIVETDECK_UNINSTALL_SKIPPED) $R7" /SD IDOK
+      ${'${EndIf}'}
+    ${'${EndIf}'}
+  ${'${EndIf}'}
+  ${'${If}'} $R7 > 0
+  ${'${AndIf}'} $R9 == 0
     DetailPrint "$(RIVETDECK_UNINSTALL_RESIDUE)"
     DetailPrint "$UnResidue"
   ${'${EndIf}'}

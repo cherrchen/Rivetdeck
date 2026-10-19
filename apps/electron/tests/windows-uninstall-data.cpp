@@ -6,7 +6,55 @@
 #include <stdlib.h>
 #include <cassert>
 #include "../installer/uninstall-data.h"
+
+// Intercept only the orchestration's enumeration calls; safe removal uses Win32 directly.
+static std::wstring enumerationFaultPattern;
+static HANDLE enumerationFaultSearch = INVALID_HANDLE_VALUE;
+static bool enumerationSawChild = false;
+static bool IsChild(const WIN32_FIND_DATAW& entry) {
+    return wcscmp(entry.cFileName, L".") != 0 && wcscmp(entry.cFileName, L"..") != 0;
+}
+static HANDLE WINAPI CleanupFindFirst(LPCWSTR pattern, LPWIN32_FIND_DATAW entry) {
+    HANDLE search = FindFirstFileW(pattern, entry);
+    if (search != INVALID_HANDLE_VALUE && enumerationFaultPattern == pattern) {
+        enumerationFaultSearch = search;
+        enumerationSawChild = IsChild(*entry);
+    }
+    return search;
+}
+static BOOL WINAPI CleanupFindNext(HANDLE search, LPWIN32_FIND_DATAW entry) {
+    if (search == enumerationFaultSearch && enumerationSawChild) {
+        SetLastError(ERROR_READ_FAULT);
+        return FALSE;
+    }
+    const BOOL result = FindNextFileW(search, entry);
+    if (result && search == enumerationFaultSearch) enumerationSawChild = IsChild(*entry);
+    return result;
+}
+static BOOL WINAPI CleanupFindClose(HANDLE search) {
+    if (search == enumerationFaultSearch) enumerationFaultSearch = INVALID_HANDLE_VALUE;
+    const BOOL result = FindClose(search);
+    // Closing a handle must not overwrite the enumeration outcome under test.
+    SetLastError(ERROR_SUCCESS);
+    return result;
+}
+static bool shortReportWrite = false;
+static BOOL WINAPI CleanupWriteFile(HANDLE file, LPCVOID bytes, DWORD size, LPDWORD written, LPOVERLAPPED overlapped) {
+    if (shortReportWrite && size > 0) {
+        *written = size - 1;
+        return TRUE;
+    }
+    return WriteFile(file, bytes, size, written, overlapped);
+}
+#define FindFirstFileW CleanupFindFirst
+#define FindNextFileW CleanupFindNext
+#define FindClose CleanupFindClose
+#define WriteFile CleanupWriteFile
 #include "../installer/uninstall-cleanup.h"
+#undef FindFirstFileW
+#undef FindNextFileW
+#undef FindClose
+#undef WriteFile
 
 static void File(const std::wstring& path, DWORD attributes = FILE_ATTRIBUTE_NORMAL) {
     HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, attributes, nullptr);
@@ -386,13 +434,28 @@ int wmain(int argc, wchar_t** argv) {
             File(legacy + L"\\Partitions\\worker\\GPUCache\\.credentials.yaml");
             Mkdir(legacy + L"\\managed-toolchains");
             SeedToolchains(legacy + L"\\managed-toolchains");
+            const std::wstring generationHome = legacy
+                + L"\\managed-toolchains\\node\\24.5.0\\win32-x64\\3f8a1c2e-0000-4abc-9def-0123456789ab\\home";
+            const std::wstring stagingHome = legacy
+                + L"\\managed-toolchains\\staging\\8c4d2f10-1111-4bcd-8f0a-abcdef012345\\home";
+            Mkdir(generationHome);
+            File(generationHome + L"\\.credentials.yaml");
+            Mkdir(stagingHome);
+            File(stagingHome + L"\\sessions.jsonl");
+            const std::wstring legacyUpdater = legacy + L"\\updater";
+            Mkdir(legacyUpdater);
+            Mkdir(legacyUpdater + L"\\pending");
+            Mkdir(legacyUpdater + L"\\pending\\home");
+            File(legacyUpdater + L"\\pending\\home\\sessions.jsonl");
+            Mkdir(legacyUpdater + L"\\installer-logs");
+            File(legacyUpdater + L"\\installer-logs\\.credentials.yaml");
             const std::wstring record = legacy + L"\\history.ini";
             if (!missingHistory) WriteText(record, "complete=0\r\n");
             uninstall_cleanup::CleanupRequest request;
             request.userData = legacy.c_str();
             request.installation = installation.c_str();
             request.historyFile = record.c_str();
-            request.updaterCache = updater.c_str();
+            request.updaterCache = legacyUpdater.c_str();
             request.residueReport = report.c_str();
             request.deleteAppData = purge;
             int residue = 0;
@@ -400,8 +463,15 @@ int wmain(int argc, wchar_t** argv) {
             assert(uninstall_cleanup::Cleanup(request) == ERROR_SUCCESS);
             assert(Exists(legacy + L"\\Cache\\shared-home\\sessions.jsonl"));
             assert(Exists(legacy + L"\\Partitions\\worker\\GPUCache\\.credentials.yaml"));
-            assert(!Exists(legacy + L"\\managed-toolchains"));
-            assert(residue >= 2);
+            assert(Exists(generationHome + L"\\.credentials.yaml"));
+            assert(Exists(stagingHome + L"\\sessions.jsonl"));
+            assert(Exists(legacyUpdater + L"\\pending\\home\\sessions.jsonl"));
+            assert(Exists(legacyUpdater + L"\\installer-logs\\.credentials.yaml"));
+            std::string reportBytes;
+            assert(uninstall_cleanup::ReadFileBytes(report, reportBytes) == ERROR_SUCCESS);
+            assert(reportBytes.find(Narrow(legacyUpdater)) != std::string::npos);
+            assert(reportBytes.find(Narrow(legacy + L"\\managed-toolchains")) != std::string::npos);
+            assert(residue >= 4);
         }
     }
 
@@ -463,6 +533,83 @@ int wmain(int argc, wchar_t** argv) {
         assert(uninstall_cleanup::Cleanup(request) == ERROR_SUCCESS);
         assert(Exists(aliasHome + L"\\sessions.jsonl"));
         assert(residue > 0);
+    }
+
+    // An I/O failure after a real child is observed cannot verify a partial inventory.
+    const std::wstring enumerationData = root + L"\\enumeration-data";
+    const std::wstring enumerationShims = enumerationData + L"\\electron\\toolchains\\bin";
+    const std::wstring enumerationPartitions = enumerationData + L"\\Partitions";
+    Mkdir(enumerationData);
+    File(enumerationData + L"\\Local State");
+    Mkdir(enumerationData + L"\\electron");
+    Mkdir(enumerationData + L"\\electron\\toolchains");
+    Mkdir(enumerationShims);
+    File(enumerationShims + L"\\python.cmd");
+    File(enumerationShims + L"\\npm.cmd");
+    Mkdir(enumerationPartitions);
+    Mkdir(enumerationPartitions + L"\\first");
+    Mkdir(enumerationPartitions + L"\\second");
+    {
+        uninstall_cleanup::CleanupRequest request;
+        request.userData = enumerationData.c_str();
+        request.installation = installation.c_str();
+        request.historyFile = fullHistory.c_str();
+        request.updaterCache = updater.c_str();
+        request.residueReport = report.c_str();
+        for (const std::wstring& target : {enumerationShims, enumerationPartitions}) {
+            enumerationFaultPattern = L"\\\\?\\" + target + L"\\*";
+            int visited = 0;
+            assert(!uninstall_cleanup::ForEachEntry(target, [&](const WIN32_FIND_DATAW&) {
+                ++visited;
+                return true;
+            }));
+            assert(visited == 1);
+            int residue = 0;
+            request.residue = &residue;
+            assert(uninstall_cleanup::Cleanup(request) == ERROR_SUCCESS);
+            assert(Exists(target));
+            std::string bytes;
+            assert(uninstall_cleanup::ReadFileBytes(report, bytes) == ERROR_SUCCESS);
+            assert(bytes.find(Narrow(target)) != std::string::npos);
+            assert(residue > 0);
+            if (target == enumerationShims) assert(Exists(enumerationShims + L"\\python.cmd"));
+        }
+        enumerationFaultPattern.clear();
+    }
+
+    // Report failure is independent of the skipped-target count; no stale report is usable.
+    {
+        WriteText(report, "old report");
+        HANDLE lockedReport = CreateFileW(report.c_str(), GENERIC_READ, FILE_SHARE_READ,
+            nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        assert(lockedReport != INVALID_HANDLE_VALUE);
+        uninstall_cleanup::CleanupRequest request;
+        request.userData = enumerationData.c_str();
+        request.installation = installation.c_str();
+        request.historyFile = incompleteHistory.c_str();
+        request.updaterCache = updater.c_str();
+        request.residueReport = report.c_str();
+        request.deleteAppData = 1;
+        DWORD reportError = ERROR_SUCCESS;
+        int residue = 0, removed = 0;
+        request.residue = &residue;
+        request.removed = &removed;
+        request.reportError = &reportError;
+        assert(uninstall_cleanup::Cleanup(request) == ERROR_SHARING_VIOLATION);
+        assert(reportError == ERROR_SHARING_VIOLATION && residue > 0);
+        assert(uninstall_cleanup::WriteResidue(report, {}) == ERROR_SHARING_VIOLATION);
+        CloseHandle(lockedReport);
+        shortReportWrite = true;
+        assert(uninstall_cleanup::Cleanup(request) == ERROR_WRITE_FAULT);
+        assert(reportError == ERROR_WRITE_FAULT && residue > 0);
+        shortReportWrite = false;
+        request.residueReport = L"relative-report.log";
+        assert(uninstall_cleanup::Cleanup(request) == ERROR_INVALID_NAME);
+        assert(reportError == ERROR_INVALID_NAME);
+        request.installation = L"relative-installation";
+        assert(uninstall_cleanup::Cleanup(request) == ERROR_INVALID_NAME);
+        assert(residue == 0 && removed == 0);
+        assert(Exists(enumerationData + L"\\Local State"));
     }
 
     assert(RemoveDirectoryW(installation.c_str()));

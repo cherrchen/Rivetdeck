@@ -1,3 +1,5 @@
+import { fork } from 'node:child_process'
+import { once } from 'node:events'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -97,5 +99,68 @@ describe('Electron path history', () => {
     await mergeLaunchPathHistory({ appDataDir, userData: 'C:\\same', dshHome: 'C:\\same-home' })
     const record = await mergeLaunchPathHistory({ appDataDir, userData: 'C:\\same', dshHome: 'C:\\same-home' })
     expect(record?.userData).toEqual(['C:\\same'])
+  })
+
+  it('retains both launches when independent processes contend for the history', async () => {
+    const appDataDir = await freshAppDataDir()
+    const recordPath = join(appDataDir, PATH_HISTORY_FILE)
+    await writeFile(recordPath, 'complete=1\r\n')
+    const children: ReturnType<typeof writer>[] = []
+    function writer(label: string) {
+      const child = fork(join(import.meta.dirname, 'fixtures/path-history-writer.mjs'),
+        [appDataDir, `C:\\data-${label}`, `C:\\home-${label}`], {
+          execArgv: ['--import', 'tsx/esm'], stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+          env: { ...process.env, TSX_TSCONFIG_PATH: join(import.meta.dirname, '../../../tsconfig.json') },
+        })
+      let stderr = ''
+      child.stderr?.on('data', (chunk) => { stderr += String(chunk) })
+      const messages: unknown[] = []
+      child.on('message', (message) => { messages.push(message) })
+      const done = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+        child.once('error', reject)
+        child.once('close', (code, signal) => { resolve({ code, signal }) })
+      })
+      return { child, messages, done, stderr: () => stderr }
+    }
+    async function message(process: ReturnType<typeof writer>) {
+      if (process.messages.length === 0) {
+        await Promise.race([
+          once(process.child, 'message'),
+          process.done.then(() => { throw new Error(`Writer exited before its barrier: ${process.stderr()}`) }),
+        ])
+      }
+      return process.messages.shift()
+    }
+    async function exited(process: ReturnType<typeof writer>) {
+      const { code, signal } = await process.done
+      expect(signal, process.stderr()).toBeNull()
+      expect(code, process.stderr()).toBe(0)
+    }
+    try {
+      const first = writer('A')
+      children.push(first)
+      expect(await message(first)).toBe('read')
+      const second = writer('B')
+      children.push(second)
+      // An unlocked implementation reaches a stale read; a locked writer reports
+      // contention before it can read the first writer's committed roots.
+      const secondState = await message(second)
+      expect(['contended', 'read']).toContain(secondState)
+      first.child.send('release')
+      await exited(first)
+      if (secondState === 'contended') expect(await message(second)).toBe('read')
+      second.child.send('release')
+      await exited(second)
+      const stored = parsePathHistory(await readFile(recordPath, 'utf8'))
+      expect(stored.complete).toBe(true)
+      expect(stored.userData).toEqual(['C:\\data-A', 'C:\\data-B'])
+      expect(stored.dshHome).toEqual(['C:\\home-A', 'C:\\home-B'])
+      await expect(readFile(`${recordPath}.lock`)).rejects.toMatchObject({ code: 'ENOENT' })
+    } finally {
+      for (const { child } of children) {
+        if (child.exitCode === null && child.signalCode === null) child.kill()
+      }
+      await Promise.all(children.map(process => process.done))
+    }
   })
 })

@@ -9,8 +9,8 @@ const WINDOWS_RENAME_RETRY_LIMIT = 8
 
 /**
  * Serialize one in-process read-modify-write operation for a Desktop file.
- * Electron enforces a single application instance, so the queue covers every
- * supported writer while avoiding a stale on-disk lock after a crash.
+ * Files shared by launches with different userData roots require a cross-process
+ * lock instead; this queue coordinates only writers within one process.
  * @param path - Final file path whose writers share a queue.
  * @param operation - Work performed after all earlier writers settle.
  * @returns operation result.
