@@ -183,9 +183,18 @@ Function un.RivetdeckCleanData
   StrCpy $UnHistory "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}"
   InitPluginsDir
   File "/oname=$PLUGINSDIR\\rivetdeck-uninstall.dll" "${'${RIVETDECK_UNINSTALL_HELPER}'}"
-  ; Always pop System's call status: DLL loading or symbol lookup can fail before entry.
-  System::Call '\"$PLUGINSDIR\\rivetdeck-uninstall.dll\"::UninstallCleanup(w "$UnTarget", w "$INSTDIR", w "$UnHome", w "$UnHistory", w "$LOCALAPPDATA\\${'${RIVETDECK_UPDATER_CACHE}'}", w "$UnResidue", i $UnMode, *i .R6, *i .R7, *i .R9) i .R8 ?cr'
-  Pop $R5
+  ; NSIS 3.0.4.1 cannot quote DLL paths in System proc specs. Load the full path as
+  ; a Unicode argument and call the resolved address so spaces and parentheses are safe.
+  StrCpy $R5 "error"
+  System::Call 'kernel32::LoadLibraryW(w "$PLUGINSDIR\\rivetdeck-uninstall.dll") p .R4'
+  ${'${If}'} $R4 != 0
+    System::Call 'kernel32::GetProcAddress(p R4, m "UninstallCleanup") p .R3'
+    ${'${If}'} $R3 != 0
+      System::Call '::$R3(w "$UnTarget", w "$INSTDIR", w "$UnHome", w "$UnHistory", w "$LOCALAPPDATA\\${'${RIVETDECK_UPDATER_CACHE}'}", w "$UnResidue", i $UnMode, *i .R6, *i .R7, *i .R9) i .R8 ?cr'
+      Pop $R5
+    ${'${EndIf}'}
+    System::Call 'kernel32::FreeLibrary(p R4)'
+  ${'${EndIf}'}
   ${'${If}'} $R5 != "ok"
     SetDetailsView show
     DetailPrint "$(RIVETDECK_UNINSTALL_HELPER_ERROR) $R5"
