@@ -326,6 +326,16 @@ describe('pruneCheckpoints', () => {
     writeFile(join(home, 'electron', 'checkpoints', dir, 'manifest.json'), JSON.stringify(manifest))
   }
 
+  it('keeps a queued restore target until the request is consumed', async () => {
+    const home = makeHome()
+    for (const id of ['1000', '2000', '3000', '4000']) commit(home, id, ['a'])
+    const root = checkpointsRoot(home)
+    await pruneCheckpoints(root, undefined, new Set(['1000']))
+    expect(readdirSync(root).sort()).toEqual(['1000', '2000', '3000', '4000'])
+    await pruneCheckpoints(root)
+    expect(readdirSync(root).sort()).toEqual(['2000', '3000', '4000'])
+  })
+
   it('keeps the newest N and every checkpoint holding a unique verified copy', async () => {
     const home = makeHome()
     // Only 1000 uniquely holds 'lost-session'; 2000's sessions are all covered
@@ -429,6 +439,47 @@ describe('runValidationWorker result framing', () => {
     writeFileSync(fixture, script)
     return fixture
   }
+
+  it('does not launch an already aborted validation', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-worker-aborted-'))
+    roots.push(root)
+    const marker = join(root, 'launched')
+    const fixture = stubWorker(root, `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(marker)}, 'yes')`)
+    const { runValidationWorker } = await import('../src/checkpoint/worker.ts')
+    await expect(runValidationWorker(fixture, root, join(root, 'anchor'), runtime,
+      AbortSignal.abort(new Error('already cancelled')))).rejects.toThrow('already cancelled')
+    expect(existsSync(marker)).toBe(false)
+  })
+
+  // Windows terminates SIGTERM recipients forcibly; POSIX exercises escalation.
+  it.skipIf(process.platform === 'win32')('reaps a worker that ignores cancellation', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-worker-cancel-'))
+    roots.push(root)
+    const ready = join(root, 'ready')
+    const fixture = stubWorker(root, `
+      import { writeFileSync } from 'node:fs'
+      process.on('SIGTERM', () => {})
+      setInterval(() => {}, 1000)
+      writeFileSync(${JSON.stringify(ready)}, String(process.pid))
+    `)
+    const controller = new AbortController()
+    const { runValidationWorker } = await import('../src/checkpoint/worker.ts')
+    let settled = false
+    const done = runValidationWorker(fixture, root, join(root, 'anchor'), runtime, controller.signal)
+      .catch((error: unknown) => error).finally(() => { settled = true })
+    try {
+      await expect.poll(() => existsSync(ready), { timeout: 10_000 }).toBe(true)
+      controller.abort(new Error('validation cancelled'))
+      await expect.poll(() => settled, { timeout: 10_000 }).toBe(true)
+      expect(await done).toMatchObject({ message: 'validation cancelled' })
+      const pid = Number(readFileSync(ready, 'utf8'))
+      expect(() => process.kill(pid, 0)).toThrow()
+    } finally {
+      controller.abort()
+      if (!settled && existsSync(ready)) process.kill(Number(readFileSync(ready, 'utf8')), 'SIGKILL')
+      await done
+    }
+  }, 30_000)
 
   it('parses a RESULT line split across stdout chunks', async () => {
     const root = mkdtempSync(join(tmpdir(), 'dsh-worker-split-'))

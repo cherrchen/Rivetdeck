@@ -4,6 +4,9 @@
  * Agent Note). Case 10 (honest refusal without a checkpoint) is covered by
  * `checkpoint-detect.spec.ts`; case 11 is post-v1.
  */
+import { runStartupSessionMaintenance } from '../src/checkpoint/startup.ts'
+import { enqueuePendingRestore, listPendingRestores } from '../src/checkpoint/pending.ts'
+import { consumePendingSessionRestores } from '../src/checkpoint/index.ts'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import {
@@ -230,6 +233,44 @@ describe('acceptance case 4: interruption at each switch stage converges at next
       }],
     }
     await writeRestoreJournal(home, journal)
+  }
+
+  for (const throws of [false, true]) {
+    it(`gates a journal created by this launch's restore (${throws ? 'notification throws' : 'failed result'})`, async () => {
+      const home = makeHome()
+      seed(home)
+      const blockedRow = join(home, 'storages', 'session_projcache', 'sessions', 'session-parent-1.json')
+      writeFile(join(blockedRow, 'blocker'), 'keeps cache removal from completing')
+      const errors: unknown[] = []
+      const deferred: string[] = []
+      const allowed = await runStartupSessionMaintenance({
+        gate: async () => {
+          const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+          deferred.push(...result.deferred)
+          return result.deferred.length === 0
+        },
+        maintain: async () => {
+          const outcome = await restoreSession({
+            home, sessionId: 'session-parent-1', acquireLease: fakeLeases().acquire, validate: fakeValidator(),
+          })
+          expect(outcome.kind).toBe('failed')
+          expect(readFileSync(join(home, 'sessions', CASE4_DIR, 'session.v4.jsonl.zstd'), 'utf8')).toBe('VERIFIED')
+          if (throws) throw new Error('notification failed')
+        },
+        onError: error => errors.push(error),
+      })
+      expect(allowed).toBe(false)
+      expect(deferred).toHaveLength(1)
+      expect(errors).toHaveLength(throws ? 1 : 0)
+      expect(await listRestoreJournals(home)).toHaveLength(1)
+      rmSync(blockedRow, { recursive: true })
+      const resumed = await runStartupSessionMaintenance({
+        gate: async () => (await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })).deferred.length === 0,
+        maintain: async () => {}, onError: (error) => { throw error },
+      })
+      expect(resumed).toBe(true)
+      expect(await listRestoreJournals(home)).toEqual([])
+    })
   }
 
   it('resumes when only staging completed (tmp staged, live untouched)', async () => {
@@ -575,5 +616,52 @@ describe('acceptance case 9: both branches survive restore + later writes + swap
     expect(readFileSync(restoredCopy)).toEqual(appendedBranch)
     expect(readFileSync(join(liveDir, 'session.v9.jsonl.zstd'))).toEqual(pollutedV9)
     expect(existsSync(join(home, 'electron', 'quarantine', quarantineDir, 'sessions', session.dir, 'session.v9.jsonl.zstd'))).toBe(true)
+  })
+})
+
+describe('confirmed checkpoint identity', () => {
+  it.skipIf(!backendAvailable)('restores the queued checkpoint after later exit captures and retention', async () => {
+    const home = makeHome()
+    const session = await createRealSession(home, 'pinned-target', '/work/pinned')
+    checkpointFromLive(home, session, '1000')
+    const canonical = join(home, 'sessions', session.dir, 'session.v4.jsonl.zstd')
+    const confirmed = readFileSync(canonical)
+    await enqueuePendingRestore(home, session.id, '1000')
+    const mounted = await mountSessionsBackend(join(home, 'sessions'), INSTALL_ANCHOR)
+    try {
+      const handle = await mounted.persistence.open(session.id, 'write')
+      try {
+        await handle.append([{ type: 'turn/start', seq: 2, time: 10, data: { turn: 2 } }])
+        await handle.flush()
+      } finally { await handle.close() }
+    } finally { await mounted.dispose() }
+    await writeCleanReport(home)
+    for (const id of [2000, 3000, 4000, 5000]) {
+      expect((await exitCheckpoint(home, id, (root, signal) =>
+        validateSessionsRoot({ sessionsRoot: root, installAnchor: INSTALL_ANCHOR, signal }))).kind).toBe('committed')
+    }
+    expect(readFileSync(canonical)).not.toEqual(confirmed)
+    expect(existsSync(join(checkpointsRoot(home), '1000'))).toBe(true)
+    const options = {
+      home, appPath: APP_PATH, resourcesPath: APP_PATH, packaged: false,
+      hostRuntime: { executable: process.execPath, env: {} }, hostRunning: () => false,
+    }
+    expect(await consumePendingSessionRestores(options)).toMatchObject([
+      { sessionId: session.id, outcome: { kind: 'restored', checkpointId: '1000' } },
+    ])
+    expect(readFileSync(canonical)).toEqual(confirmed)
+    expect(await listPendingRestores(home)).toEqual([])
+    await enqueuePendingRestore(home, session.id, 'missing')
+    expect(await consumePendingSessionRestores(options)).toMatchObject([
+      { outcome: { kind: 'refused', reason: { key: 'no-checkpoint' } } },
+    ])
+    expect(readFileSync(canonical)).toEqual(confirmed)
+    writeFile(join(home, 'electron', 'pending-restore.json'), JSON.stringify({
+      version: 1, requests: [{ sessionId: session.id, requestedAt: 1 }],
+    }))
+    expect(await consumePendingSessionRestores(options)).toMatchObject([
+      { outcome: { kind: 'refused', reason: { key: 'no-checkpoint' } } },
+    ])
+    expect(readFileSync(canonical)).toEqual(confirmed)
   })
 })

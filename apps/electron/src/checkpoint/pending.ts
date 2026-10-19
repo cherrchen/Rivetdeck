@@ -14,6 +14,8 @@ import { writeDesktopFileAtomic, withDesktopFileWriter } from '../atomic-file.ts
 
 export interface PendingRestoreRequest {
   readonly sessionId: string
+  /** Absent only on legacy requests, which must be refused rather than retargeted. */
+  readonly checkpointId?: string
   readonly requestedAt: number
 }
 
@@ -44,7 +46,9 @@ async function readPendingRestores(home: string): Promise<PendingRestores> {
         (entry): entry is PendingRestoreRequest =>
           typeof entry === 'object' && entry !== null
           && typeof (entry as { sessionId?: unknown }).sessionId === 'string'
-          && typeof (entry as { requestedAt?: unknown }).requestedAt === 'number',
+          && typeof (entry as { requestedAt?: unknown }).requestedAt === 'number'
+          && ((entry as { checkpointId?: unknown }).checkpointId === undefined
+            || typeof (entry as { checkpointId?: unknown }).checkpointId === 'string'),
       ),
     }
   } catch {
@@ -54,15 +58,19 @@ async function readPendingRestores(home: string): Promise<PendingRestores> {
 
 /**
  * Record a confirmed restore intent for the next launch. Duplicate session
- * entries collapse to the newest request.
+ * entries collapse to the newest request; the checkpoint never changes implicitly.
+ * @param home - Active Harness home.
+ * @param sessionId - Session the user confirmed restoring.
+ * @param checkpointId - Checkpoint shown in that confirmation.
+ * @returns Resolves after the request is durably written.
  */
-export async function enqueuePendingRestore(home: string, sessionId: string): Promise<void> {
+export async function enqueuePendingRestore(home: string, sessionId: string, checkpointId: string): Promise<void> {
   const path = pendingRestorePath(home)
   await withDesktopFileWriter(path, async () => {
     const current = await readPendingRestores(home)
     const requests = [
       ...current.requests.filter(request => request.sessionId !== sessionId),
-      { sessionId, requestedAt: Date.now() },
+      { sessionId, checkpointId, requestedAt: Date.now() },
     ]
     await writeDesktopFileAtomic(path, `${JSON.stringify({ version: 1, requests }, undefined, 2)}\n`)
   })

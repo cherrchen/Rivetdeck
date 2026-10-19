@@ -232,11 +232,12 @@ describe('confirmUnreadable', () => {
 describe('pending restores', () => {
   it('queues, dedupes, and dequeues requests atomically', async () => {
     const home = makeHome()
-    await enqueuePendingRestore(home, 'one')
-    await enqueuePendingRestore(home, 'two')
-    await enqueuePendingRestore(home, 'one')
+    await enqueuePendingRestore(home, 'one', '1000')
+    await enqueuePendingRestore(home, 'two', '1000')
+    await enqueuePendingRestore(home, 'one', '2000')
     const first = await listPendingRestores(home)
     expect(first.map(request => request.sessionId).sort()).toEqual(['one', 'two'])
+    expect(first.find(request => request.sessionId === 'one')?.checkpointId).toBe('2000')
     await dequeuePendingRestore(home, 'one')
     expect((await listPendingRestores(home)).map(request => request.sessionId)).toEqual(['two'])
     await dequeuePendingRestore(home, 'two')
@@ -246,12 +247,12 @@ describe('pending restores', () => {
 
   it('keeps unprocessed requests when a mid-queue dequeue never runs', async () => {
     const home = makeHome()
-    await enqueuePendingRestore(home, 'one')
-    await enqueuePendingRestore(home, 'two')
+    await enqueuePendingRestore(home, 'one', '1000')
+    await enqueuePendingRestore(home, 'two', '1000')
     await dequeuePendingRestore(home, 'one')
     expect((await listPendingRestores(home)).map(request => request.sessionId)).toEqual(['two'])
     // A request enqueued between listing and dequeue survives the rewrite.
-    await enqueuePendingRestore(home, 'three')
+    await enqueuePendingRestore(home, 'three', '1000')
     await dequeuePendingRestore(home, 'two')
     expect((await listPendingRestores(home)).map(request => request.sessionId)).toEqual(['three'])
   })

@@ -42,6 +42,7 @@ import {
   restoreCheckpointSession,
   type DesktopSessionMaintenanceOptions,
 } from './checkpoint/index.ts'
+import { runStartupSessionMaintenance } from './checkpoint/startup.ts'
 import { detectFormatRefusalFrame, type SessionRefusalHit } from './checkpoint/refusal.ts'
 import { deleteRestoreJournal, listRestoreJournals, readRestoreJournal, restoreJournalsDir } from './checkpoint/journal.ts'
 import { resolveRestoreClosure, type RestoreOutcome } from './checkpoint/restore.ts'
@@ -152,6 +153,7 @@ async function startHarness(
     runtime.executable,
     harnessArguments(appPath, resolveHostModule(appPath), hostPatch),
     {
+      ipc: true,
       cwd: app.getPath('home'),
       env: activeNetwork.environmentForHarness({
         ...process.env,
@@ -414,6 +416,7 @@ async function notifyRestoreOutcome(sessionId: string, outcome: RestoreOutcome):
  */
 async function offerSessionRestore(options: {
   readonly sessionId: string
+  readonly checkpointId: string
   readonly capturedAt: number
   readonly memberCount: number
   readonly maintenance: DesktopSessionMaintenanceOptions
@@ -431,7 +434,7 @@ async function offerSessionRestore(options: {
   })
   if ((await presentRestoreDialog(spec)) !== 0) return false
   if (harness !== undefined) {
-    await queueSessionRestore(home, options.sessionId)
+    await queueSessionRestore(home, options.sessionId, options.checkpointId)
     console.error(`desktop checkpoint: queued restore of ${options.sessionId} for the next launch`)
     return true
   }
@@ -439,6 +442,7 @@ async function offerSessionRestore(options: {
   const outcome = await restoreCheckpointSession({
     home: maintenance.home,
     sessionId: options.sessionId,
+    checkpointId: options.checkpointId,
     appPath: maintenance.appPath,
     resourcesPath: maintenance.resourcesPath,
     packaged: maintenance.packaged,
@@ -465,6 +469,7 @@ async function handleSessionRefusal(hit: SessionRefusalHit): Promise<void> {
   const members = resolveRestoreClosure(resolved.manifest, resolved.entry.sessionId)
   const queued = await offerSessionRestore({
     sessionId: resolved.entry.sessionId,
+    checkpointId: resolved.checkpointId,
     capturedAt: resolved.entry.capturedAt,
     memberCount: members?.length ?? 1,
     maintenance: {
@@ -519,12 +524,98 @@ async function requestSessionRollback(): Promise<void> {
     // never silently drops a later confirmation.
     relaunchPending = await offerSessionRestore({
       sessionId: item.sessionId,
+      checkpointId: detected.manifest.id,
       capturedAt: item.entry.capturedAt,
       memberCount: members?.length ?? 1,
       maintenance,
     }) || relaunchPending
   }
   if (relaunchPending) await relaunchDesktop()
+}
+
+/** Resolve interrupted restore work, requiring an explicit decision before Host launch. */
+async function gateRestoreJournals(home: string, appPath: string): Promise<boolean> {
+  let convergence = await convergeDesktopRestoreJournals({
+    home,
+    appPath,
+    log: (message) => { console.error(`desktop checkpoint: ${message}`) },
+  }).catch((error: unknown) => {
+    console.error('desktop checkpoint: journal convergence failed', error)
+    return undefined
+  })
+  // A failed sweep may leave uninspected journals over partial file switches
+  // or incomplete cache invalidation. Unreadable journal counts also require
+  // an explicit startup decision.
+  let deferredCount = convergence?.deferred.length
+    ?? await listRestoreJournals(home).then(paths => paths.length).catch(() => 1)
+  while (deferredCount > 0) {
+    const response = await presentRestoreDialog(
+      buildDeferredJournalsGate(
+        resolveDesktopMainLocale(app.getLocale()).messages,
+        deferredCount,
+      ),
+    )
+    if (response === 2) {
+      requestQuit()
+      return false
+    }
+    if (response === 0) {
+      const retry = await convergeDesktopRestoreJournals({
+        home,
+        appPath,
+        log: (message) => { console.error(`desktop checkpoint: ${message}`) },
+      }).catch((error: unknown) => {
+        console.error('desktop checkpoint: journal convergence retry failed', error)
+        return undefined
+      })
+      if (retry !== undefined) convergence = retry
+      deferredCount = retry?.deferred.length ?? deferredCount
+      continue
+    }
+    console.error(
+      `desktop checkpoint: ${deferredCount} restore journal(s) left deferred by user choice`,
+    )
+    break
+  }
+  // An intent whose checkpoint is gone cannot finish; keeping it allows a
+  // later launch to resume if the checkpoint is recovered from a backup.
+  if (convergence !== undefined) {
+    for (const journalId of convergence.unresolvable) {
+      const journal = await readRestoreJournal(join(restoreJournalsDir(home), `${journalId}.json`))
+      const response = await presentRestoreDialog(buildOrphanedJournalGate(
+        resolveDesktopMainLocale(app.getLocale()).messages,
+        {
+          checkpointId: journal?.checkpointId ?? journalId,
+          quarantine: join(home, journal?.quarantine ?? 'electron/quarantine'),
+        },
+      ))
+      if (response === 2) {
+        requestQuit()
+        return false
+      }
+      if (response === 0) {
+        await deleteRestoreJournal(home, journalId).catch((error: unknown) => {
+          console.error(`desktop checkpoint: failed to abandon restore journal ${journalId}`, error)
+        })
+        console.error(`desktop checkpoint: abandoned unresolvable restore journal ${journalId}`)
+      }
+    }
+  }
+  // A conflict can leave part of the closure replaced; surface it before
+  // the Host reads those sessions.
+  if (convergence !== undefined) {
+    for (const journalId of convergence.conflicted) {
+      const journal = await readRestoreJournal(join(restoreJournalsDir(home), `${journalId}.json`))
+      await notifyRestoreOutcome(journal?.targetSessionId ?? journalId, {
+        kind: 'conflicted',
+        conflict: journal?.conflict ?? journalId,
+        journalId,
+      }).catch((error: unknown) => {
+        console.error('desktop checkpoint: conflict notice failed', error)
+      })
+    }
+  }
+  return true
 }
 
 function installDesktopMenus(): void {
@@ -787,95 +878,6 @@ if (!primaryInstance) {
         })
     }
     harnessHome = process.env.DSH_HOME ?? resolveHarnessHome(app.getPath('home'))
-    // Restore journals must converge before the Host spawns: a leftover
-    // `intent` journal finishes its switch, a `committed` one completes
-    // projcache invalidation, and either blocks nothing when absent.
-    let convergence = await convergeDesktopRestoreJournals({
-      home: harnessHome,
-      appPath,
-      log: (message) => { console.error(`desktop checkpoint: ${message}`) },
-    }).catch((error: unknown) => {
-      console.error('desktop checkpoint: journal convergence failed', error)
-      return undefined
-    })
-    // A deferred journal could not converge — a foreign writer holds a member
-    // lease or the referenced checkpoint is gone — and a failed sweep may
-    // leave journals it never inspected. An intent journal may mark a
-    // partially switched closure and a committed one still owes projcache
-    // invalidation, so the Host must not spawn over either state until the
-    // journal converges or the user explicitly chooses to proceed.
-    let deferredCount = convergence?.deferred.length
-      ?? await listRestoreJournals(harnessHome).then(paths => paths.length).catch(() => 1)
-    while (deferredCount > 0) {
-      const response = await presentRestoreDialog(
-        buildDeferredJournalsGate(
-          resolveDesktopMainLocale(app.getLocale()).messages,
-          deferredCount,
-        ),
-      )
-      if (response === 2) {
-        requestQuit()
-        return
-      }
-      if (response === 0) {
-        const retry = await convergeDesktopRestoreJournals({
-          home: harnessHome,
-          appPath,
-          log: (message) => { console.error(`desktop checkpoint: ${message}`) },
-        }).catch((error: unknown) => {
-          console.error('desktop checkpoint: journal convergence retry failed', error)
-          return undefined
-        })
-        if (retry !== undefined) convergence = retry
-        deferredCount = retry?.deferred.length ?? deferredCount
-        continue
-      }
-      console.error(
-        `desktop checkpoint: ${deferredCount} restore journal(s) left deferred by user choice`,
-      )
-      break
-    }
-    // An unresolvable journal marks an interrupted switch whose checkpoint is
-    // gone — it can never converge, so the user chooses between deleting the
-    // record and keeping it for a later launch that might restore the missing
-    // checkpoint (for example from a backup).
-    if (convergence !== undefined) {
-      for (const journalId of convergence.unresolvable) {
-        const journal = await readRestoreJournal(join(restoreJournalsDir(harnessHome), `${journalId}.json`))
-        const response = await presentRestoreDialog(buildOrphanedJournalGate(
-          resolveDesktopMainLocale(app.getLocale()).messages,
-          {
-            checkpointId: journal?.checkpointId ?? journalId,
-            quarantine: join(harnessHome, journal?.quarantine ?? 'electron/quarantine'),
-          },
-        ))
-        if (response === 2) {
-          requestQuit()
-          return
-        }
-        if (response === 0) {
-          await deleteRestoreJournal(harnessHome, journalId).catch((error: unknown) => {
-            console.error(`desktop checkpoint: failed to abandon restore journal ${journalId}`, error)
-          })
-          console.error(`desktop checkpoint: abandoned unresolvable restore journal ${journalId}`)
-        }
-      }
-    }
-    // A conflicted journal means the interrupted switch stopped on live drift
-    // with part of the closure possibly already replaced — surface it instead
-    // of booting silently over a partially restored session.
-    if (convergence !== undefined) {
-      for (const journalId of convergence.conflicted) {
-        const journal = await readRestoreJournal(join(restoreJournalsDir(harnessHome), `${journalId}.json`))
-        await notifyRestoreOutcome(journal?.targetSessionId ?? journalId, {
-          kind: 'conflicted',
-          conflict: journal?.conflict ?? journalId,
-          journalId,
-        }).catch((error: unknown) => {
-          console.error('desktop checkpoint: conflict notice failed', error)
-        })
-      }
-    }
     // Pending restores confirmed during the last run execute in this pre-Host
     // window; then stat-diff + vN scan + worker confirmation surface foreign
     // writes and offer an in-place restore before the Host can read live data.
@@ -888,27 +890,29 @@ if (!primaryInstance) {
       hostRunning: () => harness !== undefined,
       log: (message) => { console.error(`desktop checkpoint: ${message}`) },
     }
-    try {
-      for (const pending of await consumePendingSessionRestores(sessionMaintenance)) {
-        await notifyRestoreOutcome(pending.sessionId, pending.outcome)
-      }
-      const detected = await detectUnreadableSessions(sessionMaintenance)
-      if (detected !== undefined) {
-        for (const item of detected.unreadable) {
-          const members = resolveRestoreClosure(detected.manifest, item.sessionId)
-          await offerSessionRestore({
-            sessionId: item.sessionId,
-            capturedAt: item.entry.capturedAt,
-            memberCount: members?.length ?? 1,
-            maintenance: sessionMaintenance,
-          })
+    const canStart = await runStartupSessionMaintenance({
+      gate: () => gateRestoreJournals(sessionMaintenance.home, appPath),
+      maintain: async () => {
+        for (const pending of await consumePendingSessionRestores(sessionMaintenance)) {
+          await notifyRestoreOutcome(pending.sessionId, pending.outcome)
         }
-      }
-    } catch (error) {
-      // Detection or prompts never block startup: the Host boots with whatever
-      // live state exists, exactly as it would without this feature.
-      console.error('desktop checkpoint: startup session maintenance failed', error)
-    }
+        const detected = await detectUnreadableSessions(sessionMaintenance)
+        if (detected !== undefined) {
+          for (const item of detected.unreadable) {
+            const members = resolveRestoreClosure(detected.manifest, item.sessionId)
+            await offerSessionRestore({
+              sessionId: item.sessionId,
+              checkpointId: detected.manifest.id,
+              capturedAt: item.entry.capturedAt,
+              memberCount: members?.length ?? 1,
+              maintenance: sessionMaintenance,
+            })
+          }
+        }
+      },
+      onError: (error) => { console.error('desktop checkpoint: startup session maintenance failed', error) },
+    })
+    if (!canStart) return
     const shim = prepareToolchainShims({ userData: userDataPath, harnessHome }, toolchains, process.platform)
     const toolchainPolicy: DesktopToolchainPolicy = {
       version: 2,

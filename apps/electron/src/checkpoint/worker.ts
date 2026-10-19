@@ -1,11 +1,10 @@
 /**
  * Parent side of the validation worker: spawns the read-only validator as a
  * child process on the Host runtime and parses its `RESULT` line. The child
- * is killed when the abort signal fires, so a hung validation cannot outlive
- * the capture deadline.
+ * receives SIGTERM on abort and SIGKILL after a two-second grace period;
+ * cancellation settles only after its stdio closes.
  */
 
-import { once } from 'node:events'
 import { join } from 'node:path'
 import { spawnHarnessChild, type HostRuntime } from '../runtime.ts'
 import { validateSessionsRoot } from './validate.ts'
@@ -30,11 +29,25 @@ export async function runValidationWorker(
   runtime: HostRuntime,
   signal?: AbortSignal,
 ): Promise<CheckpointValidationReport> {
+  signal?.throwIfAborted()
   const child = spawnHarnessChild(runtime.executable, [workerModule, '--anchor', installAnchor, '--root', sessionsRoot], {
     env: { ...process.env, ...runtime.env },
   })
-  const onAbort = (): void => { child.kill('SIGTERM') }
+  let killTimer: NodeJS.Timeout | undefined
+  const onAbort = (): void => {
+    if (child.exitCode !== null || child.signalCode !== null || killTimer !== undefined) return
+    child.kill('SIGTERM')
+    killTimer = setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+    }, WORKER_KILL_GRACE_MS)
+  }
+  let spawnError: Error | undefined
+  child.once('error', (error) => { spawnError = error })
+  const closed = new Promise<[number | null, NodeJS.Signals | null]>((resolve) => {
+    child.once('close', (code, signalCode) => { resolve([code, signalCode]) })
+  })
   signal?.addEventListener('abort', onAbort, { once: true })
+  if (signal?.aborted) onAbort()
   let result: CheckpointValidationReport | undefined
   let resultError: Error | undefined
   try {
@@ -68,7 +81,7 @@ export async function runValidationWorker(
     // 'exit' may fire while worker stdout still holds undelivered bytes; 'close'
     // runs only after every stdio stream emitted its final data, so `buffered`
     // is complete here even for large reports.
-    const [code, signalCode] = await once(child, 'close') as [number | null, NodeJS.Signals | null]
+    const [code, signalCode] = await closed
     // A worker that exited without a trailing newline may still have emitted a
     // complete result line; a truncated remainder fails the parse and reports
     // through the same malformed-result error below.
@@ -81,6 +94,7 @@ export async function runValidationWorker(
         )
       }
     }
+    if (spawnError !== undefined) throw spawnError
     if (signal?.aborted) {
       throw signal.reason instanceof Error ? signal.reason : new Error('checkpoint validation aborted')
     }
@@ -91,9 +105,10 @@ export async function runValidationWorker(
     return result
   } finally {
     signal?.removeEventListener('abort', onAbort)
+    if (killTimer !== undefined) clearTimeout(killTimer)
     if (child.exitCode === null && child.signalCode === null) {
       child.kill('SIGKILL')
-      await Promise.race([once(child, 'exit'), new Promise(resolve => setTimeout(resolve, WORKER_KILL_GRACE_MS))])
+      await closed
     }
   }
 }

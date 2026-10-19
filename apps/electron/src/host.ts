@@ -39,6 +39,7 @@ import {
   type HostDisposeOutcome,
   type ShutdownRequestCause,
 } from './harness/shutdown-report.ts'
+import { HARNESS_SHUTDOWN_MESSAGE } from './harness/process.ts'
 
 const NAME = 'dsh'
 
@@ -241,6 +242,12 @@ export async function runDesktopHost(options: HostLaunchOptions): Promise<{ ctx:
       signalShutdown.abort()
       shutdown.interrupt(code, cause)
     }
+    process.on('message', (message: unknown) => {
+      if (typeof message === 'object' && message !== null && 'type' in message
+        && message.type === HARNESS_SHUTDOWN_MESSAGE) interrupt(0, 'ipc')
+    })
+    // CLI exits must still drain the event loop after their report is written.
+    process.channel?.unref()
     process.on('SIGTERM', () => { interrupt(0, 'SIGTERM') })
     process.on('SIGINT', () => { interrupt(130, 'SIGINT') })
     installFailLoud(NAME, process, async () => {

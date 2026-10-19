@@ -19,7 +19,7 @@ export function shutdownReportPath(home: string): string {
 }
 
 /** Channel that requested the Host shutdown. */
-export type ShutdownRequestCause = 'SIGTERM' | 'SIGINT' | 'cli'
+export type ShutdownRequestCause = 'SIGTERM' | 'SIGINT' | 'cli' | 'ipc'
 
 /**
  * Drain/dispose outcome the Host observed about itself.
@@ -48,9 +48,9 @@ export interface HostShutdownSection {
 export interface MainShutdownSection {
   /** Child pid the observation describes. */
   readonly pid: number
-  /** First signal Main delivered; null when the child had already exited. */
+  /** First signal Main delivered; null for IPC requests or an already exited child. */
   readonly signal: NodeJS.Signals | null
-  /** The SIGTERM grace period elapsed before the exit event. */
+  /** The cooperative shutdown grace period elapsed before the exit event. */
   readonly timeout: boolean
   /** SIGKILL was delivered. */
   readonly kill: boolean

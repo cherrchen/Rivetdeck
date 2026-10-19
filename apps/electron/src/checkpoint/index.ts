@@ -118,8 +118,8 @@ export async function convergeDesktopRestoreJournals(options: {
 }
 
 /**
- * Restore one session plus its related-source closure from the newest
- * verified checkpoint. Runs in a Host-down window; the caller supplies the
+ * Restore one session plus its related-source closure from a specified checkpoint,
+ * or the newest verified copy when no checkpoint id is supplied. Runs in a Host-down window; the caller supplies the
  * local-Host guard.
  */
 export async function restoreCheckpointSession(options: {
@@ -198,14 +198,18 @@ export interface PendingRestoreResult {
  * Execute user-confirmed restores queued while the Host was up. Runs inside
  * the same pre-Host window as journal convergence, so `hostRunning` stays
  * false and lease acquisition is the live-writer proof. Failures surface to
- * the caller; they never block startup.
+ * the caller; unfinished journals must pass the startup gate before Host launch.
  */
 export async function consumePendingSessionRestores(
   options: DesktopSessionMaintenanceOptions,
 ): Promise<PendingRestoreResult[]> {
   const results: PendingRestoreResult[] = []
   for (const request of await listPendingRestores(options.home)) {
-    const outcome = await restoreCheckpointSession(restoreOptions(options, request.sessionId))
+    const outcome: RestoreOutcome = request.checkpointId === undefined
+      ? { kind: 'refused', reason: { key: 'no-checkpoint' } }
+      : await restoreCheckpointSession({
+        ...restoreOptions(options, request.sessionId), checkpointId: request.checkpointId,
+      })
     // The entry leaves the queue only after the attempt resolves: a crash
     // here keeps this and every later request durable for the next launch.
     await dequeuePendingRestore(options.home, request.sessionId)
@@ -310,7 +314,13 @@ export async function resolveSessionRefusal(
   return undefined
 }
 
-/** Record one open-time confirmed intent for the next launch's pre-Host window. */
-export async function queueSessionRestore(home: string, sessionId: string): Promise<void> {
-  await enqueuePendingRestore(home, sessionId)
+/**
+ * Record a confirmed restore target for the next launch's pre-Host window.
+ * @param home - Active Harness home.
+ * @param sessionId - Session the user confirmed restoring.
+ * @param checkpointId - Checkpoint shown in that confirmation.
+ * @returns Resolves after the request is durably written.
+ */
+export async function queueSessionRestore(home: string, sessionId: string, checkpointId: string): Promise<void> {
+  await enqueuePendingRestore(home, sessionId, checkpointId)
 }

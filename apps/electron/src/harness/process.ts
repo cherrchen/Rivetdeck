@@ -3,17 +3,22 @@
 import type { ChildProcess } from 'node:child_process'
 
 type HarnessChild = Pick<ChildProcess, 'exitCode' | 'signalCode' | 'kill'> & {
+  connected?: boolean
+  send?: ChildProcess['send']
   once(event: 'exit', listener: (exitCode: number | null, signalCode: NodeJS.Signals | null) => void): void
 }
+
+/** Private parent-to-Host request for a cooperative drain on every platform. */
+export const HARNESS_SHUTDOWN_MESSAGE = 'desktop/shutdown'
 
 /** Grace period before a supervised Harness process receives SIGKILL. */
 export const HARNESS_STOP_TIMEOUT_MS = 5_000
 
 /** Supervision facts `stopHarness` observed while draining the child. */
 export interface HarnessStopReport {
-  /** First signal delivered to the still-running child; null when it had already exited. */
+  /** First signal delivered; null for IPC requests or an already exited child. */
   readonly signal: NodeJS.Signals | null
-  /** The SIGTERM grace period elapsed before the exit event. */
+  /** The cooperative shutdown grace period elapsed before the exit event. */
   readonly timeout: boolean
   /** SIGKILL was delivered after the grace period. */
   readonly kill: boolean
@@ -26,7 +31,7 @@ export interface HarnessStopReport {
 /**
  * Stop a supervised Harness process and resolve only after its exit event.
  * @param child - Spawned Harness child process.
- * @param gracefulTimeoutMs - Time allowed after SIGTERM before SIGKILL.
+ * @param gracefulTimeoutMs - Time allowed for cooperative shutdown before SIGKILL.
  * @returns What the supervisor did and the child's exit result.
  */
 export async function stopHarness(
@@ -46,13 +51,20 @@ export async function stopHarness(
     child.once('exit', (exitCode, signalCode) => { resolve({ exitCode, signalCode }) })
   })
 
-  signalChild(child, 'SIGTERM')
+  const signal = child.connected === true && child.send !== undefined ? null : 'SIGTERM'
+  if (signal === null) {
+    child.send?.({ type: HARNESS_SHUTDOWN_MESSAGE }, (error: Error | null) => {
+      if (error !== null) console.error('desktop Host shutdown request failed', error)
+    })
+  } else {
+    signalChild(child, signal)
+  }
   if (await exitsWithin(exited, gracefulTimeoutMs)) {
-    return { signal: 'SIGTERM', timeout: false, kill: false, ...(await exited) }
+    return { signal, timeout: false, kill: false, ...(await exited) }
   }
   const kill = !hasExited(child)
   if (kill) signalChild(child, 'SIGKILL')
-  return { signal: 'SIGTERM', timeout: true, kill, ...(await exited) }
+  return { signal, timeout: true, kill, ...(await exited) }
 }
 
 function hasExited(child: HarnessChild): boolean {

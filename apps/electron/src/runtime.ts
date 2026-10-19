@@ -95,21 +95,22 @@ export function resolveHostRuntime(options: {
  *
  * @param executable - Resolved Host runtime executable.
  * @param args - Arguments passed to `executable`.
- * @param options - Spawn options for cwd, environment, and signals; `stdio` and `windowsHide` are always supplied here.
+ * @param options - Spawn options, including an optional private IPC channel; `stdio` and `windowsHide` are always supplied here.
  * @returns Child process with no stdin stream and piped stdout and stderr.
  */
 export function spawnHarnessChild(
   executable: string,
   args: readonly string[],
-  options: SpawnOptionsWithoutStdio,
+  options: SpawnOptionsWithoutStdio & { readonly ipc?: boolean },
 ): ChildProcessByStdio<null, Readable, Readable> {
+  const { ipc = false, ...spawnOptions } = options
   const stdin = openSync(devNull, 'r')
   try {
     // Node's spawn overloads infer stdio types from tuple literals only, so the descriptor in the
     // tuple forces this cast.
     return spawn(executable, args, {
-      ...options,
-      stdio: [stdin, 'pipe', 'pipe'],
+      ...spawnOptions,
+      stdio: ipc ? [stdin, 'pipe', 'pipe', 'ipc'] : [stdin, 'pipe', 'pipe'],
       windowsHide: true,
     }) as ChildProcessByStdio<null, Readable, Readable>
   } finally {

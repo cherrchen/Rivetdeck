@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { stopHarness } from '../src/harness/process.ts'
+import { HARNESS_SHUTDOWN_MESSAGE, stopHarness } from '../src/harness/process.ts'
 
 class FakeChild extends EventEmitter {
   exitCode: number | null = null
@@ -47,6 +47,26 @@ describe('Harness process shutdown', () => {
     child.finish()
     const report = await stopping
     expect(report).toEqual({ signal: 'SIGTERM', timeout: false, kill: false, exitCode: 0, signalCode: null })
+  })
+
+  it('requests an IPC drain without sending a platform signal', async () => {
+    const send = vi.fn()
+    const child = Object.assign(new FakeChild(), { connected: true, send })
+    const stopping = stopHarness(child, 50)
+    expect(send).toHaveBeenCalledWith({ type: HARNESS_SHUTDOWN_MESSAGE }, expect.any(Function))
+    expect(child.signals).toEqual([])
+    child.finish()
+    expect(await stopping).toEqual({ signal: null, timeout: false, kill: false, exitCode: 0, signalCode: null })
+  })
+
+  it('kills and reaps a child that ignores the IPC drain request', async () => {
+    vi.useFakeTimers()
+    const child = Object.assign(new FakeChild(), { connected: true, send: vi.fn() })
+    const stopping = stopHarness(child, 50)
+    await vi.advanceTimersByTimeAsync(50)
+    expect(child.signals).toEqual(['SIGKILL'])
+    child.finish('SIGKILL')
+    expect(await stopping).toEqual({ signal: null, timeout: true, kill: true, exitCode: null, signalCode: 'SIGKILL' })
   })
 
   it('reports a child that exits by signal', async () => {

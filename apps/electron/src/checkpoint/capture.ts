@@ -24,6 +24,7 @@ import {
   type CheckpointValidator,
 } from './manifest.ts'
 import { readShutdownReportFile } from '../harness/shutdown-report.ts'
+import { listPendingRestores } from './pending.ts'
 import { isPromotableReport } from './promotion.ts'
 
 /** Files that never belong to a checkpoint copy: transient locks and staged artifacts. */
@@ -330,10 +331,15 @@ export async function commitCandidate(
  * Rotate old checkpoints. The newest commit and every checkpoint that uniquely
  * holds some session's last verified copy are protected; other committed
  * checkpoints past {@link CHECKPOINT_RETENTION_COUNT} are removed oldest-first.
- * A checkpoint whose manifest cannot be read is always kept — its uniqueness
- * cannot be judged, so retention errs on the side of keeping it.
+ * Queued restore targets and unreadable manifests are also kept.
+ * @param root - Checkpoint directory.
+ * @param signal - Cancellation between retention operations.
+ * @param protectedCheckpointIds - Targets still referenced by confirmed restore requests.
+ * @returns Resolves after eligible checkpoints are removed.
  */
-export async function pruneCheckpoints(root: string, signal?: AbortSignal): Promise<void> {
+export async function pruneCheckpoints(
+  root: string, signal?: AbortSignal, protectedCheckpointIds: ReadonlySet<string> = new Set(),
+): Promise<void> {
   let names: string[]
   try {
     names = await readdir(root)
@@ -357,7 +363,7 @@ export async function pruneCheckpoints(root: string, signal?: AbortSignal): Prom
       ? false
       : manifest.sessions.some(entry => !retainedIds.has(entry.sessionId))
     kept += 1
-    if (kept <= CHECKPOINT_RETENTION_COUNT || unique || manifest === undefined) {
+    if (kept <= CHECKPOINT_RETENTION_COUNT || unique || manifest === undefined || protectedCheckpointIds.has(name)) {
       for (const entry of manifest?.sessions ?? []) retainedIds.add(entry.sessionId)
       continue
     }
@@ -488,7 +494,9 @@ export async function runExitCheckpoint(options: ExitCheckpointOptions): Promise
     }
     await commitCandidate(root, candidate, manifest)
     candidate = undefined
-    await pruneCheckpoints(root, options.signal)
+    const pending = await listPendingRestores(options.home)
+    await pruneCheckpoints(root, options.signal, new Set(pending.flatMap(request =>
+      request.checkpointId === undefined ? [] : [request.checkpointId])))
     return { kind: 'committed', id, sessions: sessions.length }
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
