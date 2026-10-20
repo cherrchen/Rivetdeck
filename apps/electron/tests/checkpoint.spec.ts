@@ -265,6 +265,43 @@ describe('isPromotableReport', () => {
 })
 
 describe('runExitCheckpoint', () => {
+  it.each(['EACCES', 'EIO', 'ENOENT'])('aborts capture on %s while enumerating a session directory', async (code) => {
+    const home = makeHome()
+    const sessionDir = populateHome(home)
+    await writeReport(home)
+    expect((await captureAt(home, 1000)).kind).toBe('committed')
+    const previous = readFileSync(join(checkpointsRoot(home), '1000', 'manifest.json'), 'utf8')
+    const readdir = fs.readdir
+    const failure = Object.assign(new Error(`session enumeration: ${code}`), { code })
+    vi.spyOn(fs, 'readdir').mockImplementation(async (...args) => {
+      if (String(args[0]) === join(home, 'sessions', sessionDir)) throw failure
+      return readdir(...args)
+    })
+    expect(await captureAt(home, 2000)).toEqual({ kind: 'aborted', reason: failure.message })
+    expect(committedIds(home)).toEqual(['1000'])
+    expect(readFileSync(join(checkpointsRoot(home), '1000', 'manifest.json'), 'utf8')).toBe(previous)
+  })
+
+  it.each(['EACCES', 'EIO'])('aborts capture on %s at the sessions root', async (code) => {
+    const home = makeHome()
+    populateHome(home)
+    await writeReport(home)
+    const readdir = fs.readdir
+    const failure = Object.assign(new Error(`root enumeration: ${code}`), { code })
+    vi.spyOn(fs, 'readdir').mockImplementation(async (...args) => {
+      if (String(args[0]) === join(home, 'sessions')) throw failure
+      return readdir(...args)
+    })
+    expect(await captureAt(home, 2000)).toEqual({ kind: 'aborted', reason: failure.message })
+    expect(committedIds(home)).toEqual([])
+  })
+
+  it('captures a home whose sessions root does not exist yet', async () => {
+    const home = makeHome()
+    await writeReport(home)
+    expect(await captureAt(home, 1000)).toMatchObject({ kind: 'committed', sessions: 0 })
+  })
+
   it('skips when no promotable report exists', async () => {
     const home = makeHome()
     populateHome(home)

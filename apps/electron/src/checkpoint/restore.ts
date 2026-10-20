@@ -16,7 +16,7 @@ import { constants } from 'node:fs'
 import { access, copyFile, open, readFile, readdir, rm, stat, unlink } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { renameDesktopPath, writeDesktopFileAtomic } from '../atomic-file.ts'
-import { checkpointsRoot, isPathSegment, readManifest, type CheckpointManifest, type CheckpointSessionEntry } from './manifest.ts'
+import { checkpointsRoot, readManifest, type CheckpointManifest, type CheckpointSessionEntry } from './manifest.ts'
 import {
   deleteRestoreJournal,
   listRestoreJournals,
@@ -249,6 +249,13 @@ async function applySwitch(
   checkpointDir: string,
   journal: RestoreJournal,
 ): Promise<void> {
+  // Persisted intents may have been created by a build with a broader publish set.
+  for (const member of journal.members) {
+    if (member.publish.some(plan => !isOwnedSessionFile(plan.name))
+      || member.liveFiles.some(file => !isOwnedSessionFile(file.name))) {
+      throw new Error(`restore journal ${journal.id} includes files outside session history`)
+    }
+  }
   for (const member of journal.members) {
     const liveDir = memberDir(home, member.dir)
     await createDurableDirectory(liveDir, home)
@@ -490,16 +497,9 @@ export async function restoreSession(options: RestoreSessionOptions): Promise<Re
         header: entry.header ?? { id: entry.sessionId },
         liveFiles: [],
         publish: found.manifest.files
-          .filter(file => file.path.startsWith(`sessions/${entry.dir}/`))
-          .map((file) => {
-            // The transaction owns a flat session dir: every name it stages,
-            // fingerprints, or quarantines is a single segment.
-            const name = file.path.slice(`sessions/${entry.dir}/`.length)
-            if (!isPathSegment(name)) {
-              throw new Error(`checkpoint ${found.manifest.id} stores a nested session artifact ${file.path}`)
-            }
-            return { name, digest: file.digest }
-          }),
+          .filter(file => file.path.startsWith(`sessions/${entry.dir}/`)
+            && isOwnedSessionFile(file.path.slice(`sessions/${entry.dir}/`.length)))
+          .map(file => ({ name: file.path.slice(`sessions/${entry.dir}/`.length), digest: file.digest })),
       }
       // Acquire before fingerprinting: the lease proves no live writer, so
       // the recorded pre-state cannot race a foreign append.

@@ -157,6 +157,24 @@ afterEach(() => {
 })
 
 describe('restoreSession', () => {
+  it('restores generation files while preserving extension artifacts', async () => {
+    const home = makeHome()
+    liveSession(home, SESSION_DIR, {
+      'session.v4.jsonl.zstd': 'POLLUTED', 'metadata.json': 'CURRENT',
+    })
+    seedCheckpoint(home, '1000', [{
+      sessionId: 'session-parent-1', dir: SESSION_DIR, header: PARENT,
+      files: { 'session.v4.jsonl.zstd': 'VERIFIED', 'metadata.json': 'OLD', 'removed.json': 'OLD' },
+    }])
+    const outcome = await restore(home, 'session-parent-1').run
+    expect(outcome.kind).toBe('restored')
+    expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('VERIFIED')
+    expect(read(join(home, 'sessions', SESSION_DIR, 'metadata.json'))).toBe('CURRENT')
+    expect(existsSync(join(home, 'sessions', SESSION_DIR, 'removed.json'))).toBe(false)
+    if (outcome.kind !== 'restored') throw new Error('restore failed')
+    expect(readdirSync(join(home, outcome.quarantine, 'sessions', SESSION_DIR))).toEqual(['session.v4.jsonl.zstd'])
+  })
+
   it('replaces live files with verified checkpoint bytes and invalidates projcache', async () => {
     requireWritableFileSync()
     const home = makeHome()
@@ -467,7 +485,7 @@ describe('restoreSession', () => {
     expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('VERIFIED-1000')
   })
 
-  it('fails a checkpoint storing a nested session artifact', async () => {
+  it('leaves nested archived artifacts outside the restore scope', async () => {
     const home = makeHome()
     liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'POLLUTED' })
     seedCheckpoint(home, '1000', [{
@@ -481,9 +499,9 @@ describe('restoreSession', () => {
     writeFileSync(join(checkpointsRoot(home), '1000', 'sessions', SESSION_DIR, 'sub', 'nested.bin'), 'X')
     writeFileSync(manifestPath, JSON.stringify({ ...manifest, files: [...manifest.files, nested] }))
     const outcome = await restore(home, 'session-parent-1').run
-    expect(outcome.kind).toBe('failed')
-    expect(outcome.kind === 'failed' && outcome.reason).toContain('nested session artifact')
-    expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('POLLUTED')
+    expect(outcome.kind).toBe('restored')
+    expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('VERIFIED')
+    expect(existsSync(join(home, 'sessions', SESSION_DIR, 'sub'))).toBe(false)
   })
 })
 
@@ -511,6 +529,30 @@ describe('convergeRestoreJournals', () => {
     await writeRestoreJournal(home, journal)
     return journal
   }
+
+  it('defers an intent that would publish an extension file without touching live data', async () => {
+    const home = makeHome()
+    liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'POLLUTED', 'metadata.json': 'CURRENT' })
+    seedCheckpoint(home, '1000', [{
+      sessionId: 'session-parent-1', dir: SESSION_DIR, header: PARENT,
+      files: { 'session.v4.jsonl.zstd': 'VERIFIED', 'metadata.json': 'OLD' },
+    }])
+    const journal = await seedIntentJournal(home)
+    await writeRestoreJournal(home, {
+      ...journal,
+      members: journal.members.map(member => ({
+        ...member, publish: [...member.publish, { name: 'metadata.json', digest: sha('OLD') }],
+      })),
+    })
+    const leases = fakeLeases()
+    const result = await convergeRestoreJournals({ home, acquireLease: leases.acquire })
+    expect(result).toEqual({ converged: [], conflicted: [], deferred: [journal.id], unresolvable: [] })
+    expect(read(join(home, 'sessions', SESSION_DIR, 'metadata.json'))).toBe('CURRENT')
+    expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('POLLUTED')
+    expect(existsSync(join(home, journal.quarantine))).toBe(false)
+    expect(await listRestoreJournals(home)).toHaveLength(1)
+    expect(leases.held.size).toBe(0)
+  })
 
   it('finishes an intent journal left before any staging', async () => {
     const home = makeHome()

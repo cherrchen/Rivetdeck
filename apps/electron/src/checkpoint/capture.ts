@@ -49,13 +49,14 @@ function toPosix(path: string): string {
   return path.split(sep).join('/')
 }
 
-/** Walk a directory recursively, yielding absolute paths of regular files. */
-async function* walkFiles(root: string): AsyncGenerator<string> {
+/** Enumerate regular files; only an optional root may be absent, descendants must remain readable. */
+async function* walkFiles(root: string, optionalRoot = false): AsyncGenerator<string> {
   let entries
   try {
     entries = await readdir(root, { withFileTypes: true })
-  } catch {
-    return
+  } catch (error) {
+    if (optionalRoot && (error as NodeJS.ErrnoException).code === 'ENOENT') return
+    throw error
   }
   for (const entry of entries) {
     const path = join(root, entry.name)
@@ -70,7 +71,7 @@ async function* walkFiles(root: string): AsyncGenerator<string> {
 /** Enumerate live covered files as `$DSH_HOME`-relative posix paths. */
 async function* coveredFiles(home: string): AsyncGenerator<string> {
   const sessionsRoot = join(home, 'sessions')
-  for await (const file of walkFiles(sessionsRoot)) {
+  for await (const file of walkFiles(sessionsRoot, true)) {
     const name = basename(file)
     if (EXCLUDED_NAMES.test(name)) continue
     yield `sessions/${toPosix(relative(sessionsRoot, file))}`
