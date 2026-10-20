@@ -98,9 +98,9 @@ try {
     Set-Content -LiteralPath $historyFile -Value "complete=0`r`n"
     $updaterHome = Join-Path $updaterCache 'pending\home'
     $runtimeHome = Join-Path $userData 'managed-toolchains\node\24.5.0\win32-x64\3f8a1c2e-0000-4abc-9def-0123456789ab\home'
-    foreach ($home in @($updaterHome, $runtimeHome)) {
-      New-Item -ItemType Directory -Force -Path $home | Out-Null
-      Set-Content -LiteralPath (Join-Path $home 'sessions.jsonl') -Value 'retained'
+    foreach ($legacyHomePath in @($updaterHome, $runtimeHome)) {
+      New-Item -ItemType Directory -Force -Path $legacyHomePath | Out-Null
+      Set-Content -LiteralPath (Join-Path $legacyHomePath 'sessions.jsonl') -Value 'retained'
     }
     if ($purge) { Uninstall-From $installDirectory '--delete-app-data' }
     else { Uninstall-From $installDirectory }
