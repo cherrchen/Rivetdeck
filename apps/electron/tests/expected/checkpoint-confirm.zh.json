@@ -1,0 +1,12 @@
+{
+  "type": "warning",
+  "title": "恢复会话数据？",
+  "message": "会话 \"aaaa-1111\" 无法被当前版本的 Rivetdeck 读取。存在已验证的检查点，其中会话副本的捕获时间最早为 __OLDEST_CAPTURE_TIME__。",
+  "detail": "已验证的检查点可以恢复该会话，并连同 1 个关联 subagent 会话，其中最早的会话副本捕获于 __OLDEST_CAPTURE_TIME__。\n\n每个会话在各自捕获时间之后记录的改动将被隐藏，该时间范围最早可从 __OLDEST_CAPTURE_TIME__ 开始。当前文件会移入隔离区 /home/u/.dsh/electron/quarantine 下的新目录。\n\n恢复期间请保持其它 DeepSeek Harness / Rivetdeck 实例处于退出状态。\n\n回滚只恢复会话历史——workspace 文件、外部工具的副作用以及插件数据保留当前状态，已持久化的定时任务仍可能向恢复后的会话投递。",
+  "buttons": [
+    "立即恢复",
+    "暂不"
+  ],
+  "defaultId": 0,
+  "cancelId": 1
+}

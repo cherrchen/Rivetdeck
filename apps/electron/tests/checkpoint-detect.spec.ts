@@ -356,8 +356,7 @@ describe('resolveSessionRefusal', () => {
 describe('restore dialog copy', () => {
   const facts = {
     sessionId: SESSION_ID,
-    capturedAt: 1_700_000_000_000,
-    memberCount: 2,
+    members: [{ capturedAt: 1_700_000_000_000 }, { capturedAt: 1_600_000_000_000 }],
     quarantine: '/home/u/.dsh/electron/quarantine',
     requiresRelaunch: false,
     productName: 'Rivetdeck',
@@ -374,6 +373,19 @@ describe('restore dialog copy', () => {
     expect(spec.detail).toContain('related subagent sessions')
     const relaunch = buildRestoreConfirm(en, 'en', { ...facts, requiresRelaunch: true })
     expect(relaunch.buttons[0]).toBe('Restore and Relaunch')
+  })
+
+  it.each([['en', en], ['zh-CN', zh]] as const)('warns from the oldest closure capture in %s', (locale, messages) => {
+    const earliest = new Date(1_600_000_000_000).toLocaleString(locale === 'zh-CN' ? 'zh-CN' : 'en-US')
+    const later = new Date(1_700_000_000_000).toLocaleString(locale === 'zh-CN' ? 'zh-CN' : 'en-US')
+    const spec = buildRestoreConfirm(messages, locale, facts)
+    expect(spec.message).toContain(earliest)
+    expect(spec.detail).toContain(earliest)
+    expect(spec.detail).not.toContain(later)
+    const expected: unknown = JSON.parse(readFileSync(
+      new URL(`expected/checkpoint-confirm.${locale === 'zh-CN' ? 'zh' : 'en'}.json`, import.meta.url), 'utf8',
+    ).replaceAll('__OLDEST_CAPTURE_TIME__', earliest))
+    expect(spec).toEqual(expected)
   })
 
   it('covers every key in zh and renders the no-checkpoint notice', () => {

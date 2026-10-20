@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os'
 import { stat } from 'node:fs/promises'
 import * as fs from 'node:fs/promises'
-import { runStartupSessionMaintenance } from '../src/checkpoint/startup.ts'
+import { createRestoreJournalDecisions, runStartupSessionMaintenance } from '../src/checkpoint/startup.ts'
 import { enqueuePendingRestore, listPendingRestores } from '../src/checkpoint/pending.ts'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -709,9 +709,10 @@ describe('convergeRestoreJournals', () => {
       members: [{ sessionId: 's', dir: '../escape', header: {}, liveFiles: [], publish: [] }],
     }))
     const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
-    expect(result).toEqual({ converged: [], conflicted: [], deferred: ['bad-dir.json', 'bad-id.json'], unresolvable: [] })
+    expect(result).toEqual({ converged: [], conflicted: [], deferred: ['bad-dir', 'bad-id'], unresolvable: [] })
     const maintain = vi.fn(async () => {})
     expect(await runStartupSessionMaintenance({
+      home,
       gate: async () => (await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })).deferred.length === 0,
       maintain, onError: (error) => { throw error },
     })).toBe(false)
@@ -762,7 +763,7 @@ describe('convergeRestoreJournals', () => {
     const originalRm = fs.rm
     let interrupted = false
     vi.spyOn(fs, 'rm').mockImplementation(async (...args) => {
-      if (String(args[0]).endsWith(`${journal.id}.json`) && !interrupted) {
+      if (args[0] === join(restoreJournalsDir(home), `${journal.id}.json`) && !interrupted) {
         interrupted = true
         expect(await listPendingRestores(home)).toEqual([])
         throw new Error('interrupted before journal deletion')
@@ -772,6 +773,37 @@ describe('convergeRestoreJournals', () => {
     expect((await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })).deferred).toEqual([journal.id])
     expect(await listPendingRestores(home)).toEqual([])
     expect((await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })).converged).toEqual([journal.id])
+    expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('RESTORED-THEN-APPENDED')
+  })
+
+  it.each(['EIO', 'EACCES'])('retains a committed journal until a legacy-cache %s clears', async (code) => {
+    const home = makeHome()
+    liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'RESTORED-THEN-APPENDED' })
+    const legacyPath = join(home, 'storages', 'session_projcache.json')
+    const document = JSON.stringify({
+      unit: { name: 'session_projcache', version: 1 },
+      tables: { sessions: { 'session-parent-1': { stale: true }, other: { keep: true } } },
+    })
+    writeFile(legacyPath, document)
+    const journal = await seedIntentJournal(home, { phase: 'committed' })
+    const originalReadFile = fs.readFile
+    vi.spyOn(fs, 'readFile').mockImplementation(async (...args) => {
+      if (args[0] === legacyPath) {
+        throw Object.assign(new Error('transient legacy-cache read failure'), { code })
+      }
+      return originalReadFile(...args)
+    })
+    const first = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+    expect(first.deferred).toEqual([journal.id])
+    expect((await readRestoreJournal(join(restoreJournalsDir(home), `${journal.id}.json`)))?.phase).toBe('committed')
+    expect(read(legacyPath)).toBe(document)
+    vi.restoreAllMocks()
+    const resumed = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+    expect(resumed.converged).toEqual([journal.id])
+    expect(await listRestoreJournals(home)).toEqual([])
+    expect(JSON.parse(read(legacyPath))).toEqual({
+      unit: { name: 'session_projcache', version: 1 }, tables: { sessions: { other: { keep: true } } },
+    })
     expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('RESTORED-THEN-APPENDED')
   })
 
@@ -788,5 +820,84 @@ describe('convergeRestoreJournals', () => {
     expect(result.converged).toEqual(['8000-session-parent-1'])
     const legacy = JSON.parse(read(legacyPath)) as { tables: { sessions: Record<string, unknown> } }
     expect(Object.keys(legacy.tables.sessions)).toEqual(['other-session'])
+  })
+
+  describe('startup journal decisions', () => {
+    it.each(['deferred', 'unresolvable', 'conflicted'] as const)('presents an unchanged %s journal once per launch', async (kind) => {
+      const home = makeHome()
+      liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'LIVE' })
+      await seedIntentJournal(home)
+      const presented: string[] = []
+      const gate: Parameters<typeof runStartupSessionMaintenance>[0]['gate'] = async (decisions) => {
+        for (const decision of await decisions(kind, ['8000-session-parent-1'])) {
+          presented.push(decision.id)
+          decision.acknowledge()
+        }
+        return true
+      }
+      const options = { home, gate, maintain: async () => {}, onError: (error: unknown) => { throw error } }
+      expect(await runStartupSessionMaintenance(options)).toBe(true)
+      expect(presented).toEqual(['8000-session-parent-1'])
+      expect(await runStartupSessionMaintenance(options)).toBe(true)
+      expect(presented).toHaveLength(2)
+    })
+
+    it('presents new and changed journals after maintenance fails', async () => {
+      const home = makeHome()
+      liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'LIVE' })
+      const journal = await seedIntentJournal(home)
+      const presented: string[] = []
+      const errors: unknown[] = []
+      const ids = [journal.id]
+      expect(await runStartupSessionMaintenance({
+        home,
+        gate: async (decisions) => {
+          for (const decision of await decisions('deferred', ids)) {
+            presented.push(decision.id)
+            decision.acknowledge()
+          }
+          return true
+        },
+        maintain: async () => {
+          await writeRestoreJournal(home, { ...journal, phase: 'committed' })
+          await writeRestoreJournal(home, { ...journal, id: 'new-journal' })
+          ids.push('new-journal')
+          throw new Error('maintenance interrupted')
+        },
+        onError: (error) => { errors.push(error) },
+      })).toBe(true)
+      expect(presented).toEqual([journal.id, journal.id, 'new-journal'])
+      expect(errors).toHaveLength(1)
+    })
+
+    it('requires a new decision when the convergence outcome changes', async () => {
+      const home = makeHome()
+      liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'LIVE' })
+      const journal = await seedIntentJournal(home)
+      const decisions = createRestoreJournalDecisions(home)
+      const deferred = await decisions('deferred', [journal.id])
+      deferred[0]!.acknowledge()
+      const conflicted = await decisions('conflicted', [journal.id])
+      expect(conflicted).toHaveLength(1)
+      conflicted[0]!.acknowledge()
+      expect(await decisions('deferred', [journal.id])).toHaveLength(1)
+    })
+
+    it('keeps unreadable journal contents eligible for another decision', async () => {
+      const home = makeHome()
+      liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'LIVE' })
+      const journal = await seedIntentJournal(home)
+      const originalReadFile = fs.readFile
+      vi.spyOn(fs, 'readFile').mockImplementation(async (...args) => {
+        if (args[0] === join(restoreJournalsDir(home), `${journal.id}.json`)) {
+          throw Object.assign(new Error('journal read unavailable'), { code: 'EIO' })
+        }
+        return originalReadFile(...args)
+      })
+      const decisions = createRestoreJournalDecisions(home)
+      const first = await decisions('deferred', [journal.id])
+      first[0]!.acknowledge()
+      expect(await decisions('deferred', [journal.id])).toHaveLength(1)
+    })
   })
 })

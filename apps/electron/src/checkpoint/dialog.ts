@@ -7,6 +7,7 @@
  */
 
 import { formatDesktopMessage, type DesktopMainMessages } from '../locale.ts'
+import type { CheckpointSessionEntry } from './manifest.ts'
 import type { RestoreRefusal } from './restore.ts'
 
 function assertNever(value: never): never {
@@ -16,10 +17,8 @@ function assertNever(value: never): never {
 /** Facts one restore confirmation presents. */
 export interface RestoreDialogFacts {
   readonly sessionId: string
-  /** Session-local capture time — honest even when the checkpoint mixes exits. */
-  readonly capturedAt: number
-  /** Related-source members the transaction restores with the target. */
-  readonly memberCount: number
+  /** Target and related-source members; the warning uses their oldest capture time. */
+  readonly members: readonly Pick<CheckpointSessionEntry, 'capturedAt'>[]
   /** Absolute quarantine root; the transaction files land in a journal-id subdirectory below it. */
   readonly quarantine: string
   /** The local Host is running, so restore happens through a relaunch. */
@@ -53,9 +52,9 @@ export function buildRestoreConfirm(
   localeId: string,
   facts: RestoreDialogFacts,
 ): RestoreDialogOptions {
-  const time = timestampLabel(facts.capturedAt, localeId)
-  const closure = facts.memberCount > 1
-    ? formatDesktopMessage(messages.sessionRestoreClosure, { members: facts.memberCount })
+  const time = timestampLabel(Math.min(...facts.members.map(member => member.capturedAt)), localeId)
+  const closure = facts.members.length > 1
+    ? formatDesktopMessage(messages.sessionRestoreClosure, { members: facts.members.length - 1 })
     : ''
   const detail = formatDesktopMessage(messages.sessionRestoreDetail, {
     time,

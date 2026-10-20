@@ -279,8 +279,10 @@ async function finalizeLegacyProjcache(home: string, journal: RestoreJournal): P
   let document: { unit?: { name?: unknown }; tables?: unknown }
   try {
     document = JSON.parse(await readFile(legacyPath, 'utf8')) as typeof document
-  } catch {
-    return // Missing or malformed legacy file: not ours to interpret or delete.
+  } catch (error) {
+    // Unreadable bytes may still contain stale rows; keep the journal for retry.
+    if (error instanceof SyntaxError || (error as NodeJS.ErrnoException).code === 'ENOENT') return
+    throw error
   }
   if (document.unit?.name !== 'session_projcache') return
   const tables = document.tables
@@ -593,7 +595,7 @@ export async function convergeRestoreJournals(
     const journal = await readRestoreJournal(path)
     if (journal === undefined) {
       log(`restore journal ${path} is unreadable; left in place`)
-      deferred.push(basename(path))
+      deferred.push(basename(path, '.json'))
       continue
     }
     if (journal.phase === 'conflicted') {

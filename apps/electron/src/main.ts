@@ -42,7 +42,8 @@ import {
   restoreCheckpointSession,
   type DesktopSessionMaintenanceOptions,
 } from './checkpoint/index.ts'
-import { runStartupSessionMaintenance } from './checkpoint/startup.ts'
+import type { CheckpointSessionEntry } from './checkpoint/manifest.ts'
+import { createRestoreJournalDecisions, runStartupSessionMaintenance } from './checkpoint/startup.ts'
 import { detectFormatRefusalFrame, type SessionRefusalHit } from './checkpoint/refusal.ts'
 import { dequeuePendingRestore } from './checkpoint/pending.ts'
 import { deleteRestoreJournal, listRestoreJournals, readRestoreJournal, restoreJournalsDir } from './checkpoint/journal.ts'
@@ -421,8 +422,7 @@ async function notifyRestoreOutcome(sessionId: string, outcome: RestoreOutcome):
 async function offerSessionRestore(options: {
   readonly sessionId: string
   readonly checkpointId: string
-  readonly capturedAt: number
-  readonly memberCount: number
+  readonly members: readonly CheckpointSessionEntry[]
   readonly maintenance: DesktopSessionMaintenanceOptions
 }): Promise<boolean> {
   const home = harnessHome
@@ -430,8 +430,7 @@ async function offerSessionRestore(options: {
   const locale = resolveDesktopMainLocale(app.getLocale())
   const spec = buildRestoreConfirm(locale.messages, locale.id, {
     sessionId: options.sessionId,
-    capturedAt: options.capturedAt,
-    memberCount: options.memberCount,
+    members: options.members,
     quarantine: join(home, 'electron', 'quarantine'),
     requiresRelaunch: harness !== undefined,
     productName: app.name,
@@ -474,8 +473,7 @@ async function handleSessionRefusal(hit: SessionRefusalHit): Promise<void> {
   const queued = await offerSessionRestore({
     sessionId: resolved.entry.sessionId,
     checkpointId: resolved.checkpointId,
-    capturedAt: resolved.entry.capturedAt,
-    memberCount: members?.length ?? 1,
+    members: members ?? [resolved.entry],
     maintenance: {
       home,
       appPath: app.getAppPath(),
@@ -524,8 +522,7 @@ async function requestSessionRollback(): Promise<void> {
     relaunchPending = await offerSessionRestore({
       sessionId: item.sessionId,
       checkpointId: detected.manifest.id,
-      capturedAt: item.entry.capturedAt,
-      memberCount: members?.length ?? 1,
+      members: members ?? [item.entry],
       maintenance,
     }) || relaunchPending
   }
@@ -533,7 +530,11 @@ async function requestSessionRollback(): Promise<void> {
 }
 
 /** Resolve interrupted restore work, requiring an explicit decision before Host launch. */
-async function gateRestoreJournals(home: string, appPath: string): Promise<boolean> {
+async function gateRestoreJournals(
+  home: string,
+  appPath: string,
+  decisions: ReturnType<typeof createRestoreJournalDecisions>,
+): Promise<boolean> {
   let convergence = await convergeDesktopRestoreJournals({
     home,
     appPath,
@@ -545,7 +546,8 @@ async function gateRestoreJournals(home: string, appPath: string): Promise<boole
   // A failed sweep may leave uninspected journals over partial file switches
   // or incomplete cache invalidation. Unreadable journal counts also require
   // an explicit startup decision.
-  let deferredCount = convergence?.deferred.length
+  let deferred = await decisions('deferred', convergence?.deferred ?? [])
+  let deferredCount = (convergence === undefined ? undefined : deferred.length)
     ?? await listRestoreJournals(home).then(paths => paths.length).catch(() => 1)
   while (deferredCount > 0) {
     const response = await presentRestoreDialog(
@@ -567,10 +569,14 @@ async function gateRestoreJournals(home: string, appPath: string): Promise<boole
         console.error('desktop checkpoint: journal convergence retry failed', error)
         return undefined
       })
-      if (retry !== undefined) convergence = retry
-      deferredCount = retry?.deferred.length ?? deferredCount
+      if (retry !== undefined) {
+        convergence = retry
+        deferred = await decisions('deferred', retry.deferred)
+        deferredCount = deferred.length
+      }
       continue
     }
+    for (const decision of deferred) decision.acknowledge()
     console.error(
       `desktop checkpoint: ${deferredCount} restore journal(s) left deferred by user choice`,
     )
@@ -579,7 +585,8 @@ async function gateRestoreJournals(home: string, appPath: string): Promise<boole
   // An intent whose checkpoint is gone cannot finish; keeping it allows a
   // later launch to resume if the checkpoint is recovered from a backup.
   if (convergence !== undefined) {
-    for (const journalId of convergence.unresolvable) {
+    for (const decision of await decisions('unresolvable', convergence.unresolvable)) {
+      const journalId = decision.id
       const journal = await readRestoreJournal(join(restoreJournalsDir(home), `${journalId}.json`))
       const response = await presentRestoreDialog(buildOrphanedJournalGate(
         resolveDesktopMainLocale(app.getLocale()).messages,
@@ -601,19 +608,21 @@ async function gateRestoreJournals(home: string, appPath: string): Promise<boole
         })
         console.error(`desktop checkpoint: abandoned unresolvable restore journal ${journalId}`)
       }
+      decision.acknowledge()
     }
   }
   // A conflict can leave part of the closure replaced; surface it before
   // the Host reads those sessions.
   if (convergence !== undefined) {
-    for (const journalId of convergence.conflicted) {
+    for (const decision of await decisions('conflicted', convergence.conflicted)) {
+      const journalId = decision.id
       const journal = await readRestoreJournal(join(restoreJournalsDir(home), `${journalId}.json`))
       await notifyRestoreOutcome(journal?.targetSessionId ?? journalId, {
         kind: 'conflicted',
         conflict: journal?.conflict ?? journalId,
         journalId,
         quarantine: journal?.quarantine ?? 'electron/quarantine',
-      }).catch((error: unknown) => {
+      }).then(() => { decision.acknowledge() }).catch((error: unknown) => {
         console.error('desktop checkpoint: conflict notice failed', error)
       })
     }
@@ -894,7 +903,8 @@ if (!primaryInstance) {
       log: (message) => { console.error(`desktop checkpoint: ${message}`) },
     }
     const canStart = await runStartupSessionMaintenance({
-      gate: () => gateRestoreJournals(sessionMaintenance.home, appPath),
+      home: sessionMaintenance.home,
+      gate: decisions => gateRestoreJournals(sessionMaintenance.home, appPath, decisions),
       maintain: async () => {
         for (const pending of await consumePendingSessionRestores(sessionMaintenance)) {
           await notifyRestoreOutcome(pending.sessionId, pending.outcome)
@@ -906,8 +916,7 @@ if (!primaryInstance) {
             await offerSessionRestore({
               sessionId: item.sessionId,
               checkpointId: detected.manifest.id,
-              capturedAt: item.entry.capturedAt,
-              memberCount: members?.length ?? 1,
+              members: members ?? [item.entry],
               maintenance: sessionMaintenance,
             })
           }

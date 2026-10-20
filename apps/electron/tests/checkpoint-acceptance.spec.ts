@@ -245,6 +245,7 @@ describe('acceptance case 4: interruption at each switch stage converges at next
       const errors: unknown[] = []
       const deferred: string[] = []
       const allowed = await runStartupSessionMaintenance({
+        home,
         gate: async () => {
           const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
           deferred.push(...result.deferred)
@@ -266,6 +267,7 @@ describe('acceptance case 4: interruption at each switch stage converges at next
       expect(await listRestoreJournals(home)).toHaveLength(1)
       rmSync(blockedRow, { recursive: true })
       const resumed = await runStartupSessionMaintenance({
+        home,
         gate: async () => (await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })).deferred.length === 0,
         maintain: async () => {}, onError: (error) => { throw error },
       })
