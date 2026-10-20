@@ -41,8 +41,9 @@ async function readPendingRestores(home: string): Promise<PendingRestores> {
   let raw: string
   try {
     raw = await readFile(pendingRestorePath(home), 'utf8')
-  } catch {
-    return { version: 1, requests: [] }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { version: 1, requests: [] }
+    throw error
   }
   try {
     const parsed: unknown = JSON.parse(raw)
@@ -76,6 +77,7 @@ async function readPendingRestores(home: string): Promise<PendingRestores> {
 /**
  * Record a confirmed restore intent for the next launch. Duplicate session
  * entries collapse to the newest request; the checkpoint never changes implicitly.
+ * Read failures reject without replacing the existing queue.
  * @param home - Active Harness home.
  * @param sessionId - Session the user confirmed restoring.
  * @param checkpointId - Checkpoint shown in that confirmation.
@@ -99,6 +101,7 @@ export async function enqueuePendingRestore(home: string, sessionId: string, che
  * {@link dequeuePendingRestore} runs, which callers do once that request's
  * restore attempt has resolved — so an interruption mid-queue re-presents the
  * unprocessed remainder on the next launch.
+ * A missing file means an empty queue; other file-read failures reject.
  */
 export async function listPendingRestores(home: string): Promise<readonly PendingRestoreRequest[]> {
   return (await readPendingRestores(home)).requests
@@ -106,6 +109,7 @@ export async function listPendingRestores(home: string): Promise<readonly Pendin
 
 /**
  * Acknowledge a request durably, preserving any newer request for the same session.
+ * Read failures reject without changing the existing queue.
  * @param home - Active Harness home.
  * @param sessionId - Session whose request resolved.
  * @param requestId - Exact operation to acknowledge; omit to remove all requests for the session.

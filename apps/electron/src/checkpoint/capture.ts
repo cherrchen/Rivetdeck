@@ -12,6 +12,7 @@ import { createHash } from 'node:crypto'
 import { createReadStream, createWriteStream, linkSync } from 'node:fs'
 import { copyFile, mkdir, open, readdir, rm, stat, statfs } from 'node:fs/promises'
 import { basename, dirname, join, relative, sep } from 'node:path'
+import { pipeline } from 'node:stream/promises'
 import { renameDesktopPath } from '../atomic-file.ts'
 import {
   checkpointsRoot,
@@ -119,33 +120,16 @@ async function copyIntoCandidate(
   const sourceStat = await stat(sourcePath, { bigint: true })
   const destination = join(candidateDir, rel)
   await mkdir(dirname(destination), { recursive: true })
+  signal?.throwIfAborted()
   const hash = createHash('sha256')
   let size = 0
   const read = createReadStream(sourcePath)
   const write = createWriteStream(destination, { mode: 0o600 })
-  let onAbort: (() => void) | undefined
-  try {
-    read.on('data', (chunk: string | Buffer) => {
-      hash.update(chunk)
-      size += chunk.length
-    })
-    await new Promise<void>((resolve, reject) => {
-      read.on('error', reject)
-      write.on('error', reject)
-      write.on('finish', resolve)
-      onAbort = () => {
-        reject(signal?.reason instanceof Error ? signal.reason : new Error('checkpoint capture aborted'))
-      }
-      signal?.addEventListener('abort', onAbort, { once: true })
-      read.pipe(write)
-    })
-  } finally {
-    // The listener hangs on the shared deadline signal, not the stream, so it
-    // must be detached here or one copy leaks a listener per file.
-    if (onAbort !== undefined) signal?.removeEventListener('abort', onAbort)
-    read.destroy()
-    if (!write.closed) write.destroy()
-  }
+  read.on('data', (chunk: string | Buffer) => {
+    hash.update(chunk)
+    size += chunk.length
+  })
+  await pipeline(read, write, { signal })
   // Windows FlushFileBuffers requires write access to the staged copy.
   const handle = await open(destination, 'r+')
   try {
@@ -520,9 +504,15 @@ export async function runExitCheckpoint(options: ExitCheckpointOptions): Promise
   }
 }
 
-/** Unreadable journals prevent pruning because their checkpoint references cannot be recovered. */
+/** Unreadable queues or journals prevent pruning because their checkpoint references are unknown. */
 async function protectedRestoreCheckpoints(home: string): Promise<ReadonlySet<string> | undefined> {
-  const pending = await listPendingRestores(home)
+  let pending
+  try {
+    pending = await listPendingRestores(home)
+  } catch (_error) {
+    // A transient read failure must not release confirmed restore targets.
+    return undefined
+  }
   const protectedIds = new Set(pending.flatMap(request =>
     request.checkpointId === undefined ? [] : [request.checkpointId]))
   for (const path of await listRestoreJournals(home)) {

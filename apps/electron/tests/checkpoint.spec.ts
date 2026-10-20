@@ -5,6 +5,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { createRequire } from 'node:module'
 import * as fs from 'node:fs/promises'
 import { writeRestoreJournal } from '../src/checkpoint/journal.ts'
+import { dequeuePendingRestore, enqueuePendingRestore, listPendingRestores } from '../src/checkpoint/pending.ts'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -12,6 +13,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   pruneCheckpoints,
   runExitCheckpoint,
+  stageCandidate,
   type ValidateSessions,
 } from '../src/checkpoint/capture.ts'
 import { checkpointsRoot, readManifest, type CheckpointManifest } from '../src/checkpoint/manifest.ts'
@@ -114,6 +116,12 @@ function committedIds(home: string): string[] {
   return readdirSync(root).filter(name => !name.endsWith('.tmp'))
 }
 
+function captureAt(home: string, id: number) {
+  return runExitCheckpoint({
+    home, childPid: CHILD_PID, appVersion: 'test', validate: fakeValidator(), now: () => id,
+  })
+}
+
 /** Seed a committed checkpoint holding one verified copy of `sessionDir`. */
 function seedCheckpoint(home: string, id: string, sessionDir: string, bytes: string): CheckpointManifest {
   const dir = join(checkpointsRoot(home), id)
@@ -145,6 +153,83 @@ function seedCheckpoint(home: string, id: string, sessionDir: string, bytes: str
 afterEach(() => {
   vi.restoreAllMocks()
   while (roots.length > 0) rmSync(roots.pop()!, { recursive: true, force: true })
+})
+
+describe('pending restore read failures', () => {
+  it('returns an empty queue when the pending file is absent', async () => {
+    expect(await listPendingRestores(makeHome())).toEqual([])
+  })
+
+  it.each(['EACCES', 'EIO'])('preserves queued requests on %s', async (code) => {
+    const home = makeHome()
+    await enqueuePendingRestore(home, 'one', '1000')
+    const pendingPath = join(home, 'electron', 'pending-restore.json')
+    const before = readFileSync(pendingPath, 'utf8')
+    const failure = Object.assign(new Error('pending queue read failed'), { code })
+    const readFile = fs.readFile
+    const spy = vi.spyOn(fs, 'readFile').mockImplementation(async (...args) => {
+      if (args[0] === pendingPath) throw failure
+      return readFile(...args)
+    })
+    try {
+      await expect(listPendingRestores(home)).rejects.toBe(failure)
+      await expect(enqueuePendingRestore(home, 'two', '2000')).rejects.toBe(failure)
+      await expect(dequeuePendingRestore(home, 'one')).rejects.toBe(failure)
+      expect(readFileSync(pendingPath, 'utf8')).toBe(before)
+    } finally {
+      spy.mockRestore()
+    }
+    expect(await listPendingRestores(home)).toMatchObject([{ sessionId: 'one', checkpointId: '1000' }])
+  })
+})
+
+describe('stageCandidate cancellation', () => {
+  it('does not open copy streams when cancelled during destination creation', async () => {
+    const home = makeHome()
+    const rel = 'sessions/--work--/session-aaaa/session.v4.jsonl.zstd'
+    writeFile(join(home, rel), 'SESSION')
+    const controller = new AbortController()
+    const failure = new Error('capture deadline expired')
+    const mkdir = fs.mkdir
+    vi.spyOn(fs, 'mkdir').mockImplementation(async (...args) => {
+      const result = await mkdir(...args)
+      if (String(args[0]) === dirname(join(checkpointsRoot(home), '1000.tmp', rel))) {
+        controller.abort(failure)
+      }
+      return result
+    })
+    const read = vi.spyOn(nativeFs, 'createReadStream')
+    const write = vi.spyOn(nativeFs, 'createWriteStream')
+    await expect(stageCandidate(home, '1000', controller.signal)).rejects.toBe(failure)
+    expect(controller.signal.aborted).toBe(true)
+    expect(read).not.toHaveBeenCalled()
+    expect(write).not.toHaveBeenCalled()
+  })
+
+  it('closes both copy streams before rejecting an in-flight cancellation', async () => {
+    const home = makeHome()
+    const rel = 'sessions/--work--/session-aaaa/session.v4.jsonl.zstd'
+    const content = 'x'.repeat(1024 * 1024)
+    writeFile(join(home, rel), content)
+    const controller = new AbortController()
+    let read: nativeFs.ReadStream | undefined
+    let write: nativeFs.WriteStream | undefined
+    const createRead = nativeFs.createReadStream
+    vi.spyOn(nativeFs, 'createReadStream').mockImplementation((...args) => {
+      read = createRead(...args)
+      read.once('data', () => { controller.abort() })
+      return read
+    })
+    const createWrite = nativeFs.createWriteStream
+    vi.spyOn(nativeFs, 'createWriteStream').mockImplementation((...args) => {
+      write = createWrite(...args)
+      return write
+    })
+    await expect(stageCandidate(home, '1000', controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
+    expect(read?.closed).toBe(true)
+    expect(write?.closed).toBe(true)
+    expect(read?.bytesRead).toBeLessThan(content.length)
+  })
 })
 
 describe('isPromotableReport', () => {
@@ -363,17 +448,14 @@ describe('runExitCheckpoint', () => {
     const home = makeHome()
     populateHome(home)
     await writeReport(home)
-    const capture = (id: number) => runExitCheckpoint({
-      home, childPid: CHILD_PID, appVersion: 'test', validate: fakeValidator(), now: () => id,
-    })
-    expect((await capture(1000)).kind).toBe('committed')
+    expect((await captureAt(home, 1000)).kind).toBe('committed')
     const journal = { version: 1 as const, id: 'intent', phase: 'intent' as const, checkpointId: '1000',
       targetSessionId: 'aaaa-1111', createdAt: 1, updatedAt: 1, quarantine: 'electron/quarantine/intent', members: [] }
     await writeRestoreJournal(home, journal)
-    for (const id of [2000, 3000, 4000, 5000]) expect((await capture(id)).kind).toBe('committed')
+    for (const id of [2000, 3000, 4000, 5000]) expect((await captureAt(home, id)).kind).toBe('committed')
     expect(existsSync(join(checkpointsRoot(home), '1000'))).toBe(true)
     await writeRestoreJournal(home, { ...journal, phase: 'committed' })
-    expect((await capture(6000)).kind).toBe('committed')
+    expect((await captureAt(home, 6000)).kind).toBe('committed')
     expect(existsSync(join(checkpointsRoot(home), '1000'))).toBe(false)
   })
 
@@ -388,6 +470,34 @@ describe('runExitCheckpoint', () => {
       })).kind).toBe('committed')
     }
     expect(committedIds(home)).toEqual(['1000', '2000', '3000', '4000'])
+  })
+
+  it('suspends pruning when a pending queue read fails and resumes after recovery', async () => {
+    const home = makeHome()
+    populateHome(home)
+    await writeReport(home)
+    for (const id of [1000, 2000, 3000]) expect((await captureAt(home, id)).kind).toBe('committed')
+    await enqueuePendingRestore(home, 'aaaa-1111', '1000')
+    const pendingPath = join(home, 'electron', 'pending-restore.json')
+    const before = readFileSync(pendingPath, 'utf8')
+    const readFile = fs.readFile
+    const spy = vi.spyOn(fs, 'readFile').mockImplementation(async (...args) => {
+      if (args[0] === pendingPath) throw Object.assign(new Error('read failed'), { code: 'EIO' })
+      return readFile(...args)
+    })
+    try {
+      expect((await captureAt(home, 4000)).kind).toBe('committed')
+      expect(committedIds(home)).toEqual(['1000', '2000', '3000', '4000'])
+      expect(readFileSync(pendingPath, 'utf8')).toBe(before)
+    } finally {
+      spy.mockRestore()
+    }
+    expect(await listPendingRestores(home)).toMatchObject([{ checkpointId: '1000' }])
+    expect((await captureAt(home, 5000)).kind).toBe('committed')
+    expect(committedIds(home)).toEqual(['1000', '3000', '4000', '5000'])
+    await dequeuePendingRestore(home, 'aaaa-1111')
+    expect((await captureAt(home, 6000)).kind).toBe('committed')
+    expect(committedIds(home)).toEqual(['4000', '5000', '6000'])
   })
 
   // Directory fsync is POSIX-only; Windows exercises file flushes separately.
