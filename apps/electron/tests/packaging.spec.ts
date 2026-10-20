@@ -130,6 +130,7 @@ it('wires the layered data-cleanup uninstaller through the native helper', async
     // Unregistered legacy installs can still leave data containing an unrecorded home.
     expect(installMacro).toContain('${If} $installationDir == ""')
     expect(installMacro).toContain('${AndIfNot} ${FileExists} "$APPDATA\\${APP_FILENAME}"')
+    expect(installMacro).toContain('${AndIfNot} ${FileExists} "$LOCALAPPDATA\\${RIVETDECK_UPDATER_CACHE}"')
     expect(installMacro).toContain('FileWrite $0 "complete=0$\\r$\\n"')
     // Electron data is always per-user: under an all-users install the section runs in
     // the "all" shell context where $APPDATA is ProgramData, so the seed brackets its

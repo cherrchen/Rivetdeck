@@ -208,6 +208,24 @@ try {
   Assert-Exists (Join-Path $legacyHome 'sessions.jsonl') 'legacy homes inside caches stay protected'
   Assert-Residue 'Cache'
 
+  # A legacy updater cache alone cannot establish complete path history.
+  foreach ($purge in @($false, $true)) {
+    Reset-State
+    $legacyUpdaterHome = Join-Path $updaterCache 'pending\shared-home'
+    New-Item -ItemType Directory -Force -Path $legacyUpdaterHome | Out-Null
+    Set-Content -LiteralPath (Join-Path $legacyUpdaterHome 'sessions.jsonl') -Value 'retained'
+    Assert-Missing $userData 'only the legacy updater cache survives'
+    Assert-Missing $historyFile 'legacy installs have no path history'
+    Install-To $installDirectory
+    if (-not (Select-String -LiteralPath $historyFile -Pattern '^complete=0$' -Quiet)) {
+      throw 'Reinstall over a legacy updater cache must seed incomplete history.'
+    }
+    if ($purge) { Uninstall-From $installDirectory '--delete-app-data' }
+    else { Uninstall-From $installDirectory }
+    Assert-Exists (Join-Path $legacyUpdaterHome 'sessions.jsonl') 'legacy homes inside the updater cache stay protected'
+    Assert-Residue 'updater isolation requires complete history'
+  }
+
   # A recorded home alias outside userData protects its real target inside userData.
   Reset-State
   Install-To $installDirectory
