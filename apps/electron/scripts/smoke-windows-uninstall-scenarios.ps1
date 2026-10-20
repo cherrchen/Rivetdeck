@@ -15,7 +15,7 @@ $userData = Join-Path $env:APPDATA 'Rivetdeck'
 $updaterCache = Join-Path $env:LOCALAPPDATA 'rivetdeck-updater'
 $residueLog = Join-Path $env:APPDATA 'Rivetdeck-uninstall-residue.log'
 # The path-history record lives beside the default userData so the app can always write
-# it; it survives install-directory removal by design.
+# it; protection survives removal while cleanup candidates belong to one install epoch.
 $historyFile = Join-Path $env:APPDATA 'rivetdeck-path-history.ini'
 
 function Assert-Exists([string]$Path, [string]$Because) {
@@ -140,7 +140,9 @@ try {
   Reset-State
   Install-To $installDirectory
   Plant-UserData
+  $beforeHistory = Get-Content -LiteralPath $historyFile -Raw
   Uninstall-From $installDirectory '--updated'
+  if ((Get-Content -LiteralPath $historyFile -Raw) -cne $beforeHistory) { throw 'Update retired the active history.' }
   Assert-Exists (Join-Path $userData 'Cache\data_0') 'updates never delete data'
   Assert-Exists (Join-Path $userData 'Cookies') 'updates never delete data'
   Assert-Exists $historyFile 'the record survives for the succeeding install'
@@ -149,7 +151,11 @@ try {
   Reset-State
   Install-To $installDirectory
   Plant-UserData
+  $beforeHistory = Get-Content -LiteralPath $historyFile -Raw
+  Install-To $installDirectory
+  if ((Get-Content -LiteralPath $historyFile -Raw) -cne $beforeHistory) { throw 'Replacement changed the active history.' }
   Uninstall-From $installDirectory '/KEEP_APP_DATA'
+  if ((Get-Content -LiteralPath $historyFile -Raw) -cne $beforeHistory) { throw 'Replacement retired the active history.' }
   Assert-Exists (Join-Path $userData 'Cache\data_0') 'uninstaller replacement never deletes data'
   Assert-Exists $historyFile 'the record survives for the succeeding install'
 
@@ -242,6 +248,39 @@ try {
     Assert-Residue 'protected'
   } finally {
     [IO.Directory]::Delete($homeAlias)
+  }
+
+  # Retired roots may be repurposed while retaining an old product marker. Neither
+  # tiered nor full cleanup in a later install may reach that previous epoch's roots.
+  foreach ($purge in @($false, $true)) {
+    Reset-State
+    Install-To $installDirectory
+    $retiredRoot = Join-Path $scratch ('retired-userdata-' + $purge)
+    New-Item -ItemType Directory -Force -Path $retiredRoot | Out-Null
+    Set-Content -LiteralPath (Join-Path $retiredRoot 'desktop-preferences.json') -Value '{}'
+    $historicalHome = Join-Path $scratch ('retired-home-' + $purge)
+    New-Item -ItemType Directory -Force -Path $historicalHome | Out-Null
+    Set-Content -LiteralPath (Join-Path $historicalHome 'sessions.jsonl') -Value 'retained'
+    Add-Content -LiteralPath $historyFile -Value "userData=$retiredRoot`r`ndshHome=$historicalHome"
+    Uninstall-From $installDirectory
+    if (-not (Select-String -LiteralPath $historyFile -Pattern '^retired=1$' -Quiet)) {
+      throw 'A real uninstall must retire cleanup candidates.'
+    }
+    # Simulate a previous uninstaller that failed to retire its record; reinstall must
+    # also recognize the absence of registration and close that old epoch.
+    if ($purge) {
+      Set-Content -LiteralPath $historyFile -Value "complete=1`r`nuserData=$retiredRoot`r`ndshHome=$historicalHome"
+    }
+    New-Item -ItemType Directory -Force -Path (Join-Path $retiredRoot 'Cache') | Out-Null
+    Set-Content -LiteralPath (Join-Path $retiredRoot 'Cache\foreign-data') -Value 'repurposed'
+    New-Item -ItemType Directory -Force -Path (Join-Path $retiredRoot 'electron\toolchains\bin') | Out-Null
+    Set-Content -LiteralPath (Join-Path $retiredRoot 'electron\toolchains\bin\npm.cmd') -Value 'repurposed'
+    Install-To $installDirectory
+    if ($purge) { Uninstall-From $installDirectory '--delete-app-data' }
+    else { Uninstall-From $installDirectory }
+    Assert-Exists (Join-Path $retiredRoot 'Cache\foreign-data') 'old cache candidates must not cross install epochs'
+    Assert-Exists (Join-Path $retiredRoot 'electron\toolchains\bin\npm.cmd') 'even verified old candidates must be retired'
+    Assert-Exists (Join-Path $historicalHome 'sessions.jsonl') 'home protection survives retirement'
   }
 
   Write-Output 'All uninstall data-cleanup scenarios passed.'

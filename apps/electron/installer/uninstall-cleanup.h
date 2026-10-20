@@ -11,7 +11,8 @@
 
 namespace uninstall_cleanup {
 
-// One line per claim: `complete=0|1`, `userData=<path>`, `dshHome=<path>`. A missing file is
+// Claims: `complete=0|1`, `userData=<path>`, `dshHome=<path>`, `retired=1`. Retirement
+// drops cleanup candidates and completeness, retaining protection. A missing file is
 // absent history, never an error. Entries that cannot be normalized keep their claim
 // unverifiable: damaged cleanup candidates forbid full removal, while an unresolvable
 // protected root blocks every deletion that cannot be proven separate from it.
@@ -85,6 +86,7 @@ inline DWORD LoadHistory(LPCWSTR file, History& history) {
         return error;
     }
     history.present = true;
+    bool retired = false;
     if (bytes.rfind("\xEF\xBB\xBF", 0) == 0) bytes.erase(0, 3);
     size_t offset = 0;
     while (offset <= bytes.size()) {
@@ -104,7 +106,9 @@ inline DWORD LoadHistory(LPCWSTR file, History& history) {
         const std::wstring key = Trim(wide.substr(0, equals));
         const std::wstring value = Trim(wide.substr(equals + 1));
         std::wstring normalized;
-        if (_wcsicmp(key.c_str(), L"complete") == 0) {
+        if (_wcsicmp(key.c_str(), L"retired") == 0 && value == L"1") {
+            retired = true;
+        } else if (_wcsicmp(key.c_str(), L"complete") == 0) {
             history.complete = value == L"1";
         } else if (_wcsicmp(key.c_str(), L"userData") == 0) {
             if (NormalizeEntry(value, normalized)) history.userData.push_back(normalized);
@@ -115,6 +119,10 @@ inline DWORD LoadHistory(LPCWSTR file, History& history) {
         } else {
             history.unresolvableProtection = true;
         }
+    }
+    if (retired) {
+        history.complete = false;
+        history.userData.clear();
     }
     return ERROR_SUCCESS;
 }

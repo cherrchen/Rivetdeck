@@ -13,7 +13,7 @@ The assisted NSIS uninstaller removes the install directory, `managed-toolchains
 | `%APPDATA%\Rivetdeck` | `desktop-preferences.json`, `network-secrets/`, `network-startup-override.json`, Cookies, `Local Storage/`, `IndexedDB/`, non-cache session-partition data | Preserved — delete the folder manually to remove it |
 | `%APPDATA%\Rivetdeck-uninstall-residue.log` | Skipped targets and removal failures from the last uninstall | Delete manually |
 | `%LOCALAPPDATA%\rivetdeck-updater` | Downloaded update packages | Removed only with complete history and successful verification |
-| `%APPDATA%\rivetdeck-path-history.ini` | Record of every `userData` and `DSH_HOME` root the product used | Preserved — it is what lets a later uninstall protect or remove the right roots; delete manually if unwanted |
+| `%APPDATA%\rivetdeck-path-history.ini` | Current installation’s `userData` roots and historical `DSH_HOME` protection | Preserved with cleanup candidates retired; reinstall cannot clean roots from an earlier installation. Delete manually if unwanted |
 
 Running `"Uninstall Rivetdeck.exe" --delete-app-data` requests removal of the whole `%APPDATA%\Rivetdeck`. It proceeds only when the install's path-history record exists and is complete; otherwise full removal is skipped, named caches, managed runtime trees, and the updater cache are retained, and the residue log lists skipped targets. To delete it regardless, remove `%APPDATA%\Rivetdeck` manually. Cleanup or helper-call errors display a warning while program removal continues. If the residue report cannot be written, the warning shows the Windows error and skipped-target count; check remaining files manually.
 
@@ -35,4 +35,4 @@ The following locations belong to the Harness or to you and are never removed by
 
 ## Custom locations
 
-If the app ever ran with `--user-data-dir` or a different `DSH_HOME`, the `rivetdeck-path-history.ini` record beside `%APPDATA%` lists every root it used.
+If the app ever ran with `--user-data-dir` or a different `DSH_HOME`, the `rivetdeck-path-history.ini` record beside `%APPDATA%` lists its roots. A real uninstall retires that installation’s cleanup candidates, while historical Harness homes remain protected after reinstall.

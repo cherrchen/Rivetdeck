@@ -34,6 +34,30 @@ describe('Electron path history', () => {
     expect(parsePathHistory(renderPathHistory(record))).toEqual(record)
   })
 
+  it('retires cleanup candidates without dropping homes or unknown protection claims', async () => {
+    const appDataDir = await freshAppDataDir()
+    const recordPath = join(appDataDir, PATH_HISTORY_FILE)
+    await writeFile(recordPath,
+      'complete=1\r\nuserData=C:\\old-data\r\ndshHome=C:\\old-home\r\n'
+      + 'futureHome=C:\\protected\r\nReTiReD=1\r\ncomplete=1\r\n')
+    const retired = parsePathHistory(await readFile(recordPath, 'utf8'))
+    expect(retired).toEqual({
+      complete: false, userData: [], dshHome: ['C:\\old-home'],
+      unrecognized: ['futureHome=C:\\protected'],
+    })
+    const current = await mergeLaunchPathHistory({
+      appDataDir, userData: 'C:\\new-data', dshHome: 'C:\\new-home',
+    })
+    expect(current).toEqual({
+      complete: false, userData: ['C:\\new-data'], dshHome: ['C:\\old-home', 'C:\\new-home'],
+      unrecognized: ['futureHome=C:\\protected'],
+    })
+    const stored = await readFile(recordPath, 'utf8')
+    expect(stored).not.toContain('old-data')
+    expect(stored).not.toContain('retired=')
+    expect(parsePathHistory(stored)).toEqual(current)
+  })
+
   it('carries lines it cannot parse through every rewrite', async () => {
     const appDataDir = await freshAppDataDir()
     const recordPath = join(appDataDir, PATH_HISTORY_FILE)

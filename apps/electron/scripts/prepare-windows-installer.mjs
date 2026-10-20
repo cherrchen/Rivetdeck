@@ -20,7 +20,7 @@ const installerResources = join(dirname(fileURLToPath(import.meta.url)), '..', '
 /** Replace exactly one maintained template anchor; template drift refuses packaging. */
 function replaceOnce(source, anchor, replacement) {
   if (source.split(anchor).length !== 2) throw new Error(`Windows installer template changed: ${anchor}`)
-  return source.replace(anchor, replacement)
+  return source.replace(anchor, () => replacement)
 }
 
 /** Prepare the Windows-only script before electron-builder compiles NSIS.
@@ -106,13 +106,34 @@ function renderUninstallNsh({ helperDll, updaterCacheName }) {
 !define RIVETDECK_UPDATER_CACHE "${updaterCacheName}"
 !define RIVETDECK_PATH_HISTORY "rivetdeck-path-history.ini"
 
+!macro RivetdeckRetireHistory
+  ClearErrors
+  FileOpen $0 "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}" a
+  ${'${IfNot}'} ${'${Errors}'}
+    FileWrite $0 "$\\r$\\nretired=1$\\r$\\n"
+    FileClose $0
+  ${'${EndIf}'}
+!macroend
+
+!ifndef BUILD_UNINSTALLER
+Var rivetdeckLegacyUpdaterCache
+Var rivetdeckPreviousInstall
+!endif
+
 !macro customInit
   ; installApplicationFiles stores a copy of this installer inside the updater cache
   ; (electron-builder's APP_INSTALLER_STORE_FILE), so by customInstall the cache always
   ; exists; legacy presence must be sampled during .onInit. Electron application data is
   ; always per-user: under an all-users shell context $LOCALAPPDATA is the shared root,
   ; so the sample runs in the current user's context exactly like the seed below.
-  Var /GLOBAL rivetdeckLegacyUpdaterCache
+  ; Registration precedes replacement and the new install's registry writes.
+  ReadRegStr $R0 HKCU "${'${UNINSTALL_REGISTRY_KEY}'}" UninstallString
+  ReadRegStr $R1 HKLM "${'${UNINSTALL_REGISTRY_KEY}'}" UninstallString
+  StrCpy $rivetdeckPreviousInstall "0"
+  ${'${if}'} $R0 != ""
+  ${'${orIf}'} $R1 != ""
+    StrCpy $rivetdeckPreviousInstall "1"
+  ${'${endif}'}
   ${'${if}'} $installMode == "all"
     SetShellVarContext current
   ${'${endif}'}
@@ -121,6 +142,16 @@ function renderUninstallNsh({ helperDll, updaterCacheName }) {
   ${'${else}'}
     StrCpy $rivetdeckLegacyUpdaterCache "0"
   ${'${endif}'}
+  ${'${IfNot}'} ${'${isUpdated}'}
+  ${'${AndIf}'} $rivetdeckPreviousInstall == "0"
+  ${'${AndIf}'} ${'${FileExists}'} "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}"
+    !insertmacro RivetdeckRetireHistory
+    ${'${If}'} ${'${Errors}'}
+      MessageBox MB_OK|MB_ICONEXCLAMATION "$(RIVETDECK_HISTORY_ERROR)" /SD IDOK
+      SetErrorLevel 1
+      Abort
+    ${'${EndIf}'}
+  ${'${EndIf}'}
   ${'${if}'} $installMode == "all"
     SetShellVarContext all
   ${'${endif}'}
@@ -128,23 +159,21 @@ function renderUninstallNsh({ helperDll, updaterCacheName }) {
 
 !macro customInstall
   ; Fresh installs seed the record beside the default userData — a location the app can
-  ; always write — so a later complete-removal request can prove coverage; an existing
-  ; record survives updates and reinstalls untouched. The installation-mode flags cannot
-  ; detect a fresh install — /currentuser forces them during initMultiUser.
+  ; always write. Updates and replacements retain the active epoch; a new installation
+  ; retires old cleanup candidates but retains all protection claims.
   ; Electron application data is always per-user: under an all-users install this section
   ; runs with the "all" shell context, where $APPDATA resolves to ProgramData, so the
   ; seed must switch back to the current user's context exactly like the uninstall side.
   ; A prior installation, surviving userData, or an updater cache predating this install
   ; may hold an unrecorded Harness home, including after an older uninstall. Each
   ; requires incomplete history.
-  Var /GLOBAL rivetdeckLegacyUpdaterCache
   ${'${if}'} $installMode == "all"
     SetShellVarContext current
   ${'${endif}'}
   ${'${IfNot}'} ${'${isUpdated}'}
   ${'${AndIfNot}'} ${'${FileExists}'} "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}"
     FileOpen $0 "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}" w
-    ${'${If}'} $installationDir == ""
+    ${'${If}'} $rivetdeckPreviousInstall == "0"
     ${'${AndIfNot}'} ${'${FileExists}'} "$APPDATA\\${'${APP_FILENAME}'}"
     ${'${AndIf}'} $rivetdeckLegacyUpdaterCache == "0"
       FileWrite $0 "complete=1$\\r$\\n"
@@ -217,6 +246,14 @@ Function un.RivetdeckCleanData
       Pop $R5
     ${'${EndIf}'}
     System::Call 'kernel32::FreeLibrary(p R4)'
+  ${'${EndIf}'}
+  ; A real uninstall retires candidates even if cleanup skipped targets or failed.
+  ; Appending retains protected homes and unknown claims without rewriting their paths.
+  !insertmacro RivetdeckRetireHistory
+  ${'${If}'} ${'${Errors}'}
+    SetDetailsView show
+    DetailPrint "$(RIVETDECK_HISTORY_ERROR)"
+    MessageBox MB_OK|MB_ICONEXCLAMATION "$(RIVETDECK_HISTORY_ERROR)" /SD IDOK
   ${'${EndIf}'}
   ${'${If}'} $R5 != "ok"
     SetDetailsView show

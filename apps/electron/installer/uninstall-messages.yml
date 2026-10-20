@@ -15,3 +15,6 @@ RIVETDECK_UNINSTALL_SKIPPED:
 RIVETDECK_UNINSTALL_REPORT_ERROR:
   en: 'The residue report is unavailable. Check remaining user files manually. Windows error:'
   zh: '残留报告不可用，请手动检查剩余用户文件。Windows 错误码：'
+RIVETDECK_HISTORY_ERROR:
+  en: 'The application path history could not be updated. Close Rivetdeck and check write access to the path-history file before reinstalling.'
+  zh: '无法更新应用路径历史。重新安装前，请关闭 Rivetdeck 并检查路径历史文件的写入权限。'

@@ -12,7 +12,7 @@ import { writeDesktopFileAtomic } from './atomic-file.ts'
 export const PATH_HISTORY_FILE = 'rivetdeck-path-history.ini'
 
 /** Parsed path-history record: `complete` is false whenever history cannot prove it
- * covered every root the product ever used (absent file, first record after an upgrade). */
+ * covered every root in this install epoch (absent file, upgrade, or retired epoch). */
 export interface PathHistoryRecord {
   complete: boolean
   userData: string[]
@@ -28,12 +28,14 @@ export interface PathHistoryRecord {
  * Parse the line-oriented record. Keys compare case-insensitively, matching the native
  * reader; empty lines and comments are dropped. Anything else that is not a recognized
  * claim is preserved verbatim in `unrecognized` rather than silently erased by the next
- * rewrite.
+ * rewrite. `retired=1` clears cleanup candidates and completeness regardless of line
+ * order, while preserving every protected-home and unknown claim.
  * @param content Raw UTF-8 record content.
  * @returns Record with deduplicated paths in file order.
  */
 export function parsePathHistory(content: string): PathHistoryRecord {
   const record: PathHistoryRecord = { complete: false, userData: [], dshHome: [], unrecognized: [] }
+  let retired = false
   for (const rawLine of content.split(/\r?\n/)) {
     const line = rawLine.trim()
     if (line === '' || line.startsWith('#') || line.startsWith(';')) continue
@@ -44,18 +46,22 @@ export function parsePathHistory(content: string): PathHistoryRecord {
     }
     const key = line.slice(0, equals).trim().toLowerCase()
     const value = line.slice(equals + 1).trim()
-    if (key === 'complete') record.complete = value === '1'
+    if (key === 'retired' && value === '1') retired = true
+    else if (key === 'complete') record.complete = value === '1'
     else if (key === 'userdata' && value !== '') pushUnique(record.userData, value)
     else if (key === 'dshhome' && value !== '') pushUnique(record.dshHome, value)
     else record.unrecognized.push(line)
+  }
+  if (retired) {
+    record.complete = false
+    record.userData = []
   }
   return record
 }
 
 /**
- * Render the record as CRLF `key=value` lines; complete first so a truncated read still
- * carries the completeness proof, unrecognized lines last so a rewrite keeps every claim
- * it could not interpret.
+ * Render CRLF claims for the active epoch, retaining unrecognized lines. A parsed
+ * retirement marker is consumed; its old candidates and completeness are already reset.
  * @param record Merged record.
  * @returns Persistable record content.
  */
@@ -69,9 +75,10 @@ export function renderPathHistory(record: PathHistoryRecord): string {
 
 /**
  * Merge this launch's resolved userData and DSH_HOME into the install's durable record.
- * Values accumulate — earlier roots are never overwritten or dropped, and lines this
- * version cannot parse are carried through verbatim. A cross-process writer lock covers
- * the entire read-modify-write cycle, including launches with different userData roots.
+ * UserData roots accumulate within the current install epoch; retiring an epoch drops
+ * its cleanup candidates and completeness, while homes and unrecognized claims survive.
+ * A cross-process writer lock covers the entire read-modify-write cycle, including
+ * launches with different userData roots.
  * The record lives beside the default userData so an unelevated process can always
  * update it. With no record at all the
  * launch starts a new record marked incomplete, because the first record cannot prove

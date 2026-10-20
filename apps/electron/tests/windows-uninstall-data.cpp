@@ -219,6 +219,18 @@ int wmain(int argc, wchar_t** argv) {
         assert(history.userData.size() == 1u && history.homes.size() == 1u);
     }
 
+    // A retired epoch cannot supply cleanup candidates or completeness to a reinstall.
+    {
+        const std::wstring retiredPath = root + L"\\retired.ini";
+        WriteText(retiredPath, "complete=1\r\nuserData=" + Narrow(userData) +
+            "\r\ndshHome=" + Narrow(home) + "\r\nReTiReD=1\r\ncomplete=1\r\n");
+        uninstall_cleanup::History history;
+        assert(uninstall_cleanup::LoadHistory(retiredPath.c_str(), history) == ERROR_SUCCESS);
+        assert(history.present && !history.complete && !history.damaged);
+        assert(history.userData.empty());
+        assert(history.homes.size() == 1u && history.homes[0] == home);
+    }
+
     // An unnormalizable dshHome claim is unresolvable protection, not dropped history.
     const std::wstring damagedHistory = root + L"\\damaged.ini";
     WriteText(damagedHistory, "complete=1\r\ndshHome=relative\\path\r\n");

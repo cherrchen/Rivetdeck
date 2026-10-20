@@ -69,7 +69,7 @@ it('generates checked Windows ZIP extraction while retaining default NSIS compil
   try {
     await prepare({ electronPlatformName: 'darwin', packager: { projectDir } })
     expect(existsSync(join(projectDir, '.electron-build/nsis'))).toBe(false)
-    const sevenZip = String.raw`C:\Program Files\7-Zip\7za.exe`
+    const sevenZip = String.raw`C:\Program Files\$&-7-Zip\7za.exe`
     await prepareWindowsInstallerScript(projectDir, sevenZip)
     const extraction = await readFile(join(projectDir, '.electron-build/nsis/extractAppPackage.nsh'), 'utf8')
     expect(extraction).toContain(`File /oname=$PLUGINSDIR\\dsh-7za.exe "${sevenZip}"`)
@@ -122,13 +122,13 @@ it('wires the layered data-cleanup uninstaller through the native helper', async
     expect(nsh).toContain('${AndIfNot} ${FileExists} "$APPDATA\\${RIVETDECK_PATH_HISTORY}"')
     expect(nsh).toContain('FileWrite $0 "complete=1$\\r$\\n"')
     // Fresh installs seed the record beside userData so the app can always rewrite it;
-    // a surviving record is never overwritten. The install flags cannot detect a fresh
+    // active records survive replacements. The install flags cannot detect a fresh
     // install — /currentuser forces $hasPerUserInstallation to 1.
     expect(nsh).toContain('FileOpen $0 "$APPDATA\\${RIVETDECK_PATH_HISTORY}" w')
     expect(nsh).not.toContain('$hasPerUserInstallation')
     const installMacro = nsh.slice(nsh.indexOf('!macro customInstall'), nsh.indexOf('!macro customUnInstall'))
     // Unregistered legacy installs can still leave data containing an unrecorded home.
-    expect(installMacro).toContain('${If} $installationDir == ""')
+    expect(installMacro).toContain('${If} $rivetdeckPreviousInstall == "0"')
     expect(installMacro).toContain('${AndIfNot} ${FileExists} "$APPDATA\\${APP_FILENAME}"')
     expect(installMacro).toContain('${AndIf} $rivetdeckLegacyUpdaterCache == "0"')
     expect(installMacro).toContain('FileWrite $0 "complete=0$\\r$\\n"')
@@ -140,6 +140,12 @@ it('wires the layered data-cleanup uninstaller through the native helper', async
     expect(initMacro).toContain('StrCpy $rivetdeckLegacyUpdaterCache "0"')
     expect(initMacro).toContain('SetShellVarContext current')
     expect(initMacro).toContain('SetShellVarContext all')
+    expect(nsh.match(/^Var rivetdeckLegacyUpdaterCache$/gm)).toHaveLength(1)
+    expect(nsh).not.toContain('Var /GLOBAL rivetdeckLegacyUpdaterCache')
+    expect(initMacro).toContain('ReadRegStr $R0 HKCU "${UNINSTALL_REGISTRY_KEY}" UninstallString')
+    expect(initMacro).toContain('ReadRegStr $R1 HKLM "${UNINSTALL_REGISTRY_KEY}" UninstallString')
+    expect(initMacro).toContain('!insertmacro RivetdeckRetireHistory')
+    expect(initMacro).toContain('SetErrorLevel 1\n      Abort')
     expect(installMacro).not.toContain('FileExists} "$LOCALAPPDATA')
     // Electron data is always per-user: under an all-users install the section runs in
     // the "all" shell context where $APPDATA is ProgramData, so the seed brackets its
@@ -187,6 +193,11 @@ it('wires the layered data-cleanup uninstaller through the native helper', async
     expect(nsh.indexOf('!include "FileFunc.nsh"')).toBeLessThan(nsh.indexOf('Function un.'))
     const functions = nsh.slice(nsh.indexOf('Function un.'))
     expect(functions).not.toContain('$installMode')
+    const retirement = functions.indexOf('!insertmacro RivetdeckRetireHistory')
+    expect(retirement).toBeGreaterThan(functions.indexOf('kernel32::FreeLibrary'))
+    expect(functions.slice(0, retirement).match(/    Return/g)).toHaveLength(2)
+    expect(nsh).toContain('retired=1$\\r$\\n')
+    expect(nsh).toContain('$(RIVETDECK_HISTORY_ERROR)')
 
     // Localized residue text is generated from the owned dictionary, not hardcoded.
     const strings = await readFile(join(output, 'uninstall-strings.nsh'), 'utf8')
