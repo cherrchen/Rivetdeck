@@ -130,8 +130,17 @@ it('wires the layered data-cleanup uninstaller through the native helper', async
     // Unregistered legacy installs can still leave data containing an unrecorded home.
     expect(installMacro).toContain('${If} $installationDir == ""')
     expect(installMacro).toContain('${AndIfNot} ${FileExists} "$APPDATA\\${APP_FILENAME}"')
-    expect(installMacro).toContain('${AndIfNot} ${FileExists} "$LOCALAPPDATA\\${RIVETDECK_UPDATER_CACHE}"')
+    expect(installMacro).toContain('${AndIf} $rivetdeckLegacyUpdaterCache == "0"')
     expect(installMacro).toContain('FileWrite $0 "complete=0$\\r$\\n"')
+    // installApplicationFiles stores a copy of the installer inside the updater cache
+    // before customInstall runs, so legacy cache presence is sampled during .onInit.
+    const initMacro = nsh.slice(nsh.indexOf('!macro customInit'), nsh.indexOf('!macro customInstall'))
+    expect(initMacro).toContain('${if} ${FileExists} "$LOCALAPPDATA\\${RIVETDECK_UPDATER_CACHE}"')
+    expect(initMacro).toContain('StrCpy $rivetdeckLegacyUpdaterCache "1"')
+    expect(initMacro).toContain('StrCpy $rivetdeckLegacyUpdaterCache "0"')
+    expect(initMacro).toContain('SetShellVarContext current')
+    expect(initMacro).toContain('SetShellVarContext all')
+    expect(installMacro).not.toContain('FileExists} "$LOCALAPPDATA')
     // Electron data is always per-user: under an all-users install the section runs in
     // the "all" shell context where $APPDATA is ProgramData, so the seed brackets its
     // write with the same context switch the uninstall side uses.
