@@ -54,7 +54,7 @@ pnpm --filter @dsh-electron/dsh-electron test:ownership
 
 Git 产物验收比较原生文件系统路径，使 Windows 短路径名与 Git 路径分隔符指向同一目录。运行时验证 fixture 在 POSIX 上链接已安装的 Node 可执行文件，在 Windows 上复制该文件；验证用例与清理各允许 30 秒，以覆盖验证器的 15 秒子进程期限。托管运行环境的检查在激活前于最终 generation 路径执行（[生命周期](../../docs/electron/runtime-environments.zh.md)）。
 
-Checkpoint 捕获和恢复在发布暂存文件前，通过可写句柄将文件刷盘；Windows 的文件刷盘要求写入权限。回归测试在每个测试宿主上强制检查此要求。
+Checkpoint 捕获和恢复在发布暂存文件前，通过可写句柄将文件刷盘；Windows 的文件刷盘要求写入权限。POSIX 发布还同步暂存目录层级与隔离移动两侧的父目录。回归测试覆盖可写刷盘、目录同步失败、跨卷复制中断，以及删除 journal 前确认排队请求。
 
 Electron 应用是私有安装程序，不作为 npm 发布成员。依赖同步使用 `workspace:^` 复制上游 CLI 的 workspace 依赖，排除实验性 peer 依赖，并保留可选 bundle 所需的稳定 peer 依赖；仓库的 `constraints` 检查对该应用执行此范围要求，并继续对上游包执行上游发布规则。
 
@@ -71,7 +71,7 @@ Electron 应用是私有安装程序，不作为 npm 发布成员。依赖同步
 
 随包提供的 Desktop 网络子进程插件在运行时导入已安装的 `dsh-subprocess-local` 和 `dsh-subprocess` 包。它们必须与 Host 共用“找不到可执行文件”的错误类，终端 shell 发现流程才能跳过未安装的候选项。
 
-原生页面右键菜单根据 Chromium 当前的编辑能力提供剪切、复制、粘贴、全选和刷新；开发构建还提供 DevTools。应用菜单和托盘菜单提供桌面端自有的“关于”窗口、更新通道选择、手动更新检查，以及“恢复会话…”入口——后者扫描 session checkpoint，并可以把内置 Harness 已读不了的 session 回滚到确认框展示的已验证副本。排队请求在 relaunch 和保留清理期间固定该 checkpoint；未完成的恢复 journal 必须在 Host 打开会话前经过启动决策。[会话 checkpoint 与恢复](../../docs/electron/session-checkpoint-restore.zh.md) 说明关闭、取消与恢复机制。
+原生页面右键菜单根据 Chromium 当前的编辑能力提供剪切、复制、粘贴、全选和刷新；开发构建还提供 DevTools。应用菜单和托盘菜单提供桌面端自有的“关于”窗口、更新通道选择、手动更新检查，以及“恢复会话…”入口——后者扫描 session checkpoint，并可以把内置 Harness 已读不了的 session 回滚到确认框展示的已验证副本。排队请求与 intent journal 在 relaunch 和保留清理期间固定该 checkpoint；未完成或无法读取的恢复 journal 必须在 Host 打开会话前经过启动决策。检测在整个校验期间持有关联会话的写租约，带入旧副本的会话在 live 数据可读或恢复前仍可被检测。[会话 checkpoint 与恢复](../../docs/electron/session-checkpoint-restore.zh.md) 说明关闭、取消与恢复机制。
 
 托盘使用从受版本控制的 `assets/tray/deepseek.svg`（LobeHub lobe-icons，MIT）栅格化的单色 DeepSeek 图形。`pnpm run build:tray` 会在 `build/tray/` 下生成各 DPI 的 PNG；Windows 和 Linux 在原生浅色主题下选择黑色图形、在深色主题下选择白色图形，并按主显示器缩放因子选取最近的打包像素尺寸，在 Electron 报告主题或 display-metrics 变化时刷新。macOS 使用预渲染的 template PNG，由操作系统控制菜单栏对比度。
 

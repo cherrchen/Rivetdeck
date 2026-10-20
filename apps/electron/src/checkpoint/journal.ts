@@ -8,9 +8,11 @@
  * journal is deleted only after finalize is durable.
  */
 
+import type { PendingRestoreRequestId } from './pending.ts'
 import { readFile, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { writeDesktopFileAtomic } from '../atomic-file.ts'
+import { createDurableDirectory, syncDirectory } from './files.ts'
 import { isCheckpointDigest, isPathSegment, type CheckpointDigest, type CheckpointSessionHeader } from './manifest.ts'
 
 export type RestoreJournalPhase = 'intent' | 'committed' | 'finalized' | 'conflicted'
@@ -51,6 +53,8 @@ export interface RestoreJournal {
   readonly phase: RestoreJournalPhase
   readonly checkpointId: string
   readonly targetSessionId: string
+  /** Queued operation acknowledged durably before this journal can be deleted. */
+  readonly pendingRequestId?: PendingRestoreRequestId
   readonly createdAt: number
   readonly updatedAt: number
   /** `$DSH_HOME`-relative quarantine directory (`electron/quarantine/<id>`). */
@@ -72,6 +76,7 @@ export function restoreQuarantineDir(home: string, journalId: string): string {
 
 /** Persist the journal durably (tmp + fsync + rename + directory fsync). */
 export async function writeRestoreJournal(home: string, journal: RestoreJournal): Promise<void> {
+  await createDurableDirectory(restoreJournalsDir(home), home)
   const path = join(restoreJournalsDir(home), `${journal.id}.json`)
   await writeDesktopFileAtomic(path, `${JSON.stringify(journal, undefined, 2)}\n`)
 }
@@ -79,6 +84,7 @@ export async function writeRestoreJournal(home: string, journal: RestoreJournal)
 /** Delete the journal after a durable `finalized` record; idempotent. */
 export async function deleteRestoreJournal(home: string, id: string): Promise<void> {
   await rm(join(restoreJournalsDir(home), `${id}.json`), { force: true })
+  await syncDirectory(restoreJournalsDir(home))
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -107,6 +113,7 @@ function isRestoreJournal(parsed: unknown): parsed is RestoreJournal {
   if (!isPathSegment(parsed.id)
     || typeof parsed.checkpointId !== 'string'
     || typeof parsed.targetSessionId !== 'string'
+    || (parsed.pendingRequestId !== undefined && typeof parsed.pendingRequestId !== 'string')
     || typeof parsed.createdAt !== 'number' || typeof parsed.updatedAt !== 'number'
     || typeof parsed.quarantine !== 'string'
     || !parsed.quarantine.startsWith('electron/quarantine/')
@@ -146,8 +153,9 @@ export async function listRestoreJournals(home: string): Promise<string[]> {
   let names: string[]
   try {
     names = await readdir(dir)
-  } catch {
-    return []
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+    throw error
   }
   return names
     .filter(name => name.endsWith('.json'))

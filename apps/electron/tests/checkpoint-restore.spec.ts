@@ -3,6 +3,9 @@ import { existsSync } from 'node:fs'
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { stat } from 'node:fs/promises'
+import * as fs from 'node:fs/promises'
+import { runStartupSessionMaintenance } from '../src/checkpoint/startup.ts'
+import { enqueuePendingRestore, listPendingRestores } from '../src/checkpoint/pending.ts'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -149,6 +152,7 @@ function restore(home: string, sessionId: string, extra: Partial<Parameters<type
 }
 
 afterEach(() => {
+  vi.restoreAllMocks()
   while (roots.length > 0) rmSync(roots.pop()!, { recursive: true, force: true })
 })
 
@@ -175,6 +179,117 @@ describe('restoreSession', () => {
     expect(leases.held.size).toBe(0)
   })
 
+  it('durably publishes a verified cross-volume quarantine copy before unlinking live', async () => {
+    const home = makeHome()
+    liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'POLLUTED' })
+    seedCheckpoint(home, '1000', [{ sessionId: PARENT.id, dir: SESSION_DIR, header: PARENT,
+      files: { 'session.v4.jsonl.zstd': 'VERIFIED' } }])
+    const live = join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd')
+    const quarantine = join(home, 'electron/quarantine/9000-session-parent-1/sessions', SESSION_DIR, 'session.v4.jsonl.zstd')
+    const synced = new Set<string>()
+    const originalOpen = fs.open
+    vi.spyOn(fs, 'open').mockImplementation(async (...args) => {
+      if (String(args[0]) === `${quarantine}.restore.tmp`) expect(args[1]).toBe('r+')
+      const handle = await originalOpen(...args)
+      const sync = handle.sync.bind(handle)
+      vi.spyOn(handle, 'sync').mockImplementation(async () => { await sync(); synced.add(String(args[0])) })
+      return handle
+    })
+    const rename = fs.rename
+    vi.spyOn(fs, 'rename').mockImplementation(async (from, to) => {
+      if (String(from) === live && String(to) === quarantine) {
+        throw Object.assign(new Error('different volumes'), { code: 'EXDEV' })
+      }
+      return rename(from, to)
+    })
+    const unlink = fs.unlink
+    vi.spyOn(fs, 'unlink').mockImplementation(async (path) => {
+      if (String(path) === live) {
+        expect(read(quarantine)).toBe('POLLUTED')
+        expect(synced.has(`${quarantine}.restore.tmp`)).toBe(true)
+        if (process.platform !== 'win32') expect(synced.has(dirname(quarantine))).toBe(true)
+      }
+      return unlink(path)
+    })
+    expect(await restore(home, PARENT.id).run).toMatchObject({ kind: 'restored' })
+    expect(read(live)).toBe('VERIFIED')
+    expect(read(quarantine)).toBe('POLLUTED')
+  })
+
+  it('resumes a cross-volume move interrupted after quarantine publication', async () => {
+    const home = makeHome()
+    liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'POLLUTED' })
+    seedCheckpoint(home, '1000', [{ sessionId: PARENT.id, dir: SESSION_DIR, header: PARENT,
+      files: { 'session.v4.jsonl.zstd': 'VERIFIED' } }])
+    const live = join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd')
+    const rename = fs.rename
+    vi.spyOn(fs, 'rename').mockImplementation(async (from, to) => {
+      if (String(from) === live) throw Object.assign(new Error('different volumes'), { code: 'EXDEV' })
+      return rename(from, to)
+    })
+    const unlink = fs.unlink
+    let interrupted = false
+    vi.spyOn(fs, 'unlink').mockImplementation(async (path) => {
+      if (String(path) === live && !interrupted) { interrupted = true; throw new Error('interrupted before source removal') }
+      return unlink(path)
+    })
+    expect((await restore(home, PARENT.id).run).kind).toBe('failed')
+    expect(read(live)).toBe('POLLUTED')
+    const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+    expect(result.converged).toEqual(['9000-session-parent-1'])
+    expect(read(live)).toBe('VERIFIED')
+    expect(read(join(home, 'electron/quarantine/9000-session-parent-1/sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('POLLUTED')
+  })
+
+  it('preserves live bytes when a cross-volume quarantine copy fails verification', async () => {
+    const home = makeHome()
+    liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'POLLUTED' })
+    seedCheckpoint(home, '1000', [{ sessionId: PARENT.id, dir: SESSION_DIR, header: PARENT,
+      files: { 'session.v4.jsonl.zstd': 'VERIFIED' } }])
+    const live = join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd')
+    const rename = fs.rename
+    vi.spyOn(fs, 'rename').mockImplementation(async (from, to) => {
+      if (String(from) === live) throw Object.assign(new Error('different volumes'), { code: 'EXDEV' })
+      return rename(from, to)
+    })
+    const copy = fs.copyFile
+    vi.spyOn(fs, 'copyFile').mockImplementation(async (...args) => {
+      await copy(...args)
+      if (String(args[1]).includes('quarantine')) writeFileSync(String(args[1]), 'TORN')
+    })
+    expect(await restore(home, PARENT.id).run).toMatchObject({ kind: 'failed' })
+    expect(read(live)).toBe('POLLUTED')
+    expect(await listRestoreJournals(home)).toHaveLength(1)
+  })
+
+  // A rename touches both parents; verify their flushes precede canonical publication.
+  it.skipIf(process.platform === 'win32')('syncs both quarantine and live parents before publishing a replacement', async () => {
+    const home = makeHome()
+    liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'POLLUTED' })
+    seedCheckpoint(home, '1000', [{ sessionId: PARENT.id, dir: SESSION_DIR, header: PARENT,
+      files: { 'session.v4.jsonl.zstd': 'VERIFIED' } }])
+    const live = join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd')
+    const synced = new Set<string>()
+    const originalOpen = fs.open
+    vi.spyOn(fs, 'open').mockImplementation(async (...args) => {
+      const handle = await originalOpen(...args)
+      const sync = handle.sync.bind(handle)
+      vi.spyOn(handle, 'sync').mockImplementation(async () => { await sync(); synced.add(String(args[0])) })
+      return handle
+    })
+    const rename = fs.rename
+    let quarantined = false
+    vi.spyOn(fs, 'rename').mockImplementation(async (from, to) => {
+      if (String(from) === live) { synced.clear(); quarantined = true }
+      if (String(to) === live && quarantined) {
+        expect(synced.has(dirname(live))).toBe(true)
+        expect([...synced].some(path => path.includes('quarantine') && path.endsWith(SESSION_DIR))).toBe(true)
+      }
+      return rename(from, to)
+    })
+    expect((await restore(home, PARENT.id).run).kind).toBe('restored')
+  })
+
   it('restores the related-source closure: subagent children switch and invalidate too', async () => {
     const home = makeHome()
     liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'POLLUTED' })
@@ -190,6 +305,30 @@ describe('restoreSession', () => {
     expect(read(join(home, 'sessions', CHILD_DIR, 'session.v4.jsonl.zstd'))).toBe('CHILD-VERIFIED')
     expect(existsSync(childRow)).toBe(false)
     expect(existsSync(join(home, 'electron', 'quarantine', '9000-session-parent-1', 'sessions', CHILD_DIR, 'session.v4.jsonl.zstd'))).toBe(true)
+  })
+
+  it('reports partial recovery when a later related member changed', async () => {
+    const home = makeHome()
+    liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'PARENT-POLLUTED' })
+    liveSession(home, CHILD_DIR, { 'session.v4.jsonl.zstd': 'CHILD-POLLUTED' })
+    seedCheckpoint(home, '1000', [
+      { sessionId: PARENT.id, dir: SESSION_DIR, header: PARENT, files: { 'session.v4.jsonl.zstd': 'PARENT-VERIFIED' } },
+      { sessionId: CHILD.id, dir: CHILD_DIR, header: CHILD, files: { 'session.v4.jsonl.zstd': 'CHILD-VERIFIED' } },
+    ])
+    const parent = join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd')
+    const child = join(home, 'sessions', CHILD_DIR, 'session.v4.jsonl.zstd')
+    const rename = fs.rename
+    vi.spyOn(fs, 'rename').mockImplementation(async (from, to) => {
+      await rename(from, to)
+      if (String(to) === parent) writeFileSync(child, 'CHILD-CHANGED-AFTER-INTENT')
+    })
+    expect(await restore(home, PARENT.id).run).toMatchObject({
+      kind: 'conflicted', conflict: `${CHILD_DIR}/session.v4.jsonl.zstd`, journalId: '9000-session-parent-1',
+      quarantine: 'electron/quarantine/9000-session-parent-1',
+    })
+    expect(read(parent)).toBe('PARENT-VERIFIED')
+    expect(read(child)).toBe('CHILD-CHANGED-AFTER-INTENT')
+    expect(read(join(home, 'electron/quarantine/9000-session-parent-1/sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('PARENT-POLLUTED')
   })
 
   it('refuses a session with no verified checkpoint copy and leaves live data in place', async () => {
@@ -570,9 +709,70 @@ describe('convergeRestoreJournals', () => {
       members: [{ sessionId: 's', dir: '../escape', header: {}, liveFiles: [], publish: [] }],
     }))
     const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
-    expect(result).toEqual({ converged: [], conflicted: [], deferred: [], unresolvable: [] })
+    expect(result).toEqual({ converged: [], conflicted: [], deferred: ['bad-dir.json', 'bad-id.json'], unresolvable: [] })
+    const maintain = vi.fn(async () => {})
+    expect(await runStartupSessionMaintenance({
+      gate: async () => (await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })).deferred.length === 0,
+      maintain, onError: (error) => { throw error },
+    })).toBe(false)
+    expect(maintain).not.toHaveBeenCalled()
     expect(await listRestoreJournals(home)).toHaveLength(2)
     expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('LIVE')
+  })
+
+  it('finishes an interrupted quarantine copy with both original copies present', async () => {
+    const home = makeHome()
+    liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'POLLUTED' })
+    seedCheckpoint(home, '1000', [{ sessionId: PARENT.id, dir: SESSION_DIR, header: PARENT,
+      files: { 'session.v4.jsonl.zstd': 'VERIFIED' } }])
+    const journal = await seedIntentJournal(home)
+    const quarantine = join(home, journal.quarantine, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd')
+    writeFile(quarantine, 'POLLUTED')
+    const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+    expect(result.converged).toEqual([journal.id])
+    expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('VERIFIED')
+    expect(read(quarantine)).toBe('POLLUTED')
+  })
+
+  it('does not restart a queued request already owned by an unfinished journal', async () => {
+    const home = makeHome()
+    liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'POLLUTED' })
+    seedCheckpoint(home, '1000', [{ sessionId: PARENT.id, dir: SESSION_DIR, header: PARENT,
+      files: { 'session.v4.jsonl.zstd': 'VERIFIED' } }])
+    await enqueuePendingRestore(home, PARENT.id, '1000')
+    const request = (await listPendingRestores(home))[0]!
+    const journal = await seedIntentJournal(home, { pendingRequestId: request.id })
+    const { consumePendingSessionRestores } = await import('../src/checkpoint/index.ts')
+    expect(await consumePendingSessionRestores({
+      home, appPath: home, resourcesPath: home, packaged: false,
+      hostRuntime: { executable: process.execPath, env: {} }, hostRunning: () => false,
+    })).toEqual([])
+    expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('POLLUTED')
+    expect(await listPendingRestores(home)).toHaveLength(1)
+    expect((await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })).converged).toEqual([journal.id])
+    expect(await listPendingRestores(home)).toEqual([])
+  })
+
+  it('acknowledges a completed queued restore before deleting its journal', async () => {
+    const home = makeHome()
+    liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'RESTORED-THEN-APPENDED' })
+    await enqueuePendingRestore(home, PARENT.id, '1000')
+    const request = (await listPendingRestores(home))[0]!
+    const journal = await seedIntentJournal(home, { phase: 'finalized', pendingRequestId: request.id })
+    const originalRm = fs.rm
+    let interrupted = false
+    vi.spyOn(fs, 'rm').mockImplementation(async (...args) => {
+      if (String(args[0]).endsWith(`${journal.id}.json`) && !interrupted) {
+        interrupted = true
+        expect(await listPendingRestores(home)).toEqual([])
+        throw new Error('interrupted before journal deletion')
+      }
+      return originalRm(...args)
+    })
+    expect((await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })).deferred).toEqual([journal.id])
+    expect(await listPendingRestores(home)).toEqual([])
+    expect((await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })).converged).toEqual([journal.id])
+    expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('RESTORED-THEN-APPENDED')
   })
 
   it('invalidates member rows inside the legacy whole-unit projcache file', async () => {

@@ -25,6 +25,8 @@ import {
 } from './manifest.ts'
 import { readShutdownReportFile } from '../harness/shutdown-report.ts'
 import { listPendingRestores } from './pending.ts'
+import { listRestoreJournals, readRestoreJournal } from './journal.ts'
+import { createDurableDirectory, syncDirectoryTree } from './files.ts'
 import { isPromotableReport } from './promotion.ts'
 
 /** Files that never belong to a checkpoint copy: transient locks and staged artifacts. */
@@ -222,6 +224,7 @@ export async function stageCandidate(
 ): Promise<StagedCandidate> {
   const root = checkpointsRoot(home)
   const dir = join(root, `${id}.tmp`)
+  await createDurableDirectory(root, home)
   const files: CheckpointFileEntry[] = []
   const sessionDirs = new Set<string>()
   for await (const rel of coveredFiles(home)) {
@@ -278,6 +281,12 @@ export async function carryForwardSession(
       linkSync(source, destination)
     } catch {
       await copyFile(source, destination)
+      const handle = await open(destination, 'r+')
+      try {
+        await handle.sync()
+      } finally {
+        await handle.close()
+      }
     }
     const liveSource = liveSources.get(entry.path)
     candidate.files.push({
@@ -315,6 +324,7 @@ export async function commitCandidate(
   manifest: CheckpointManifest,
 ): Promise<string> {
   await writeManifest(candidate.dir, manifest)
+  await syncDirectoryTree(candidate.dir)
   const target = join(root, candidate.id)
   await renameDesktopPath(candidate.dir, target)
   if (process.platform !== 'win32') {
@@ -332,10 +342,10 @@ export async function commitCandidate(
  * Rotate old checkpoints. The newest commit and every checkpoint that uniquely
  * holds some session's last verified copy are protected; other committed
  * checkpoints past {@link CHECKPOINT_RETENTION_COUNT} are removed oldest-first.
- * Queued restore targets and unreadable manifests are also kept.
+ * Queued restore targets, intent-journal inputs, and unreadable manifests are also kept.
  * @param root - Checkpoint directory.
  * @param signal - Cancellation between retention operations.
- * @param protectedCheckpointIds - Targets still referenced by confirmed restore requests.
+ * @param protectedCheckpointIds - Targets referenced by confirmed restore requests or intent journals.
  * @returns Resolves after eligible checkpoints are removed.
  */
 export async function pruneCheckpoints(
@@ -443,6 +453,7 @@ export async function runExitCheckpoint(options: ExitCheckpointOptions): Promise
         const kept = staged.files.filter(entry => sessionDirOf(entry.path) !== dir)
         staged.files.length = 0
         staged.files.push(...kept)
+        staged.sessionDirs.delete(dir)
         await rm(join(staged.dir, 'sessions', ...dir.split('/')), { recursive: true, force: true })
       }
       if (previous === undefined) {
@@ -462,9 +473,12 @@ export async function runExitCheckpoint(options: ExitCheckpointOptions): Promise
       // closure: any residual failure aborts the whole candidate rather than
       // committing an inconsistent set.
       const second = await options.validate(join(candidate.dir, 'sessions'), options.signal)
-      const stillFailing = second.sessions.filter(result => !result.ok)
-      if (stillFailing.length > 0) {
-        return { kind: 'aborted', reason: `re-validation failed for ${stillFailing.map(result => result.dir).join(', ')}` }
+      const stillFailing = new Set(second.sessions.filter(result => !result.ok).map(result => result.dir))
+      for (const dir of candidate.sessionDirs) {
+        if (!second.sessions.some(result => result.dir === dir && result.ok)) stillFailing.add(dir)
+      }
+      if (stillFailing.size > 0) {
+        return { kind: 'aborted', reason: `re-validation failed for ${[...stillFailing].join(', ')}` }
       }
       finalReport = second
     } else {
@@ -495,9 +509,8 @@ export async function runExitCheckpoint(options: ExitCheckpointOptions): Promise
     }
     await commitCandidate(root, candidate, manifest)
     candidate = undefined
-    const pending = await listPendingRestores(options.home)
-    await pruneCheckpoints(root, options.signal, new Set(pending.flatMap(request =>
-      request.checkpointId === undefined ? [] : [request.checkpointId])))
+    const protectedIds = await protectedRestoreCheckpoints(options.home)
+    if (protectedIds !== undefined) await pruneCheckpoints(root, options.signal, protectedIds)
     return { kind: 'committed', id, sessions: sessions.length }
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
@@ -505,4 +518,17 @@ export async function runExitCheckpoint(options: ExitCheckpointOptions): Promise
   } finally {
     if (candidate !== undefined) await discardCandidate(candidate).catch(() => undefined)
   }
+}
+
+/** Unreadable journals prevent pruning because their checkpoint references cannot be recovered. */
+async function protectedRestoreCheckpoints(home: string): Promise<ReadonlySet<string> | undefined> {
+  const pending = await listPendingRestores(home)
+  const protectedIds = new Set(pending.flatMap(request =>
+    request.checkpointId === undefined ? [] : [request.checkpointId]))
+  for (const path of await listRestoreJournals(home)) {
+    const journal = await readRestoreJournal(path)
+    if (journal === undefined) return undefined
+    if (journal.phase === 'intent') protectedIds.add(journal.checkpointId)
+  }
+  return protectedIds
 }

@@ -70,7 +70,7 @@ export async function detectCheckpointDrift(
   for (const entry of manifest.sessions) {
     options?.signal?.throwIfAborted()
     const liveDir = join(home, 'sessions', ...entry.dir.split('/'))
-    const recorded = new Map<string, { size: number; mtimeNs: string; sha256: string; hasSource: boolean }>()
+    const recorded = new Map<string, { size: number; mtimeNs: string; sha256: string; hasSource: boolean; carried: boolean }>()
     for (const file of manifest.files) {
       if (!file.path.startsWith(`sessions/${entry.dir}/`)) continue
       recorded.set(file.path.slice(`sessions/${entry.dir}/`.length), {
@@ -78,6 +78,7 @@ export async function detectCheckpointDrift(
         mtimeNs: file.source?.mtimeNs ?? '',
         sha256: file.digest.sha256,
         hasSource: file.source !== undefined,
+        carried: file.origin === 'carried',
       })
     }
     let liveNames: string[]
@@ -100,9 +101,9 @@ export async function detectCheckpointDrift(
         reasons.add('extra')
         continue
       }
-      if (Number(liveStat.size) === expect.size && String(liveStat.mtimeNs) === expect.mtimeNs) continue
-      // Bytes identical to the checkpoint copy (the post-restore steady state)
-      // are not foreign drift; the digest check hashes only drifted files.
+      if (!expect.carried && Number(liveStat.size) === expect.size && String(liveStat.mtimeNs) === expect.mtimeNs) continue
+      // Carried sources failed validation even when their stats match.
+      // Bytes equal to the checkpoint are the post-restore steady state.
       if ((await liveFileDigest(livePath)) === expect.sha256) continue
       reasons.add('changed')
     }

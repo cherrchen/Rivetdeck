@@ -44,6 +44,7 @@ import {
 } from './checkpoint/index.ts'
 import { runStartupSessionMaintenance } from './checkpoint/startup.ts'
 import { detectFormatRefusalFrame, type SessionRefusalHit } from './checkpoint/refusal.ts'
+import { dequeuePendingRestore } from './checkpoint/pending.ts'
 import { deleteRestoreJournal, listRestoreJournals, readRestoreJournal, restoreJournalsDir } from './checkpoint/journal.ts'
 import { resolveRestoreClosure, type RestoreOutcome } from './checkpoint/restore.ts'
 import {
@@ -51,6 +52,7 @@ import {
   buildNoCheckpointNotice,
   buildOrphanedJournalGate,
   buildRestoreConfirm,
+  buildRestoreConflictNotice,
   buildRestoreNotice,
   formatRestoreRefusal,
   refusalLabel,
@@ -397,8 +399,10 @@ async function notifyRestoreOutcome(sessionId: string, outcome: RestoreOutcome):
           formatDesktopMessage(messages.sessionRestoreRefusedBody,
             { id: sessionId, reason: formatRestoreRefusal(messages, outcome.reason) }))
       case 'conflicted':
-        return buildRestoreNotice(messages, messages.sessionRestoreConflictTitle,
-          formatDesktopMessage(messages.sessionRestoreConflictBody, { conflict: outcome.conflict }))
+        return buildRestoreConflictNotice(messages, {
+          conflict: outcome.conflict, journalId: outcome.journalId,
+          quarantine: join(harnessHome ?? '', outcome.quarantine),
+        })
       case 'failed':
         return buildRestoreNotice(messages, messages.sessionRestoreFailedTitle,
           formatDesktopMessage(messages.sessionRestoreFailedBody, { id: sessionId, reason: outcome.reason }))
@@ -498,12 +502,7 @@ async function requestSessionRollback(): Promise<void> {
     hostRuntime: runtime,
     hostRunning: () => harness !== undefined,
   }
-  // While the local Host is up a torn mid-append read can masquerade as an
-  // unreadable session, so candidates must also prove an idle write lease.
-  const detected = await detectUnreadableSessions({
-    ...maintenance,
-    confirmIdleLease: harness !== undefined,
-  }).catch((error: unknown) => {
+  const detected = await detectUnreadableSessions(maintenance).catch((error: unknown) => {
     console.error('desktop checkpoint: manual detection failed', error)
     return undefined
   })
@@ -594,6 +593,9 @@ async function gateRestoreJournals(home: string, appPath: string): Promise<boole
         return false
       }
       if (response === 0) {
+        if (journal?.pendingRequestId !== undefined) {
+          await dequeuePendingRestore(home, journal.targetSessionId, journal.pendingRequestId)
+        }
         await deleteRestoreJournal(home, journalId).catch((error: unknown) => {
           console.error(`desktop checkpoint: failed to abandon restore journal ${journalId}`, error)
         })
@@ -610,6 +612,7 @@ async function gateRestoreJournals(home: string, appPath: string): Promise<boole
         kind: 'conflicted',
         conflict: journal?.conflict ?? journalId,
         journalId,
+        quarantine: journal?.quarantine ?? 'electron/quarantine',
       }).catch((error: unknown) => {
         console.error('desktop checkpoint: conflict notice failed', error)
       })

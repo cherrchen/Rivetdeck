@@ -6,7 +6,7 @@
  */
 import { runStartupSessionMaintenance } from '../src/checkpoint/startup.ts'
 import { enqueuePendingRestore, listPendingRestores } from '../src/checkpoint/pending.ts'
-import { consumePendingSessionRestores } from '../src/checkpoint/index.ts'
+import { consumePendingSessionRestores, confirmIdleSessions } from '../src/checkpoint/index.ts'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import {
@@ -25,6 +25,7 @@ import {
   type ExitCheckpointOutcome,
   type ValidateSessions,
 } from '../src/checkpoint/capture.ts'
+import { detectCheckpointDrift } from '../src/checkpoint/detect.ts'
 import { checkpointsRoot, readManifest, type CheckpointManifest } from '../src/checkpoint/manifest.ts'
 import {
   mergeMainShutdownFacts,
@@ -616,6 +617,95 @@ describe('acceptance case 9: both branches survive restore + later writes + swap
     expect(readFileSync(restoredCopy)).toEqual(appendedBranch)
     expect(readFileSync(join(liveDir, 'session.v9.jsonl.zstd'))).toEqual(pollutedV9)
     expect(existsSync(join(home, 'electron', 'quarantine', quarantineDir, 'sessions', session.dir, 'session.v9.jsonl.zstd'))).toBe(true)
+  })
+})
+
+describe('capture and detection through the bundled backend', () => {
+  it.skipIf(!backendAvailable)('keeps a carried pollution candidate detectable until restore', async () => {
+    const home = makeHome()
+    const session = await createRealSession(home, 'carried-detection', '/work/carried')
+    await writeCleanReport(home)
+    const validate: ValidateSessions = (root, signal) => validateSessionsRoot({ sessionsRoot: root, installAnchor: INSTALL_ANCHOR, signal })
+    expect((await exitCheckpoint(home, 1000, validate)).kind).toBe('committed')
+    polluteWithUnknownEvent(home, session.dir)
+    expect((await exitCheckpoint(home, 2000, validate)).kind).toBe('committed')
+    expect((await detectCheckpointDrift(home, { formatVersion: 4 }))?.candidates.map(item => item.sessionId))
+      .toEqual([session.id])
+    const leases = realLeases(home)
+    try {
+      expect((await restoreSession({ home, sessionId: session.id, acquireLease: leases.acquire, validate })).kind).toBe('restored')
+    } finally { await leases.close() }
+    expect((await detectCheckpointDrift(home, { formatVersion: 4 }))?.candidates).toEqual([])
+  })
+
+  it.skipIf(!backendAvailable)('refuses to commit a carried future header omitted by the current reader', async () => {
+    const home = makeHome()
+    const session = await createRealSession(home, 'future-carried', '/work/downgrade')
+    polluteWithNewerGeneration(home, session.dir)
+    checkpointFromLive(home, session, '1000')
+    await writeCleanReport(home)
+    const outcome = await exitCheckpoint(home, 2000, (root, signal) =>
+      validateSessionsRoot({ sessionsRoot: root, installAnchor: INSTALL_ANCHOR, signal }))
+    expect(outcome).toMatchObject({ kind: 'aborted' })
+    expect(readdirSync(checkpointsRoot(home))).toEqual(['1000'])
+  })
+
+  it.skipIf(!backendAvailable)('validates live bytes only after acquiring the real write lease', async () => {
+    const home = makeHome()
+    const session = await createRealSession(home, 'leased-detection', '/work/detection')
+    await writeCleanReport(home)
+    expect((await exitCheckpoint(home, 1000, root =>
+      validateSessionsRoot({ sessionsRoot: root, installAnchor: INSTALL_ANCHOR }))).kind).toBe('committed')
+    const canonical = join(home, 'sessions', session.dir, 'session.v4.jsonl.zstd')
+    const before = readFileSync(canonical)
+    polluteWithUnknownEvent(home, session.dir)
+    const detection = await detectCheckpointDrift(home, { formatVersion: 4 })
+    expect(detection?.candidates).toHaveLength(1)
+    const mounted = await mountSessionsBackend(join(home, 'sessions'), INSTALL_ANCHOR)
+    try {
+      const kept = await confirmIdleSessions(detection!, async (member) => {
+        // A foreign append has rolled back before releasing its lease.
+        writeFileSync(canonical, before)
+        return mounted.persistence.acquireWriteLease(member.header)
+      }, async () => {
+        await expect(mounted.persistence.acquireWriteLease(session.header)).rejects.toMatchObject({ name: 'SessionAlreadyOwnedError' })
+        return validateSessionsRoot({ sessionsRoot: join(home, 'sessions'), installAnchor: INSTALL_ANCHOR })
+      })
+      expect(kept).toEqual([])
+      const again = await mounted.persistence.acquireWriteLease(session.header)
+      await again.release()
+    } finally { await mounted.dispose() }
+  })
+
+  it.skipIf(!backendAvailable)('does not replay a completed queued rollback over later session writes', async () => {
+    const home = makeHome()
+    const session = await createRealSession(home, 'acknowledged-request', '/work/ack')
+    checkpointFromLive(home, session, '1000')
+    polluteWithUnknownEvent(home, session.dir)
+    await enqueuePendingRestore(home, session.id, '1000')
+    const request = (await listPendingRestores(home))[0]!
+    const leases = realLeases(home)
+    try {
+      expect((await restoreSession({
+        home, sessionId: session.id, checkpointId: '1000', pendingRequestId: request.id,
+        acquireLease: leases.acquire,
+        validate: root => validateSessionsRoot({ sessionsRoot: root, installAnchor: INSTALL_ANCHOR }),
+      })).kind).toBe('restored')
+    } finally { await leases.close() }
+    expect(await listPendingRestores(home)).toEqual([])
+    const mounted = await mountSessionsBackend(join(home, 'sessions'), INSTALL_ANCHOR)
+    try {
+      const handle = await mounted.persistence.open(session.id, 'write')
+      try { await handle.append([{ type: 'turn/start', seq: 2, time: 10, data: { turn: 2 } }]); await handle.flush() }
+      finally { await handle.close() }
+    } finally { await mounted.dispose() }
+    const path = join(home, 'sessions', session.dir, 'session.v4.jsonl.zstd')
+    const appended = readFileSync(path)
+    expect(await consumePendingSessionRestores({
+      home, appPath: APP_PATH, resourcesPath: APP_PATH, packaged: false,
+      hostRuntime: { executable: process.execPath, env: {} }, hostRunning: () => false,
+    })).toEqual([])
+    expect(readFileSync(path)).toEqual(appended)
   })
 })
 

@@ -1,7 +1,10 @@
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
+import * as nativeFs from 'node:fs'
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import * as fs from 'node:fs/promises'
+import { writeRestoreJournal } from '../src/checkpoint/journal.ts'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -21,6 +24,10 @@ import {
   type HostShutdownSection,
   type MainShutdownSection,
 } from '../src/harness/shutdown-report.ts'
+
+vi.mock('node:fs', async importOriginal => ({
+  ...await importOriginal<typeof import('node:fs')>(),
+}))
 
 vi.mock('node:fs/promises', async importOriginal => ({
   ...await importOriginal<typeof import('node:fs/promises')>(),
@@ -136,6 +143,7 @@ function seedCheckpoint(home: string, id: string, sessionDir: string, bytes: str
 }
 
 afterEach(() => {
+  vi.restoreAllMocks()
   while (roots.length > 0) rmSync(roots.pop()!, { recursive: true, force: true })
 })
 
@@ -242,6 +250,32 @@ describe('runExitCheckpoint', () => {
     expect(calls).toBe(2)
   })
 
+  it('flushes a carried copy when hard-link materialization is unavailable', async () => {
+    const home = makeHome()
+    await writeReport(home)
+    const dir = populateHome(home, 'POLLUTED')
+    seedCheckpoint(home, '1000', dir, 'VERIFIED')
+    vi.spyOn(nativeFs, 'linkSync').mockImplementation(() => { throw new Error('hard links unavailable') })
+    const open = fs.open
+    let flushed = false
+    vi.spyOn(fs, 'open').mockImplementation(async (...args) => {
+      const handle = await open(...args)
+      if (String(args[0]) === join(checkpointsRoot(home), '2000.tmp', 'sessions', dir, 'session.v4.jsonl.zstd')) {
+        expect(args[1]).toBe('r+')
+        const sync = handle.sync.bind(handle)
+        vi.spyOn(handle, 'sync').mockImplementation(async () => { await sync(); flushed = true })
+      }
+      return handle
+    })
+    let calls = 0
+    expect((await runExitCheckpoint({
+      home, childPid: CHILD_PID, appVersion: 'test', now: () => 2000,
+      validate: async root => (++calls === 1 ? fakeValidator(new Set([dir]))(root) : fakeValidator()(root)),
+    })).kind).toBe('committed')
+    expect(flushed).toBe(true)
+    expect(readFileSync(join(checkpointsRoot(home), '2000', 'sessions', dir, 'session.v4.jsonl.zstd'), 'utf8')).toBe('VERIFIED')
+  })
+
   it('drops a failed session that has no verified copy', async () => {
     const home = makeHome()
     await writeReport(home)
@@ -306,6 +340,104 @@ describe('runExitCheckpoint', () => {
     })
     expect(outcome).toMatchObject({ kind: 'aborted' })
     expect(committedIds(home)).toEqual([])
+  })
+
+  it('aborts when the carried copy is omitted from the second listing', async () => {
+    const home = makeHome()
+    const dir = populateHome(home)
+    await writeReport(home)
+    seedCheckpoint(home, '1000', dir, 'OLD')
+    let calls = 0
+    const outcome = await runExitCheckpoint({
+      home, childPid: CHILD_PID, appVersion: 'older', now: () => 2000,
+      validate: async () => (++calls === 1
+        ? { sessionFormatVersion: 4, sessions: [{ sessionId: 'aaaa-1111', dir, ok: false }] }
+        : { sessionFormatVersion: 4, sessions: [] }),
+    })
+    expect(outcome).toMatchObject({ kind: 'aborted', reason: `re-validation failed for ${dir}` })
+    expect(committedIds(home)).toEqual(['1000'])
+    expect(readdirSync(checkpointsRoot(home))).toEqual(['1000'])
+  })
+
+  it('protects an intent journal input through exit captures and releases it after finalization', async () => {
+    const home = makeHome()
+    populateHome(home)
+    await writeReport(home)
+    const capture = (id: number) => runExitCheckpoint({
+      home, childPid: CHILD_PID, appVersion: 'test', validate: fakeValidator(), now: () => id,
+    })
+    expect((await capture(1000)).kind).toBe('committed')
+    const journal = { version: 1 as const, id: 'intent', phase: 'intent' as const, checkpointId: '1000',
+      targetSessionId: 'aaaa-1111', createdAt: 1, updatedAt: 1, quarantine: 'electron/quarantine/intent', members: [] }
+    await writeRestoreJournal(home, journal)
+    for (const id of [2000, 3000, 4000, 5000]) expect((await capture(id)).kind).toBe('committed')
+    expect(existsSync(join(checkpointsRoot(home), '1000'))).toBe(true)
+    await writeRestoreJournal(home, { ...journal, phase: 'committed' })
+    expect((await capture(6000)).kind).toBe('committed')
+    expect(existsSync(join(checkpointsRoot(home), '1000'))).toBe(false)
+  })
+
+  it('does not prune when an unreadable journal may refer to an older checkpoint', async () => {
+    const home = makeHome()
+    populateHome(home)
+    await writeReport(home)
+    writeFile(join(home, 'electron/restore-journals/broken.json'), '{invalid')
+    for (const id of [1000, 2000, 3000, 4000]) {
+      expect((await runExitCheckpoint({
+        home, childPid: CHILD_PID, appVersion: 'test', validate: fakeValidator(), now: () => id,
+      })).kind).toBe('committed')
+    }
+    expect(committedIds(home)).toEqual(['1000', '2000', '3000', '4000'])
+  })
+
+  // Directory fsync is POSIX-only; Windows exercises file flushes separately.
+  it.skipIf(process.platform === 'win32')('flushes the staged directory hierarchy before publication', async () => {
+    const home = makeHome()
+    const dir = populateHome(home)
+    await writeReport(home)
+    const synced = new Set<string>()
+    const originalOpen = fs.open
+    vi.spyOn(fs, 'open').mockImplementation(async (...args) => {
+      const handle = await originalOpen(...args)
+      const sync = handle.sync.bind(handle)
+      vi.spyOn(handle, 'sync').mockImplementation(async () => {
+        await sync()
+        if ((await handle.stat()).isDirectory()) synced.add(String(args[0]))
+      })
+      return handle
+    })
+    const rename = fs.rename
+    vi.spyOn(fs, 'rename').mockImplementation(async (from, to) => {
+      if (String(to) === join(checkpointsRoot(home), '7000')) {
+        const staged = join(checkpointsRoot(home), '7000.tmp')
+        for (const path of ['sessions', 'sessions/--work--', `sessions/${dir}`, 'profiles/web', 'storages/session_projcache/sessions']) {
+          expect(synced.has(join(staged, path)), path).toBe(true)
+        }
+      }
+      return rename(from, to)
+    })
+    expect((await runExitCheckpoint({
+      home, childPid: CHILD_PID, appVersion: 'test', validate: fakeValidator(), now: () => 7000,
+    })).kind).toBe('committed')
+  })
+
+  it.skipIf(process.platform === 'win32')('does not publish or prune after a session-directory sync failure', async () => {
+    const home = makeHome()
+    const dir = populateHome(home)
+    await writeReport(home)
+    seedCheckpoint(home, '1000', dir, 'OLD')
+    const originalOpen = fs.open
+    vi.spyOn(fs, 'open').mockImplementation(async (...args) => {
+      const handle = await originalOpen(...args)
+      if (String(args[0]) === join(checkpointsRoot(home), '2000.tmp', 'sessions', dir)) {
+        vi.spyOn(handle, 'sync').mockRejectedValue(new Error('directory sync failed'))
+      }
+      return handle
+    })
+    expect(await runExitCheckpoint({
+      home, childPid: CHILD_PID, appVersion: 'test', validate: fakeValidator(), now: () => 2000,
+    })).toMatchObject({ kind: 'aborted', reason: 'directory sync failed' })
+    expect(readdirSync(checkpointsRoot(home))).toEqual(['1000'])
   })
 
   it('sweeps stale candidates left by an interrupted earlier capture', async () => {

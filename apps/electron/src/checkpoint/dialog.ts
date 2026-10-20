@@ -176,6 +176,22 @@ export function buildRestoreNotice(
   }
 }
 
+/**
+ * Describe a stopped restore without claiming that earlier member switches were undone.
+ * @param messages - Main locale dictionary.
+ * @param facts - Conflict location and recovery record paths.
+ * @returns A dismiss-only notice naming the possible partial restore and preserved files.
+ */
+export function buildRestoreConflictNotice(
+  messages: DesktopMainMessages,
+  facts: { readonly conflict: string; readonly journalId: string; readonly quarantine: string },
+): RestoreDialogOptions {
+  return buildRestoreNotice(messages, messages.sessionRestoreConflictTitle,
+    formatDesktopMessage(messages.sessionRestoreConflictBody, {
+      conflict: facts.conflict, journal: facts.journalId, quarantine: facts.quarantine,
+    }))
+}
+
 /** Short session label for notices: the raw id, or the encoded dir tail when only that is known. */
 export function refusalLabel(sessionId: string | undefined, dirTail: string | undefined): string {
   return sessionId ?? dirTail ?? '?'

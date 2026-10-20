@@ -13,15 +13,14 @@
 
 import { createHash } from 'node:crypto'
 import { constants } from 'node:fs'
-import { access, copyFile, mkdir, open, readFile, readdir, rm, stat, unlink } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { access, copyFile, open, readFile, readdir, rm, stat, unlink } from 'node:fs/promises'
+import { basename, dirname, join } from 'node:path'
 import { renameDesktopPath, writeDesktopFileAtomic } from '../atomic-file.ts'
 import { checkpointsRoot, isPathSegment, readManifest, type CheckpointManifest, type CheckpointSessionEntry } from './manifest.ts'
 import {
   deleteRestoreJournal,
   listRestoreJournals,
   readRestoreJournal,
-  restoreJournalsDir,
   writeRestoreJournal,
   type RestoreFingerprint,
   type RestoreJournal,
@@ -29,6 +28,8 @@ import {
   type RestorePublish,
 } from './journal.ts'
 import type { ValidateSessions } from './capture.ts'
+import { createDurableDirectory, syncDirectory } from './files.ts'
+import { dequeuePendingRestore, type PendingRestoreRequestId } from './pending.ts'
 
 /** Held `session.lock` write lease; released by closing it. */
 export interface SessionLease {
@@ -67,38 +68,42 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-/** Fsync a directory on POSIX; Windows follows the backend's write-through precedent. */
-async function syncDirectory(dir: string): Promise<void> {
-  if (process.platform === 'win32') return
-  const handle = await open(dir, 'r')
-  try {
-    await handle.sync()
-  } finally {
-    await handle.close()
-  }
-}
-
 /** sha256 of a file's current bytes. */
 async function digestFile(path: string): Promise<{ size: number; sha256: string }> {
   const buffer = await readFile(path)
   return { size: buffer.length, sha256: createHash('sha256').update(buffer).digest('hex') }
 }
 
-/**
- * Move `source` to `destination` atomically; cross-device homes fall back to
- * copy-verify-unlink (resume dedups because the source disappears only after
- * the verified destination exists).
- */
+/** Move a live file to quarantine, durably preserving its bytes before cross-volume unlink. */
 async function moveFile(source: string, destination: string): Promise<void> {
   try {
     await renameDesktopPath(source, destination)
-    return
   } catch (error) {
     if ((error as NodeJS.ErrnoException | null)?.code !== 'EXDEV') throw error
+    const temporary = `${destination}.restore.tmp`
+    await copyFile(source, temporary)
+    const original = await digestFile(source)
+    const copied = await digestFile(temporary)
+    if (original.size !== copied.size || original.sha256 !== copied.sha256) {
+      throw new Error(`quarantine copy ${destination} does not match ${source}`)
+    }
+    await syncFile(temporary)
+    await renameDesktopPath(temporary, destination)
+    await syncDirectory(dirname(destination))
+    await unlink(source)
   }
-  await mkdir(dirname(destination), { recursive: true })
-  await copyFile(source, destination)
-  await unlink(source)
+  await syncDirectory(dirname(destination))
+  await syncDirectory(dirname(source))
+}
+
+/** Flush file contents through a writable handle, including on Windows. */
+async function syncFile(path: string): Promise<void> {
+  const handle = await open(path, 'r+')
+  try {
+    await handle.sync()
+  } finally {
+    await handle.close()
+  }
 }
 
 /** Copy a checkpoint file into the member dir as a staged temporary, fsynced and digest-verified. */
@@ -160,7 +165,8 @@ async function resumeMember(
 ): Promise<void> {
   const liveDir = memberDir(home, member.dir)
   const quarantineMemberDir = join(home, journal.quarantine, 'sessions', ...member.dir.split('/'))
-  await mkdir(liveDir, { recursive: true, mode: 0o700 })
+  await createDurableDirectory(liveDir, home)
+  await createDurableDirectory(quarantineMemberDir, home)
   const fingerprints = new Map(member.liveFiles.map(entry => [entry.name, entry]))
   const publish = new Map(member.publish.map(entry => [entry.name, entry]))
   const current = (await readdir(liveDir)).filter(isOwnedSessionFile)
@@ -187,24 +193,28 @@ async function resumeMember(
 
     if (fingerprint !== undefined) {
       if (liveExists && quarantined) {
-        // The canonical name was re-occupied after the quarantine move: ours
-        // when the digest matches, foreign otherwise.
-        const republished = plan !== undefined
-          && (await digestFile(livePath)).sha256 === plan.digest.sha256
+        const liveDigest = await digestFile(livePath)
+        const republished = plan !== undefined && liveDigest.sha256 === plan.digest.sha256
+          && liveDigest.size === plan.digest.size
         if (!republished) {
-          throw new RestoreConflict(join(member.dir, name), 'live file was recreated during the interrupted restore')
+          const preserved = await digestFile(quarantinePath)
+          const copiedBeforeUnlink = await fingerprintMatches(livePath, fingerprint)
+            && preserved.size === liveDigest.size && preserved.sha256 === liveDigest.sha256
+          if (!copiedBeforeUnlink) {
+            throw new RestoreConflict(join(member.dir, name), 'live file was recreated during the interrupted restore')
+          }
+          // A cross-volume copy, or a crash before source-directory fsync,
+          // can leave both original names. Persist the retained bytes first.
+          await syncFile(quarantinePath)
+          await syncDirectory(quarantineMemberDir)
+          await unlink(livePath)
+          await syncDirectory(liveDir)
         }
       } else if (liveExists) {
         if (!(await fingerprintMatches(livePath, fingerprint))) {
           throw new RestoreConflict(join(member.dir, name), 'live file changed during the interrupted restore')
         }
-        await mkdir(dirname(quarantinePath), { recursive: true })
         await moveFile(livePath, quarantinePath)
-        // The quarantine directory entry must be durable before the switch can
-        // be recorded committed: a crash that kept only the live-side removal
-        // would lose the file entirely, and resume would report a conflict
-        // over data the transaction promised to preserve.
-        await syncDirectory(quarantineMemberDir)
       } else if (!quarantined) {
         throw new RestoreConflict(join(member.dir, name), 'live file vanished during the interrupted restore')
       }
@@ -241,6 +251,7 @@ async function applySwitch(
 ): Promise<void> {
   for (const member of journal.members) {
     const liveDir = memberDir(home, member.dir)
+    await createDurableDirectory(liveDir, home)
     for (const plan of member.publish) {
       if (await pathExists(join(liveDir, stagedName(plan.name)))) continue
       const canonical = join(liveDir, plan.name)
@@ -333,8 +344,10 @@ async function convergeJournal(
     current = await persistPhase(home, current, 'finalized')
   }
   if (current.phase === 'finalized') {
+    if (current.pendingRequestId !== undefined) {
+      await dequeuePendingRestore(home, current.targetSessionId, current.pendingRequestId)
+    }
     await deleteRestoreJournal(home, current.id)
-    await syncDirectory(restoreJournalsDir(home)).catch(() => undefined)
   }
   return current
 }
@@ -402,7 +415,7 @@ export type RestoreRefusal =
 export type RestoreOutcome =
   | { readonly kind: 'restored'; readonly checkpointId: string; readonly sessions: readonly string[]; readonly quarantine: string }
   | { readonly kind: 'refused'; readonly reason: RestoreRefusal }
-  | { readonly kind: 'conflicted'; readonly conflict: string; readonly journalId: string }
+  | { readonly kind: 'conflicted'; readonly conflict: string; readonly journalId: string; readonly quarantine: string }
   | { readonly kind: 'failed'; readonly reason: string }
 
 export interface RestoreSessionOptions {
@@ -412,6 +425,8 @@ export interface RestoreSessionOptions {
   readonly sessionId: string
   /** Pin a specific checkpoint; newest containing the session when omitted. */
   readonly checkpointId?: string
+  /** Durable pending request acknowledged before the completed journal is deleted. */
+  readonly pendingRequestId?: PendingRestoreRequestId | undefined
   /** Refuse while the local Host is up — restore runs in a Host-down window. */
   readonly hostRunning?: (() => boolean) | undefined
   /** `session.lock` acquisition through the backend seam. */
@@ -506,6 +521,7 @@ export async function restoreSession(options: RestoreSessionOptions): Promise<Re
       phase: 'intent',
       checkpointId: found.manifest.id,
       targetSessionId: options.sessionId,
+      ...(options.pendingRequestId === undefined ? {} : { pendingRequestId: options.pendingRequestId }),
       createdAt: now(),
       updatedAt: now(),
       quarantine: `electron/quarantine/${journalId}`,
@@ -522,6 +538,7 @@ export async function restoreSession(options: RestoreSessionOptions): Promise<Re
         kind: 'conflicted',
         conflict: journal.conflict ?? 'unknown path',
         journalId: journal.id,
+        quarantine: journal.quarantine,
       }
     }
     log(`restored session ${options.sessionId} from checkpoint ${found.manifest.id}; live files moved to ${journal.quarantine}`)
@@ -576,6 +593,7 @@ export async function convergeRestoreJournals(
     const journal = await readRestoreJournal(path)
     if (journal === undefined) {
       log(`restore journal ${path} is unreadable; left in place`)
+      deferred.push(basename(path))
       continue
     }
     if (journal.phase === 'conflicted') {

@@ -6,18 +6,19 @@
  */
 
 import { join } from 'node:path'
-import { runExitCheckpoint, type ExitCheckpointOutcome } from './capture.ts'
-import { listRestoreJournals } from './journal.ts'
+import { runExitCheckpoint, type ExitCheckpointOutcome, type CheckpointValidationReport } from './capture.ts'
+import { listRestoreJournals, readRestoreJournal } from './journal.ts'
 import {
   convergeRestoreJournals,
   restoreSession,
+  resolveRestoreClosure,
   type AcquireSessionLease,
   type JournalConvergence,
   type RestoreOutcome,
 } from './restore.ts'
 import { resolveDshInstallAnchor, resolveHostRuntime, type HostRuntime } from '../runtime.ts'
-import { detectCheckpointDrift, confirmUnreadable, type ConfirmedUnreadable } from './detect.ts'
-import { dequeuePendingRestore, enqueuePendingRestore, listPendingRestores } from './pending.ts'
+import { detectCheckpointDrift, confirmUnreadable, type ConfirmedUnreadable, type DriftDetection } from './detect.ts'
+import { dequeuePendingRestore, enqueuePendingRestore, listPendingRestores, type PendingRestoreRequestId } from './pending.ts'
 import { checkpointsRoot, readManifest, type CheckpointManifest, type CheckpointSessionEntry } from './manifest.ts'
 import { mountSessionsBackend, resolveSessionFormatVersion } from './validate.ts'
 import { runValidationWorker, validateWorkerModule } from './worker.ts'
@@ -126,6 +127,7 @@ export async function restoreCheckpointSession(options: {
   readonly home: string
   readonly sessionId: string
   readonly checkpointId?: string | undefined
+  readonly pendingRequestId?: PendingRestoreRequestId | undefined
   readonly appPath: string
   readonly resourcesPath: string
   readonly packaged: boolean
@@ -146,6 +148,7 @@ export async function restoreCheckpointSession(options: {
       home: options.home,
       sessionId: options.sessionId,
       ...(options.checkpointId === undefined ? {} : { checkpointId: options.checkpointId }),
+      ...(options.pendingRequestId === undefined ? {} : { pendingRequestId: options.pendingRequestId }),
       ...(options.hostRunning === undefined ? {} : { hostRunning: options.hostRunning }),
       acquireLease: leases.acquire,
       validate: (sessionsRoot, signal) => runValidationWorker(workerModule, sessionsRoot, anchor, runtime, signal),
@@ -205,14 +208,20 @@ export async function consumePendingSessionRestores(
 ): Promise<PendingRestoreResult[]> {
   const results: PendingRestoreResult[] = []
   for (const request of await listPendingRestores(options.home)) {
+    let journalOwnsRequest = false
+    for (const path of await listRestoreJournals(options.home)) {
+      const journal = await readRestoreJournal(path)
+      if (journal === undefined || journal.pendingRequestId === request.id) journalOwnsRequest = true
+    }
+    if (journalOwnsRequest) continue
     const outcome: RestoreOutcome = request.checkpointId === undefined
       ? { kind: 'refused', reason: { key: 'no-checkpoint' } }
       : await restoreCheckpointSession({
-        ...restoreOptions(options, request.sessionId), checkpointId: request.checkpointId,
+        ...restoreOptions(options, request.sessionId), checkpointId: request.checkpointId, pendingRequestId: request.id,
       })
-    // The entry leaves the queue only after the attempt resolves: a crash
-    // here keeps this and every later request durable for the next launch.
-    await dequeuePendingRestore(options.home, request.sessionId)
+    // Successful journals acknowledge their request before deletion. Refusals
+    // and failures have no completed switch to replay, so consume them here.
+    await dequeuePendingRestore(options.home, request.sessionId, request.id)
     results.push({ sessionId: request.sessionId, outcome })
     options.log?.(`pending restore ${request.sessionId}: ${outcome.kind}`)
   }
@@ -224,13 +233,11 @@ export async function consumePendingSessionRestores(
  * checkpoint, then worker confirmation on the live sessions root. Returns
  * only sessions confirmed unreadable AND holding a verified copy — the set a
  * confirmation prompt may offer to restore.
- * @param options.confirmIdleLease - Set while a writer may be live (the local
- *   Host is up): a torn mid-append read then reports a healthy session as
- *   unreadable, so only candidates whose `session.lock` write lease can be
- *   acquired — proving no writer — keep the verdict.
+ * Candidate write leases, including related sources, are held throughout the
+ * read so a concurrent append or rollback cannot produce a stale refusal.
  */
 export async function detectUnreadableSessions(
-  options: DesktopSessionMaintenanceOptions & { readonly confirmIdleLease?: boolean | undefined },
+  options: DesktopSessionMaintenanceOptions,
 ): Promise<{ manifest: CheckpointManifest; unreadable: readonly ConfirmedUnreadable[] } | undefined> {
   const anchor = resolveDshInstallAnchor(options.appPath)
   const formatVersion = await resolveSessionFormatVersion(anchor).catch(() => undefined)
@@ -239,51 +246,67 @@ export async function detectUnreadableSessions(
   if (detection.candidates.length === 0) return { manifest: detection.manifest, unreadable: [] }
   options.log?.(`drift detected against checkpoint ${detection.checkpointId}: ${detection.candidates.map(c => c.dir).join(', ')}`)
   const workerModule = validateWorkerModule(options.appPath)
-  const report = await runValidationWorker(
-    workerModule,
-    join(options.home, 'sessions'),
-    anchor,
-    options.hostRuntime,
-    AbortSignal.timeout(DETECTION_BUDGET_MS),
-  )
-  const unreadable = confirmUnreadable(detection, report)
-  if (options.confirmIdleLease !== true || unreadable.length === 0) {
-    return { manifest: detection.manifest, unreadable }
-  }
   const leases = await backendLeaseAcquirer(options.home, anchor)
   try {
-    return { manifest: detection.manifest, unreadable: await filterIdleWriters(unreadable, leases.acquire, options.log) }
+    const unreadable = await confirmIdleSessions(detection, leases.acquire, () => runValidationWorker(
+      workerModule, join(options.home, 'sessions'), anchor, options.hostRuntime,
+      AbortSignal.timeout(DETECTION_BUDGET_MS),
+    ), options.log)
+    return { manifest: detection.manifest, unreadable }
   } finally {
     await leases.dispose()
   }
 }
 
 /**
- * Drop confirmed-unreadable candidates that cannot prove the absence of a
- * live writer: a held lease means a mid-append torn read may have produced
- * the verdict. A header-less entry cannot be leased at all and drops under
- * the same "unverifiable while writers may be live" rule.
+ * Validate candidate sessions while their entire stored related-source closure
+ * holds write leases. Contention or missing headers omit that candidate.
+ * @param detection - Drift candidates and the checkpoint's related-source metadata.
+ * @param acquireLease - Backend write-lease provider.
+ * @param validate - Read-only live validation, invoked while all acquired leases are held.
+ * @param log - Optional diagnostic sink for skipped candidates.
+ * @returns Candidates still unreadable in the leased read.
  */
-export async function filterIdleWriters(
-  candidates: readonly ConfirmedUnreadable[],
+export async function confirmIdleSessions(
+  detection: DriftDetection,
   acquireLease: AcquireSessionLease,
+  validate: () => Promise<CheckpointValidationReport>,
   log?: (message: string) => void,
 ): Promise<readonly ConfirmedUnreadable[]> {
-  const confirmed: ConfirmedUnreadable[] = []
-  for (const item of candidates) {
-    if (item.entry.header === undefined) {
-      log?.(`drift candidate ${item.dir} skipped: no stored header to lease against`)
-      continue
+  const held = new Map<string, Awaited<ReturnType<AcquireSessionLease>>>()
+  const eligible = new Set<string>()
+  try {
+    for (const item of detection.candidates) {
+      const members = resolveRestoreClosure(detection.manifest, item.sessionId)
+      if (members === undefined) continue
+      const acquired: string[] = []
+      try {
+        for (const member of members) {
+          if (held.has(member.dir)) continue
+          const header = member.header
+          if (header === undefined) throw new Error('checkpoint has no stored header')
+          held.set(member.dir, await acquireLease({ sessionId: member.sessionId, dir: member.dir, header }))
+          acquired.push(member.dir)
+        }
+        eligible.add(item.dir)
+      } catch (error) {
+        for (const dir of acquired) {
+          await held.get(dir)?.release()
+          held.delete(dir)
+        }
+        log?.(`drift candidate ${item.dir} skipped: cannot hold related write leases (${(error as Error).message})`)
+      }
     }
-    try {
-      const lease = await acquireLease({ sessionId: item.sessionId, dir: item.dir, header: item.entry.header })
-      await lease.release()
-      confirmed.push(item)
-    } catch (error) {
-      log?.(`drift candidate ${item.dir} skipped: write lease held by a live writer (${(error as Error).message})`)
-    }
+    if (eligible.size === 0) return []
+    return confirmUnreadable(detection, await validate()).filter(item => eligible.has(item.dir))
+  } finally {
+    const released = await Promise.allSettled([...held.values()].map(lease => lease.release()))
+    const failed = released.filter(result => result.status === 'rejected').map((result) => {
+      const reason: unknown = result.reason
+      return reason
+    })
+    if (failed.length > 0) throw new AggregateError(failed, 'session detection lease release failed')
   }
-  return confirmed
 }
 
 /**

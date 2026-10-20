@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -17,10 +17,9 @@ import {
   listPendingRestores,
 } from '../src/checkpoint/pending.ts'
 import { detectFormatRefusalFrame } from '../src/checkpoint/refusal.ts'
-import { filterIdleWriters, resolveSessionRefusal } from '../src/checkpoint/index.ts'
+import { confirmIdleSessions, resolveSessionRefusal } from '../src/checkpoint/index.ts'
 import type { AcquireSessionLease } from '../src/checkpoint/restore.ts'
-import type { ConfirmedUnreadable } from '../src/checkpoint/detect.ts'
-import { buildNoCheckpointNotice, buildOrphanedJournalGate, buildRestoreConfirm } from '../src/checkpoint/dialog.ts'
+import { buildNoCheckpointNotice, buildOrphanedJournalGate, buildRestoreConflictNotice, buildRestoreConfirm } from '../src/checkpoint/dialog.ts'
 import { en, zh } from '../src/locale.ts'
 import type { CheckpointValidationReport } from '../src/checkpoint/capture.ts'
 
@@ -257,6 +256,18 @@ describe('pending restores', () => {
     expect((await listPendingRestores(home)).map(request => request.sessionId)).toEqual(['three'])
   })
 
+  it('acknowledges only the completed operation while preserving a newer request', async () => {
+    const home = makeHome()
+    await enqueuePendingRestore(home, 'one', '1000')
+    const old = (await listPendingRestores(home))[0]!
+    await enqueuePendingRestore(home, 'one', '2000')
+    await dequeuePendingRestore(home, 'one', old.id)
+    const current = await listPendingRestores(home)
+    expect(current).toHaveLength(1)
+    expect(current[0]?.checkpointId).toBe('2000')
+    expect(current[0]?.id).not.toBe(old.id)
+  })
+
   it('tolerates a corrupt pending file', async () => {
     const home = makeHome()
     writeFile(join(home, 'electron', 'pending-restore.json'), 'not-json')
@@ -373,6 +384,15 @@ describe('restore dialog copy', () => {
     expect(notice.message).toContain('no verified checkpoint copy exists')
   })
 
+  it.each([['en', en], ['zh', zh]] as const)('renders the partial-conflict recovery notice in %s', (locale, messages) => {
+    const spec = buildRestoreConflictNotice(messages, {
+      conflict: '--work--/child/session.v4.jsonl.zstd', journalId: '9000-parent',
+      quarantine: '/home/user/.dsh/electron/quarantine/9000-parent',
+    })
+    const expected: unknown = JSON.parse(readFileSync(new URL(`expected/checkpoint-conflict.${locale}.json`, import.meta.url), 'utf8'))
+    expect(spec).toEqual(expected)
+  })
+
   it('gates an orphaned intent journal on abandon, keep, or quit — keep is the default', () => {
     const spec = buildOrphanedJournalGate(en, { checkpointId: '1000', quarantine: '/q' })
     expect(spec.buttons).toEqual(['Abandon Restore', 'Keep Pending', 'Quit'])
@@ -384,42 +404,80 @@ describe('restore dialog copy', () => {
   })
 })
 
-describe('filterIdleWriters', () => {
-  const HEADER: CheckpointSessionHeader = { id: 'aaaa-1111', cwd: '/work', isSeeded: false, delegationDepth: 0 }
+describe('confirmIdleSessions', () => {
+  const HEADER: CheckpointSessionHeader = { id: 'free', cwd: '/work', isSeeded: false, delegationDepth: 0 }
 
-  function candidate(dir: string, header?: CheckpointSessionHeader): ConfirmedUnreadable {
+  function scan(entries: CheckpointSessionEntry[]): DriftDetection {
     return {
-      sessionId: dir,
-      dir,
-      entry: {
-        sessionId: dir,
-        dir,
-        capturedAt: 0,
-        sourceCheckpointId: '1000',
-        validator: { appVersion: '0.2.0', sessionFormatVersion: 4 },
-        ...(header === undefined ? {} : { header }),
-      },
-      reasons: ['changed'],
-      newerGeneration: undefined,
-      error: undefined,
+      checkpointId: '1000', checkpointDir: '/checkpoint',
+      manifest: { version: 1, id: '1000', capturedAt: 1000, shutdown: { version: 1, recordedAt: 0 }, files: [], sessions: entries },
+      candidates: entries.map(entry => ({
+        sessionId: entry.sessionId, dir: entry.dir, entry, reasons: ['changed'], newerGeneration: undefined,
+      })),
     }
   }
 
-  it('keeps candidates whose write lease is free and drops held or unleasable ones', async () => {
-    const held = new Set(['--work--/held'])
+  function entry(id: string, header: CheckpointSessionHeader = { ...HEADER, id }): CheckpointSessionEntry {
+    return { sessionId: id, dir: `--work--/${id}`, header, capturedAt: 1000, sourceCheckpointId: '1000',
+      validator: { appVersion: 'test', sessionFormatVersion: 4 } }
+  }
+
+  it('holds candidate and related leases throughout validation and releases them after failure', async () => {
+    const held = new Set<string>()
+    const parent = entry('free')
+    const child = entry('child', { ...HEADER, id: 'child', origin: 'subagent', parentSession: 'free' })
     const acquire: AcquireSessionLease = async (subject) => {
-      if (held.has(subject.dir)) {
-        const error = new Error('already owned')
-        error.name = 'SessionAlreadyOwnedError'
-        throw error
-      }
-      return { release: async () => undefined }
+      expect(held.has(subject.dir)).toBe(false)
+      held.add(subject.dir)
+      return { release: async () => { held.delete(subject.dir) } }
     }
-    const kept = await filterIdleWriters([
-      candidate('--work--/free', HEADER),
-      candidate('--work--/held', { ...HEADER, id: 'held' }),
-      candidate('--work--/no-header'),
-    ], acquire)
-    expect(kept.map(item => item.dir)).toEqual(['--work--/free'])
+    await expect(confirmIdleSessions(scan([parent, child]), acquire, async () => {
+      expect([...held].sort()).toEqual([child.dir, parent.dir].sort())
+      throw new Error('worker failed')
+    })).rejects.toThrow('worker failed')
+    expect(held.size).toBe(0)
+  })
+
+  it('reads after acquisition so a rolled-back append does not retain an obsolete refusal', async () => {
+    const candidate = entry('free')
+    let unreadable = true
+    let held = false
+    const kept = await confirmIdleSessions(scan([candidate]), async () => {
+      unreadable = false
+      held = true
+      return { release: async () => { held = false } }
+    }, async () => {
+      expect(held).toBe(true)
+      return { sessionFormatVersion: 4, sessions: [{ sessionId: 'free', dir: candidate.dir, ok: !unreadable }] }
+    })
+    expect(kept).toEqual([])
+    expect(held).toBe(false)
+  })
+
+  it('skips contended closures and reads eligible candidates under their leases', async () => {
+    const held = new Set<string>()
+    const candidates = [entry('free'), entry('busy'), { sessionId: 'headerless', dir: '--work--/headerless', capturedAt: 1000, sourceCheckpointId: '1000', validator: { appVersion: 'test', sessionFormatVersion: 4 } }]
+    const kept = await confirmIdleSessions(scan(candidates), async (subject) => {
+      if (subject.sessionId === 'busy') throw new Error('owned elsewhere')
+      held.add(subject.sessionId)
+      return { release: async () => { held.delete(subject.sessionId) } }
+    }, async () => {
+      expect([...held]).toEqual(['free'])
+      return { sessionFormatVersion: 4, sessions: [{ sessionId: 'free', dir: '--work--/free', ok: false }] }
+    })
+    expect(kept).toEqual([])
+    expect(held.size).toBe(0)
+    // Every checkpoint header is required to establish a complete closure.
+    const readableHeaders = candidates.slice(0, 2)
+    const eligible = await confirmIdleSessions(scan(readableHeaders), async (subject) => {
+      if (subject.sessionId === 'busy') throw new Error('owned elsewhere')
+      held.add(subject.sessionId)
+      return { release: async () => { held.delete(subject.sessionId) } }
+    }, async () => {
+      expect([...held]).toEqual(['free'])
+      return { sessionFormatVersion: 4, sessions: [{ sessionId: 'free', dir: '--work--/free', ok: false }] }
+    })
+    expect(eligible.map(item => item.sessionId)).toEqual(['free'])
+    expect(held.size).toBe(0)
   })
 })
