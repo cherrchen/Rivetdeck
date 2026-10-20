@@ -436,6 +436,7 @@ int wmain(int argc, wchar_t** argv) {
     Mkdir(foreign + L"\\Cache");
     File(foreign + L"\\Cache\\data_0");
     Mkdir(foreign + L"\\Partitions");
+    Mkdir(foreign + L"\\Partitions\\worker");
     Mkdir(foreign + L"\\Partitions\\worker\\GPUCache");
     File(foreign + L"\\Partitions\\worker\\GPUCache\\gpu.bin");
     const std::wstring foreignHistory = root + L"\\foreign.ini";
