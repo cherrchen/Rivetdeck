@@ -275,12 +275,19 @@ int wmain(int argc, wchar_t** argv) {
     assert(!uninstall_cleanup::VerifyShimDirectory(shims));
     assert(DeleteFileW((shims + L"\\evil.exe").c_str()));
 
-    // Attribution: a root with product markers is ours; a bare root is not.
-    File(userData + L"\\Local State");
-    assert(uninstall_cleanup::IsAttributedUserData(userData));
+    // Attribution: generic Chromium directories are not ownership; a marker this product
+    // writes is required before a recorded root becomes a cleanup candidate.
+    const std::wstring attributed = root + L"\\attributed-root";
+    Mkdir(attributed);
+    File(attributed + L"\\Local State");
+    File(attributed + L"\\Cookies");
+    assert(!uninstall_cleanup::IsAttributedUserData(attributed));
+    File(attributed + L"\\desktop-preferences.json");
+    assert(uninstall_cleanup::IsAttributedUserData(attributed));
     const std::wstring bare = root + L"\\bare-root";
     Mkdir(bare);
     assert(!uninstall_cleanup::IsAttributedUserData(bare));
+    File(userData + L"\\Local State");
 
     // Tiered cleanup (no delete flag): rebuildables removed, preferences and browser data kept.
     const std::wstring cacheDir = userData + L"\\Cache";
@@ -359,6 +366,7 @@ int wmain(int argc, wchar_t** argv) {
     const std::wstring userData2 = root + L"\\Rivetdeck2";
     Mkdir(userData2);
     File(userData2 + L"\\Local State");
+    File(userData2 + L"\\desktop-preferences.json");
     const std::wstring incompleteHistory = root + L"\\incomplete.ini";
     WriteText(incompleteHistory, "complete=0\r\nuserData=" + Narrow(userData2) + "\r\n");
     {
@@ -398,6 +406,7 @@ int wmain(int argc, wchar_t** argv) {
     const std::wstring junctionTarget = root + L"\\elsewhere-target";
     Mkdir(userData3);
     File(userData3 + L"\\Local State");
+    File(userData3 + L"\\desktop-preferences.json");
     const std::wstring cache3 = userData3 + L"\\Cache";
     Mkdir(cache3);
     Mkdir(junctionTarget);
@@ -416,6 +425,36 @@ int wmain(int argc, wchar_t** argv) {
         assert(uninstall_cleanup::Cleanup(request) == ERROR_SUCCESS);
         assert(!Exists(cache3));
         assert(Exists(junctionTarget + L"\\keep.me"));
+    }
+
+    // A recorded root carrying only generic Chromium entries may have been reused by
+    // another Electron application; it is reported, never tiered or purged.
+    const std::wstring foreign = root + L"\\reused-root";
+    Mkdir(foreign);
+    File(foreign + L"\\Local State");
+    File(foreign + L"\\Cookies");
+    Mkdir(foreign + L"\\Cache");
+    File(foreign + L"\\Cache\\data_0");
+    Mkdir(foreign + L"\\Partitions");
+    Mkdir(foreign + L"\\Partitions\\worker\\GPUCache");
+    File(foreign + L"\\Partitions\\worker\\GPUCache\\gpu.bin");
+    const std::wstring foreignHistory = root + L"\\foreign.ini";
+    WriteText(foreignHistory, "complete=1\r\nuserData=" + Narrow(foreign) + "\r\n");
+    for (int purge : {0, 1}) {
+        uninstall_cleanup::CleanupRequest request;
+        request.userData = foreign.c_str();
+        request.installation = installation.c_str();
+        request.protectedHome = L"";
+        request.historyFile = foreignHistory.c_str();
+        request.updaterCache = updater.c_str();
+        request.residueReport = report.c_str();
+        request.deleteAppData = purge;
+        int residue = 0;
+        request.residue = &residue;
+        assert(uninstall_cleanup::Cleanup(request) == ERROR_SUCCESS);
+        assert(Exists(foreign + L"\\Cache\\data_0"));
+        assert(Exists(foreign + L"\\Partitions\\worker\\GPUCache\\gpu.bin"));
+        assert(residue > 0);
     }
 
     // Legacy history cannot exclude a Harness home inside a cache, even without a purge flag.
@@ -482,6 +521,7 @@ int wmain(int argc, wchar_t** argv) {
     const std::wstring aliasHistory = root + L"\\alias-history.ini";
     Mkdir(aliasData);
     File(aliasData + L"\\Local State");
+    File(aliasData + L"\\desktop-preferences.json");
     Mkdir(aliasData + L"\\Cache");
     Mkdir(aliasHome);
     File(aliasHome + L"\\sessions.jsonl");
@@ -541,6 +581,7 @@ int wmain(int argc, wchar_t** argv) {
     const std::wstring enumerationPartitions = enumerationData + L"\\Partitions";
     Mkdir(enumerationData);
     File(enumerationData + L"\\Local State");
+    File(enumerationData + L"\\desktop-preferences.json");
     Mkdir(enumerationData + L"\\electron");
     Mkdir(enumerationData + L"\\electron\\toolchains");
     Mkdir(enumerationShims);

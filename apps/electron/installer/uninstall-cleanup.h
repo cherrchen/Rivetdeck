@@ -262,13 +262,13 @@ inline bool VerifyUpdaterCache(const std::wstring& root) {
     });
 }
 
-// A userData root is only ours when it carries a product marker written by the app itself.
+// A userData root is only ours when it carries a marker this product writes. Generic
+// Chromium directories (Local State, Cache, Cookies, ...) are created by any Electron
+// application and never prove ownership of a recorded root.
 inline bool IsAttributedUserData(const std::wstring& root) {
     static const wchar_t* markers[] = {
-        L"Local State",       L"desktop-preferences.json",    L"electron-host.patch.yml",
-        L"network-secrets",   L"network-startup-override.json", L"managed-toolchains",
-        L"Partitions",        L"Cache",                     L"Code Cache",
-        L"GPUCache",          L"Cookies",                   L"Local Storage",
+        L"managed-toolchains", L"desktop-preferences.json",    L"electron-host.patch.yml",
+        L"network-secrets",    L"network-startup-override.json",
     };
     for (const wchar_t* marker : markers) {
         const DWORD attributes = GetFileAttributesW((L"\\\\?\\" + root + L'\\' + marker).c_str());
