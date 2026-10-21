@@ -167,6 +167,8 @@ Var rivetdeckPreviousInstall
   ; A prior installation, surviving userData, or an updater cache predating this install
   ; may hold an unrecorded Harness home, including after an older uninstall. Each
   ; requires incomplete history.
+  ; complete=1 attests only the default userData root checked here. The launch recorder
+  ; makes history incomplete before adding any newly discovered custom root.
   ${'${if}'} $installMode == "all"
     SetShellVarContext current
   ${'${endif}'}

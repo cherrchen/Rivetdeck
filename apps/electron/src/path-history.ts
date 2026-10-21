@@ -77,6 +77,8 @@ export function renderPathHistory(record: PathHistoryRecord): string {
  * Merge this launch's resolved userData and DSH_HOME into the install's durable record.
  * UserData roots accumulate within the current install epoch; retiring an epoch drops
  * its cleanup candidates and completeness, while homes and unrecognized claims survive.
+ * An installer seed attests only the default userData root. Discovering any other
+ * unrecorded root makes history incomplete because its earlier homes are unknown.
  * A cross-process writer lock covers the entire read-modify-write cycle, including
  * launches with different userData roots.
  * The record lives beside the default userData so an unelevated process can always
@@ -84,14 +86,15 @@ export function renderPathHistory(record: PathHistoryRecord): string {
  * launch starts a new record marked incomplete, because the first record cannot prove
  * which roots ran before it existed. A record that exists but cannot be read is left
  * untouched — overwriting it could erase claims the uninstaller would otherwise honor.
- * @param options appDataDir (fixed roaming root that survives install-directory removal)
- *   plus this launch's resolved roots.
+ * @param options appDataDir (fixed roaming root that survives install-directory removal),
+ *   defaultUserData (the root checked by the installer), and this launch's resolved roots.
  * @returns The merged record.
  * @throws Read or write failures other than an absent record. Callers must stop startup
  *   on failure so an older complete record never omits a home this launch starts using.
  */
 export async function mergeLaunchPathHistory(options: {
   appDataDir: string
+  defaultUserData: string
   userData: string
   dshHome: string
 }): Promise<PathHistoryRecord> {
@@ -100,7 +103,8 @@ export async function mergeLaunchPathHistory(options: {
   return withFileLock(recordPath, async () => {
     const record: PathHistoryRecord = (await readRecord(recordPath))
       ?? { complete: false, userData: [], dshHome: [], unrecognized: [] }
-    pushUnique(record.userData, options.userData)
+    if (pushUnique(record.userData, options.userData)
+      && !samePath(options.userData, options.defaultUserData)) record.complete = false
     pushUnique(record.dshHome, options.dshHome)
     await writeDesktopFileAtomic(recordPath, renderPathHistory(record))
     return record
@@ -119,9 +123,13 @@ async function readRecord(path: string): Promise<PathHistoryRecord | undefined> 
 }
 
 /** Windows path comparison is case-insensitive; other platforms compare verbatim. */
-function pushUnique(paths: string[], path: string): void {
-  const same = process.platform === 'win32'
-    ? (left: string, right: string) => left.toLowerCase() === right.toLowerCase()
-    : (left: string, right: string) => left === right
-  if (!paths.some(existing => same(existing, path))) paths.push(path)
+function samePath(left: string, right: string): boolean {
+  return process.platform === 'win32' ? left.toLowerCase() === right.toLowerCase() : left === right
+}
+
+/** Append a previously unrecorded path and report whether it was added. */
+function pushUnique(paths: string[], path: string): boolean {
+  if (paths.some(existing => samePath(existing, path))) return false
+  paths.push(path)
+  return true
 }

@@ -3,6 +3,7 @@
 import fs from 'node:fs/promises'
 import { once } from 'node:events'
 import { syncBuiltinESMExports } from 'node:module'
+import { join } from 'node:path'
 
 const [appDataDir, userData, dshHome] = process.argv.slice(2)
 const read = fs.readFile
@@ -31,5 +32,5 @@ fs.writeFile = async (...args) => {
 }
 syncBuiltinESMExports()
 const { mergeLaunchPathHistory } = await import('../../src/path-history.ts')
-await mergeLaunchPathHistory({ appDataDir, userData, dshHome })
+await mergeLaunchPathHistory({ appDataDir, defaultUserData: join(appDataDir, 'Rivetdeck'), userData, dshHome })
 process.disconnect()

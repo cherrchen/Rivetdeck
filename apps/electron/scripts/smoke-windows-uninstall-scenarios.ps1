@@ -200,6 +200,44 @@ try {
   Assert-Missing (Join-Path $extraRoot 'Cache') 'recorded userData roots get tiered cleanup'
   Assert-Exists (Join-Path $extraRoot 'desktop-preferences.json') 'recorded userData roots keep protected data'
 
+  # A fresh default-root seed cannot attest an older custom root discovered at startup.
+  foreach ($purge in @($false, $true)) {
+    Reset-State
+    $legacyRoot = Join-Path $scratch ('legacy-custom-userdata-' + $purge)
+    $legacyHome = Join-Path $legacyRoot 'Cache\shared-home'
+    New-Item -ItemType Directory -Force -Path $legacyHome | Out-Null
+    Set-Content -LiteralPath (Join-Path $legacyRoot 'desktop-preferences.json') -Value '{}'
+    $legacySession = Join-Path $legacyHome 'sessions.jsonl'
+    Set-Content -LiteralPath $legacySession -Value 'retained session'
+    $beforeSession = Get-Content -LiteralPath $legacySession -Raw
+    Install-To $installDirectory
+    if (-not (Select-String -LiteralPath $historyFile -Pattern '^complete=1$' -Quiet)) {
+      throw 'The custom-root regression requires a fresh complete installer seed.'
+    }
+    & node (Join-Path $PSScriptRoot 'smoke-runtime-setup.mjs') (Join-Path $installDirectory 'Rivetdeck.exe') --offline --startup-only --user-data-dir $legacyRoot
+    if ($LASTEXITCODE -ne 0) { throw 'Custom-root Desktop startup failed.' }
+    if ((Get-Content -LiteralPath $legacySession -Raw) -cne $beforeSession) {
+      throw 'Startup changed the historical session before uninstall.'
+    }
+    if (-not (Select-String -LiteralPath $historyFile -Pattern '^complete=0$' -Quiet)) {
+      throw 'Discovering a custom userData root must make history incomplete.'
+    }
+    if (-not (Select-String -LiteralPath $historyFile -SimpleMatch "userData=$legacyRoot" -Quiet)) {
+      throw 'Packaged startup did not record the custom userData root.'
+    }
+    if (Select-String -LiteralPath $historyFile -SimpleMatch "dshHome=$legacyHome" -Quiet) {
+      throw 'The legacy home must remain unknown to exercise incomplete-history protection.'
+    }
+    if ($purge) { Uninstall-From $installDirectory '--delete-app-data' }
+    else { Uninstall-From $installDirectory }
+    Assert-Exists $legacySession 'newly discovered custom roots may contain historical homes'
+    if ((Get-Content -LiteralPath $legacySession -Raw) -cne $beforeSession) {
+      throw 'Uninstall changed a historical session in the custom userData root.'
+    }
+    Assert-Residue ([regex]::Escape((Join-Path $legacyRoot 'Cache')))
+    Assert-Residue 'cache isolation requires complete history'
+  }
+
   # An older uninstall leaves data without registration or a history record.
   Reset-State
   Plant-UserData

@@ -46,7 +46,7 @@ describe('Electron path history', () => {
       unrecognized: ['futureHome=C:\\protected'],
     })
     const current = await mergeLaunchPathHistory({
-      appDataDir, userData: 'C:\\new-data', dshHome: 'C:\\new-home',
+      appDataDir, defaultUserData: 'C:\\default', userData: 'C:\\new-data', dshHome: 'C:\\new-home',
     })
     expect(current).toEqual({
       complete: false, userData: ['C:\\new-data'], dshHome: ['C:\\old-home', 'C:\\new-home'],
@@ -67,7 +67,8 @@ describe('Electron path history', () => {
       'complete=1\r\nworkspace=C:\\ws\r\nnot-a-claim\r\nuserData=\r\nuserData=C:\\first\r\n')
     const record = await mergeLaunchPathHistory({
       appDataDir,
-      userData: 'D:\\second',
+      defaultUserData: 'C:\\default',
+      userData: 'C:\\first',
       dshHome: 'D:\\home',
     })
     expect(record?.complete).toBe(true)
@@ -88,6 +89,7 @@ describe('Electron path history', () => {
     await mkdir(join(appDataDir, PATH_HISTORY_FILE))
     await expect(mergeLaunchPathHistory({
       appDataDir,
+      defaultUserData: 'C:\\default',
       userData: 'D:\\second',
       dshHome: 'D:\\home',
     })).rejects.toThrow()
@@ -97,6 +99,7 @@ describe('Electron path history', () => {
     const appDataDir = await freshAppDataDir()
     const record = await mergeLaunchPathHistory({
       appDataDir,
+      defaultUserData: 'C:\\default',
       userData: 'D:\\data\\Rivetdeck',
       dshHome: 'D:\\home\\.dsh',
     })
@@ -106,29 +109,93 @@ describe('Electron path history', () => {
     expect(stored.dshHome).toEqual(['D:\\home\\.dsh'])
   })
 
-  it('merges relocated roots and keeps the installer-seeded completeness', async () => {
+  it('limits installer-seeded completeness to the default userData root', async () => {
+    const appDataDir = await freshAppDataDir()
+    const defaultUserData = join(appDataDir, 'Rivetdeck')
+    const recordPath = join(appDataDir, PATH_HISTORY_FILE)
+    await writeFile(recordPath, 'complete=1\r\n')
+    const record = await mergeLaunchPathHistory({
+      appDataDir, defaultUserData, userData: defaultUserData, dshHome: join(appDataDir, 'home'),
+    })
+    expect(record.complete).toBe(true)
+    expect(record.userData).toEqual([defaultUserData])
+    expect(parsePathHistory(await readFile(recordPath, 'utf8'))).toEqual(record)
+  })
+
+  it('keeps completeness for a recorded root when the current home changes', async () => {
+    const appDataDir = await freshAppDataDir()
+    await writeFile(join(appDataDir, PATH_HISTORY_FILE),
+      'complete=1\r\nuserData=C:\\known\r\ndshHome=C:\\old-home\r\n')
+    const record = await mergeLaunchPathHistory({
+      appDataDir, defaultUserData: 'C:\\default', userData: 'C:\\known', dshHome: 'C:\\new-home',
+    })
+    expect(record.complete).toBe(true)
+    expect(record.userData).toEqual(['C:\\known'])
+    expect(record.dshHome).toEqual(['C:\\old-home', 'C:\\new-home'])
+  })
+
+  it('marks an installer seed incomplete when the first launch discovers a custom root', async () => {
+    const appDataDir = await freshAppDataDir()
+    const recordPath = join(appDataDir, PATH_HISTORY_FILE)
+    const customRoot = join(appDataDir, 'legacy-custom-root')
+    const legacyHome = join(customRoot, 'Cache', 'shared-home')
+    const session = join(legacyHome, 'sessions.jsonl')
+    await mkdir(legacyHome, { recursive: true })
+    await writeFile(join(customRoot, 'desktop-preferences.json'), '{}')
+    await writeFile(session, 'retained session\n')
+    await writeFile(recordPath, 'complete=1\r\n')
+    const record = await mergeLaunchPathHistory({
+      appDataDir, defaultUserData: join(appDataDir, 'Rivetdeck'), userData: customRoot,
+      dshHome: join(appDataDir, 'current-home'),
+    })
+    expect(record.complete).toBe(false)
+    expect(record.userData).toEqual([customRoot])
+    expect(record.dshHome).not.toContain(legacyHome)
+    expect(parsePathHistory(await readFile(recordPath, 'utf8'))).toEqual(record)
+    expect(await readFile(session, 'utf8')).toBe('retained session\n')
+  })
+
+  it('compares recorded roots using the host filesystem casing rules', async () => {
+    const appDataDir = await freshAppDataDir()
+    await writeFile(join(appDataDir, PATH_HISTORY_FILE), 'complete=1\r\nuserData=C:\\Known\r\n')
+    const record = await mergeLaunchPathHistory({
+      appDataDir, defaultUserData: 'C:\\default', userData: 'c:\\known', dshHome: 'C:\\home',
+    })
+    expect(record.complete).toBe(process.platform === 'win32')
+    expect(record.userData).toHaveLength(process.platform === 'win32' ? 1 : 2)
+  })
+
+  it('keeps history incomplete after discovering a custom root and returning to a known root', async () => {
     const appDataDir = await freshAppDataDir()
     await writeFile(join(appDataDir, PATH_HISTORY_FILE), 'complete=1\r\nuserData=C:\\first\r\n')
     const record = await mergeLaunchPathHistory({
       appDataDir,
+      defaultUserData: 'C:\\first',
       userData: 'D:\\second',
       dshHome: 'D:\\home',
     })
-    expect(record?.complete).toBe(true)
+    expect(record?.complete).toBe(false)
     expect(record?.userData).toEqual(['C:\\first', 'D:\\second'])
+    const returned = await mergeLaunchPathHistory({
+      appDataDir, defaultUserData: 'C:\\first', userData: 'C:\\first', dshHome: 'C:\\home',
+    })
+    expect(returned.complete).toBe(false)
+    expect(returned.userData).toEqual(record.userData)
+    expect(returned.dshHome).toEqual(['D:\\home', 'C:\\home'])
   })
 
   it('accumulates duplicate roots once', async () => {
     const appDataDir = await freshAppDataDir()
-    await mergeLaunchPathHistory({ appDataDir, userData: 'C:\\same', dshHome: 'C:\\same-home' })
-    const record = await mergeLaunchPathHistory({ appDataDir, userData: 'C:\\same', dshHome: 'C:\\same-home' })
+    const options = { appDataDir, defaultUserData: 'C:\\default', userData: 'C:\\same', dshHome: 'C:\\same-home' }
+    await mergeLaunchPathHistory(options)
+    const record = await mergeLaunchPathHistory(options)
     expect(record?.userData).toEqual(['C:\\same'])
   })
 
   it('retains both launches when independent processes contend for the history', async () => {
     const appDataDir = await freshAppDataDir()
     const recordPath = join(appDataDir, PATH_HISTORY_FILE)
-    await writeFile(recordPath, 'complete=1\r\n')
+    await writeFile(recordPath, 'complete=1\r\nuserData=C:\\data-A\r\n')
     const children: ReturnType<typeof writer>[] = []
     function writer(label: string) {
       const child = fork(join(import.meta.dirname, 'fixtures/path-history-writer.mjs'),
@@ -176,7 +243,7 @@ describe('Electron path history', () => {
       second.child.send('release')
       await exited(second)
       const stored = parsePathHistory(await readFile(recordPath, 'utf8'))
-      expect(stored.complete).toBe(true)
+      expect(stored.complete).toBe(false)
       expect(stored.userData).toEqual(['C:\\data-A', 'C:\\data-B'])
       expect(stored.dshHome).toEqual(['C:\\home-A', 'C:\\home-B'])
       await expect(readFile(`${recordPath}.lock`)).rejects.toMatchObject({ code: 'ENOENT' })

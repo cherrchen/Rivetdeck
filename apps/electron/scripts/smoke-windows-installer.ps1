@@ -83,7 +83,7 @@ try {
   }
 
   # Resource presence alone cannot detect startup dependencies removed by installer extraction.
-  & node (Join-Path $PSScriptRoot 'smoke-runtime-setup.mjs') $application --offline --startup-only
+  & node (Join-Path $PSScriptRoot 'smoke-runtime-setup.mjs') $application --offline --startup-only --user-data-dir (Join-Path $env:APPDATA 'Rivetdeck')
   if ($LASTEXITCODE -ne 0) {
     throw "Installed Desktop failed zero-runtime startup with code $LASTEXITCODE."
   }

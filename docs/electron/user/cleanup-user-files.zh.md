@@ -6,7 +6,7 @@
 
 ## Windows（NSIS 安装包）
 
-assisted NSIS 卸载器会删除安装目录、`managed-toolchains/`、`electron/toolchains/bin`、具名 Chromium 缓存目录（`Cache/`、`Code Cache/`、`GPUCache/`、`DawnGraphiteCache/`、`DawnWebGPUCache/` 及各分区的对应目录）和 `%LOCALAPPDATA%\rivetdeck-updater`。只有路径历史完整时才会删除具名缓存、托管运行时目录树与更新器缓存；历史缺失或不完整时会整体保留这些目标，并将其列入残留报告。在遗留用户数据上重装会保持历史不完整。更新与卸载器替换完全不删除数据。
+assisted NSIS 卸载器会删除安装目录、`managed-toolchains/`、`electron/toolchains/bin`、具名 Chromium 缓存目录（`Cache/`、`Code Cache/`、`GPUCache/`、`DawnGraphiteCache/`、`DawnWebGPUCache/` 及各分区的对应目录）和 `%LOCALAPPDATA%\rivetdeck-updater`。只有路径历史完整时才会删除具名缓存、托管运行时目录树与更新器缓存；历史缺失或不完整时会整体保留这些目标，并将其列入残留报告。在遗留用户数据上重装或使用新发现的自定义用户数据目录启动时，历史保持不完整，以保留其中可能未记录的 Harness home。更新与卸载器替换完全不删除数据。
 
 | 位置 | 内容 | 卸载后 |
 | --- | --- | --- |

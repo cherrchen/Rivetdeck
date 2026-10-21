@@ -801,6 +801,7 @@ if (!primaryInstance) {
     if (process.platform === 'win32' && app.isPackaged) {
       await mergeLaunchPathHistory({
         appDataDir: app.getPath('appData'),
+        defaultUserData: join(app.getPath('appData'), app.name),
         userData: userDataPath,
         dshHome: harnessHome,
       })
