@@ -100,6 +100,8 @@ export function formatRestoreRefusal(messages: DesktopMainMessages, refusal: Res
     case 'host-running': return messages.sessionRestoreRefuseHostRunning
     case 'no-checkpoint': return messages.sessionRestoreRefuseNoCheckpoint
     case 'incomplete-headers': return messages.sessionRestoreRefuseHeaders
+    case 'live-closure-incomplete':
+      return formatDesktopMessage(messages.sessionRestoreRefuseLiveClosure, { dirs: refusal.dirs.join(', ') })
     case 'revalidation-failed':
       return formatDesktopMessage(messages.sessionRestoreRefuseValidation, { dirs: refusal.dirs.join(', ') })
     case 'lease-held':

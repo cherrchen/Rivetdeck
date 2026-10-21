@@ -19,7 +19,7 @@ import {
 import { detectFormatRefusalFrame } from '../src/checkpoint/refusal.ts'
 import { confirmIdleSessions, resolveSessionRefusal } from '../src/checkpoint/index.ts'
 import type { AcquireSessionLease } from '../src/checkpoint/restore.ts'
-import { buildNoCheckpointNotice, buildOrphanedJournalGate, buildRestoreConflictNotice, buildRestoreConfirm } from '../src/checkpoint/dialog.ts'
+import { formatRestoreRefusal, buildRestoreNotice, buildNoCheckpointNotice, buildOrphanedJournalGate, buildRestoreConflictNotice, buildRestoreConfirm } from '../src/checkpoint/dialog.ts'
 import { en, zh } from '../src/locale.ts'
 import type { CheckpointValidationReport } from '../src/checkpoint/capture.ts'
 
@@ -402,6 +402,13 @@ describe('restore dialog copy', () => {
       quarantine: '/home/user/.dsh/electron/quarantine/9000-parent',
     })
     const expected: unknown = JSON.parse(readFileSync(new URL(`expected/checkpoint-conflict.${locale}.json`, import.meta.url), 'utf8'))
+    expect(spec).toEqual(expected)
+  })
+
+  it.each([['en', en], ['zh', zh]] as const)('renders the live-closure refusal in %s', (locale, messages) => {
+    const spec = buildRestoreNotice(messages, messages.sessionRestoreRefusedTitle,
+      formatRestoreRefusal(messages, { key: 'live-closure-incomplete', dirs: ['--work--/new-child'] }))
+    const expected: unknown = JSON.parse(readFileSync(new URL(`expected/checkpoint-live-closure.${locale}.json`, import.meta.url), 'utf8'))
     expect(spec).toEqual(expected)
   })
 

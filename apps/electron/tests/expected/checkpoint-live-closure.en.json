@@ -1,0 +1,11 @@
+{
+  "type": "info",
+  "title": "Session restore refused",
+  "message": "the live session relationships cannot be fully restored from this checkpoint (--work--/new-child); session history was left unchanged. Inspect these sessions with a compatible Harness before trying again",
+  "detail": "",
+  "buttons": [
+    "Later"
+  ],
+  "defaultId": 0,
+  "cancelId": 0
+}

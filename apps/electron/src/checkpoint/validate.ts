@@ -14,6 +14,7 @@ import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import type { CheckpointValidationReport, SessionValidationResult } from './capture.ts'
 import type { CheckpointSessionHeader } from './manifest.ts'
+import type { ListLiveSessions } from './restore.ts'
 
 /** Minimal typed surface of `@deepseek-ai/dsh-session-persistence-jsonl` used here. */
 interface BackendModule {
@@ -130,6 +131,8 @@ export async function resolveSessionFormatVersion(installAnchor: string): Promis
 export interface MountedSessionsBackend {
   readonly sessionFormatVersion: number
   readonly persistence: InstanceType<CordisModule['Context']>['sessionPersistence']
+  /** Read admitted headers and their backend-derived directories without reading event bodies. */
+  readonly listSessions: ListLiveSessions
   dispose(): Promise<void>
 }
 
@@ -154,6 +157,9 @@ export async function mountSessionsBackend(
   return {
     sessionFormatVersion: session.SESSION_FORMAT_VERSION,
     persistence: ctx.sessionPersistence,
+    listSessions: async () => (await ctx.sessionPersistence.list()).map(({ header }) => ({
+      sessionId: header.id, dir: sessionDirRel(header.cwd, header.id), header,
+    })),
     dispose: async () => { await ctx.fiber.dispose().catch(() => undefined) },
   }
 }

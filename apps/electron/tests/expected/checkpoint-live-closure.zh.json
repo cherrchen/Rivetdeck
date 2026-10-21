@@ -1,0 +1,11 @@
+{
+  "type": "info",
+  "title": "恢复被拒绝",
+  "message": "无法确认此检查点完整涵盖当前会话关系（--work--/new-child）；会话历史保持原样。请先使用兼容的 Harness 检查这些会话，再重试",
+  "detail": "",
+  "buttons": [
+    "稍后"
+  ],
+  "defaultId": 0,
+  "cancelId": 0
+}

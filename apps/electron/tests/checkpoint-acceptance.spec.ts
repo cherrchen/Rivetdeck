@@ -6,7 +6,7 @@
  */
 import { runStartupSessionMaintenance } from '../src/checkpoint/startup.ts'
 import { enqueuePendingRestore, listPendingRestores } from '../src/checkpoint/pending.ts'
-import { consumePendingSessionRestores, confirmIdleSessions } from '../src/checkpoint/index.ts'
+import { consumePendingSessionRestores, confirmIdleSessions, restoreCheckpointSession } from '../src/checkpoint/index.ts'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import {
@@ -42,6 +42,7 @@ import {
   convergeRestoreJournals,
   restoreSession,
   type AcquireSessionLease,
+  type ListLiveSessions,
 } from '../src/checkpoint/restore.ts'
 import {
   mountSessionsBackend,
@@ -247,13 +248,13 @@ describe('acceptance case 4: interruption at each switch stage converges at next
       const allowed = await runStartupSessionMaintenance({
         home,
         gate: async () => {
-          const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+          const result = await convergeRestoreJournals({ home, listLiveSessions: async () => [], acquireLease: fakeLeases().acquire })
           deferred.push(...result.deferred)
           return result.deferred.length === 0
         },
         maintain: async () => {
           const outcome = await restoreSession({
-            home, sessionId: 'session-parent-1', acquireLease: fakeLeases().acquire, validate: fakeValidator(),
+            home, sessionId: 'session-parent-1', listLiveSessions: async () => [], acquireLease: fakeLeases().acquire, validate: fakeValidator(),
           })
           expect(outcome.kind).toBe('failed')
           expect(readFileSync(join(home, 'sessions', CASE4_DIR, 'session.v4.jsonl.zstd'), 'utf8')).toBe('VERIFIED')
@@ -268,7 +269,9 @@ describe('acceptance case 4: interruption at each switch stage converges at next
       rmSync(blockedRow, { recursive: true })
       const resumed = await runStartupSessionMaintenance({
         home,
-        gate: async () => (await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })).deferred.length === 0,
+        gate: async () => (await convergeRestoreJournals({
+          home, listLiveSessions: async () => [], acquireLease: fakeLeases().acquire,
+        })).deferred.length === 0,
         maintain: async () => {}, onError: (error) => { throw error },
       })
       expect(resumed).toBe(true)
@@ -282,7 +285,7 @@ describe('acceptance case 4: interruption at each switch stage converges at next
     await seedJournal(home)
     // Crash after staging: the tmp sibling is complete on disk.
     writeFile(join(home, 'sessions', CASE4_DIR, 'session.v4.jsonl.zstd.restore.tmp'), 'VERIFIED')
-    const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+    const result = await convergeRestoreJournals({ home, listLiveSessions: async () => [], acquireLease: fakeLeases().acquire })
     expect(result).toEqual({ converged: ['8000-session-parent-1'], conflicted: [], deferred: [], unresolvable: [] })
     const liveDir = join(home, 'sessions', CASE4_DIR)
     expect(readFileSync(join(liveDir, 'session.v4.jsonl.zstd'), 'utf8')).toBe('VERIFIED')
@@ -307,7 +310,7 @@ describe('acceptance case 4: interruption at each switch stage converges at next
     mkdirSync(quarantined, { recursive: true })
     await rename(join(liveDir, 'session.v4.jsonl.zstd'), join(quarantined, 'session.v4.jsonl.zstd'))
     writeFile(join(liveDir, 'session.v4.jsonl.zstd.restore.tmp'), 'VERIFIED')
-    const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+    const result = await convergeRestoreJournals({ home, listLiveSessions: async () => [], acquireLease: fakeLeases().acquire })
     expect(result.converged).toEqual(['8000-session-parent-1'])
     expect(readFileSync(join(liveDir, 'session.v4.jsonl.zstd'), 'utf8')).toBe('VERIFIED')
     expect(await listRestoreJournals(home)).toEqual([])
@@ -333,7 +336,7 @@ interface RealSession {
 }
 
 /** Create one real session through the bundled backend write path. */
-async function createRealSession(home: string, id: string, cwd: string): Promise<RealSession> {
+async function createRealSession(home: string, id: string, cwd: string, parentSession?: string): Promise<RealSession> {
   const req = createRequire(BACKEND_ANCHOR)
   const backend = await import(pathToFileURL(req.resolve('@deepseek-ai/dsh-session-persistence-jsonl')).href) as {
     default: unknown
@@ -363,7 +366,8 @@ async function createRealSession(home: string, id: string, cwd: string): Promise
     createdAt: 1,
     cwd,
     isSeeded: false,
-    delegationDepth: 0,
+    delegationDepth: parentSession === undefined ? 0 : 1,
+    ...(parentSession === undefined ? {} : { parentSession, origin: 'subagent' }),
   })
   await handle.append([
     { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } },
@@ -380,7 +384,9 @@ async function createRealSession(home: string, id: string, cwd: string): Promise
     id,
     dir,
     header: {
-      version: session.SESSION_FORMAT_VERSION, id, createdAt: 1, cwd, isSeeded: false, delegationDepth: 0,
+      version: session.SESSION_FORMAT_VERSION, id, createdAt: 1, cwd, isSeeded: false,
+      delegationDepth: parentSession === undefined ? 0 : 1,
+      ...(parentSession === undefined ? {} : { parentSession, origin: 'subagent' }),
     },
   }
 }
@@ -430,12 +436,16 @@ function polluteWithNewerGeneration(home: string, dir: string): void {
   writeFile(join(home, 'sessions', dir, 'session.v9.jsonl.zstd'), zstdCompressSync(Buffer.from(lines.join('\n'))))
 }
 
-function realLeases(home: string): { acquire: AcquireSessionLease; close(): Promise<void> } {
+function realLeases(home: string): { acquire: AcquireSessionLease; list: ListLiveSessions; close(): Promise<void> } {
   let mounted: Awaited<ReturnType<typeof mountSessionsBackend>> | undefined
   return {
     acquire: async (member) => {
       mounted ??= await mountSessionsBackend(join(home, 'sessions'), INSTALL_ANCHOR)
       return mounted.persistence.acquireWriteLease(member.header)
+    },
+    list: async () => {
+      mounted ??= await mountSessionsBackend(join(home, 'sessions'), INSTALL_ANCHOR)
+      return mounted.listSessions()
     },
     close: async () => { await mounted?.dispose() },
   }
@@ -498,7 +508,7 @@ describe('acceptance case 2/6: real lease competition (bundled flock)', () => {
     const leases = fakeLeases()
     leases.held.add(sessionDir)
     const outcome = await restoreSession({
-      home, sessionId: 'session-x', acquireLease: leases.acquire, validate: fakeValidator(),
+      home, sessionId: 'session-x', listLiveSessions: async () => [], acquireLease: leases.acquire, validate: fakeValidator(),
     })
     expect(outcome.kind).toBe('refused')
     expect(readFileSync(join(home, 'sessions', sessionDir, 'session.v4.jsonl.zstd'), 'utf8')).toBe('LIVE')
@@ -557,7 +567,7 @@ describe('acceptance case 8: unknown-event and vN pollution restore cleanly', ()
       try {
         const outcome = await restoreSession({
           home, sessionId: session.id,
-          acquireLease: leases.acquire,
+          listLiveSessions: leases.list, acquireLease: leases.acquire,
           validate: (root, signal) => validateSessionsRoot({ sessionsRoot: root, installAnchor: INSTALL_ANCHOR, signal }),
         })
         expect(outcome.kind).toBe('restored')
@@ -583,7 +593,7 @@ describe('acceptance case 9: both branches survive restore + later writes + swap
     try {
       const outcome = await restoreSession({
         home, sessionId: session.id,
-        acquireLease: leases.acquire,
+        listLiveSessions: leases.list, acquireLease: leases.acquire,
         validate: (root, signal) => validateSessionsRoot({ sessionsRoot: root, installAnchor: INSTALL_ANCHOR, signal }),
       })
       expect(outcome.kind).toBe('restored')
@@ -623,6 +633,38 @@ describe('acceptance case 9: both branches survive restore + later writes + swap
 })
 
 describe('capture and detection through the bundled backend', () => {
+  it.skipIf(!backendAvailable).each([false, true])('refuses a new live descendant through the production restore entry (future header: %s)', async (futureHeader) => {
+    const home = makeHome()
+    const parent = await createRealSession(home, 'parent-with-new-child', '/work/restore-closure')
+    checkpointFromLive(home, parent, '1000')
+    const child = await createRealSession(home, 'uncheckpointed-child', '/work/restore-closure', parent.id)
+    if (futureHeader) polluteWithNewerGeneration(home, child.dir)
+    const parentPath = join(home, 'sessions', parent.dir, 'session.v4.jsonl.zstd')
+    appendFileSync(parentPath, zstdCompressSync(Buffer.from(`${JSON.stringify({
+      type: 'subagent/catalog', seq: 2, time: 3,
+      data: { version: 1, childId: child.id, childCreatedAt: 1, mode: 'one-shot' },
+    })}\n`)))
+    appendFileSync(parentPath, zstdCompressSync(Buffer.from(`${JSON.stringify({
+      type: 'acceptance/foreign-write', seq: 3, time: 4, data: {},
+    })}\n`)))
+    const polluted = readFileSync(parentPath)
+    const childPath = join(home, 'sessions', child.dir, futureHeader ? 'session.v9.jsonl.zstd' : 'session.v4.jsonl.zstd')
+    const childBytes = readFileSync(childPath)
+    const mounted = await mountSessionsBackend(join(home, 'sessions'), INSTALL_ANCHOR)
+    try {
+      expect((await mounted.listSessions()).some(entry => entry.sessionId === child.id)).toBe(!futureHeader)
+    } finally { await mounted.dispose() }
+    const outcome = await restoreCheckpointSession({
+      home, sessionId: parent.id, checkpointId: '1000', appPath: APP_PATH,
+      resourcesPath: APP_PATH, packaged: false, hostRunning: () => false,
+    })
+    expect(outcome).toMatchObject({ kind: 'refused', reason: { key: 'live-closure-incomplete', dirs: [child.dir] } })
+    expect(readFileSync(parentPath)).toEqual(polluted)
+    expect(readFileSync(childPath)).toEqual(childBytes)
+    expect(await listRestoreJournals(home)).toEqual([])
+    expect(existsSync(join(home, 'electron/quarantine'))).toBe(false)
+  })
+
   it.skipIf(!backendAvailable)('keeps a carried pollution candidate detectable until restore', async () => {
     const home = makeHome()
     const session = await createRealSession(home, 'carried-detection', '/work/carried')
@@ -635,7 +677,7 @@ describe('capture and detection through the bundled backend', () => {
       .toEqual([session.id])
     const leases = realLeases(home)
     try {
-      expect((await restoreSession({ home, sessionId: session.id, acquireLease: leases.acquire, validate })).kind).toBe('restored')
+      expect((await restoreSession({ home, sessionId: session.id, listLiveSessions: leases.list, acquireLease: leases.acquire, validate })).kind).toBe('restored')
     } finally { await leases.close() }
     expect((await detectCheckpointDrift(home, { formatVersion: 4 }))?.candidates).toEqual([])
   })
@@ -690,7 +732,7 @@ describe('capture and detection through the bundled backend', () => {
     try {
       expect((await restoreSession({
         home, sessionId: session.id, checkpointId: '1000', pendingRequestId: request.id,
-        acquireLease: leases.acquire,
+        listLiveSessions: leases.list, acquireLease: leases.acquire,
         validate: root => validateSessionsRoot({ sessionsRoot: root, installAnchor: INSTALL_ANCHOR }),
       })).kind).toBe('restored')
     } finally { await leases.close() }

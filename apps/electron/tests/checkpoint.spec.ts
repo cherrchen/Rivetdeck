@@ -464,6 +464,119 @@ describe('runExitCheckpoint', () => {
     expect(committedIds(home)).toEqual([])
   })
 
+  it('does not publish when validation finishes after cancellation', async () => {
+    const home = makeHome()
+    populateHome(home)
+    await writeReport(home)
+    const controller = new AbortController()
+    const outcome = await runExitCheckpoint({
+      home, childPid: CHILD_PID, appVersion: 'test', now: () => 2000, signal: controller.signal,
+      validate: async (root) => { const report = await fakeValidator()(root); controller.abort(); return report },
+    })
+    expect(outcome.kind).toBe('aborted')
+    expect(readdirSync(checkpointsRoot(home))).toEqual([])
+  })
+
+  it('stops directory traversal after cancellation and keeps existing checkpoints', async () => {
+    const home = makeHome()
+    const dir = populateHome(home)
+    await writeReport(home)
+    seedCheckpoint(home, '1000', dir, 'VERIFIED')
+    const controller = new AbortController()
+    const original = fs.readdir
+    const candidate = join(checkpointsRoot(home), '2000.tmp')
+    vi.spyOn(fs, 'readdir').mockImplementation(async (...args) => {
+      const result = await original(...args)
+      if (String(args[0]) === candidate) controller.abort()
+      return result
+    })
+    const rename = vi.spyOn(fs, 'rename')
+    const outcome = await runExitCheckpoint({
+      home, childPid: CHILD_PID, appVersion: 'test', validate: fakeValidator(), now: () => 2000, signal: controller.signal,
+    })
+    expect(outcome.kind).toBe('aborted')
+    expect(rename.mock.calls.some(([, to]) => String(to) === join(checkpointsRoot(home), '2000'))).toBe(false)
+    expect(readdirSync(checkpointsRoot(home))).toEqual(['1000'])
+  })
+
+  it.skipIf(process.platform === 'win32')('does not publish after cancellation during the final directory flush', async () => {
+    const home = makeHome()
+    const dir = populateHome(home)
+    await writeReport(home)
+    seedCheckpoint(home, '1000', dir, 'VERIFIED')
+    const controller = new AbortController()
+    const original = fs.open
+    vi.spyOn(fs, 'open').mockImplementation(async (...args) => {
+      const handle = await original(...args)
+      if (String(args[0]) === join(checkpointsRoot(home), '2000.tmp', 'sessions', ...dir.split('/')) && args[1] === 'r') {
+        const sync = handle.sync.bind(handle)
+        vi.spyOn(handle, 'sync').mockImplementation(async () => { await sync(); controller.abort() })
+      }
+      return handle
+    })
+    const outcome = await runExitCheckpoint({
+      home, childPid: CHILD_PID, appVersion: 'test', validate: fakeValidator(), now: () => 2000, signal: controller.signal,
+    })
+    expect(outcome.kind).toBe('aborted')
+    expect(readdirSync(checkpointsRoot(home))).toEqual(['1000'])
+  })
+
+  it('finishes publication and skips pruning when cancellation arrives after rename', async () => {
+    const home = makeHome()
+    populateHome(home)
+    await writeReport(home)
+    for (const id of [1000, 2000, 3000]) expect((await captureAt(home, id)).kind).toBe('committed')
+    const controller = new AbortController()
+    const original = fs.rename
+    let flushedRoot = false
+    const originalOpen = fs.open
+    vi.spyOn(fs, 'rename').mockImplementation(async (...args) => {
+      await original(...args)
+      if (String(args[1]) === join(checkpointsRoot(home), '4000')) controller.abort()
+    })
+    vi.spyOn(fs, 'open').mockImplementation(async (...args) => {
+      const handle = await originalOpen(...args)
+      if (String(args[0]) === checkpointsRoot(home) && args[1] === 'r') {
+        const sync = handle.sync.bind(handle)
+        vi.spyOn(handle, 'sync').mockImplementation(async () => { await sync(); flushedRoot = true })
+      }
+      return handle
+    })
+    const outcome = await runExitCheckpoint({
+      home, childPid: CHILD_PID, appVersion: 'test', validate: fakeValidator(), now: () => 4000, signal: controller.signal,
+    })
+    expect(outcome).toMatchObject({ kind: 'committed', id: '4000' })
+    expect(await readManifest(join(checkpointsRoot(home), '4000'))).toBeDefined()
+    expect(committedIds(home)).toEqual(['1000', '2000', '3000', '4000'])
+    if (process.platform !== 'win32') expect(flushedRoot).toBe(true)
+  })
+
+  it('reports an already published checkpoint as committed when retention is cancelled', async () => {
+    const home = makeHome()
+    populateHome(home)
+    await writeReport(home)
+    for (const id of [1000, 2000, 3000]) expect((await captureAt(home, id)).kind).toBe('committed')
+    const controller = new AbortController()
+    const originalRename = fs.rename
+    let published = false
+    vi.spyOn(fs, 'rename').mockImplementation(async (...args) => {
+      await originalRename(...args)
+      if (String(args[1]) === join(checkpointsRoot(home), '4000')) published = true
+    })
+    const originalRead = fs.readFile
+    vi.spyOn(fs, 'readFile').mockImplementation(async (...args) => {
+      const result = await originalRead(...args)
+      if (published && args[0] === join(checkpointsRoot(home), '4000', 'manifest.json')) controller.abort()
+      return result
+    })
+    const outcome = await runExitCheckpoint({
+      home, childPid: CHILD_PID, appVersion: 'test', validate: fakeValidator(), now: () => 4000, signal: controller.signal,
+    })
+    expect(controller.signal.aborted).toBe(true)
+    expect(outcome).toMatchObject({ kind: 'committed', id: '4000' })
+    expect(committedIds(home)).toEqual(['1000', '2000', '3000', '4000'])
+  })
+
   it('aborts when the carried copy is omitted from the second listing', async () => {
     const home = makeHome()
     const dir = populateHome(home)

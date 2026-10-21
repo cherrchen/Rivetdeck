@@ -146,7 +146,7 @@ function restore(home: string, sessionId: string, extra: Partial<Parameters<type
   return {
     leases,
     run: restoreSession({
-      home, sessionId, acquireLease: leases.acquire, validate: fakeValidator(), now: () => 9000, ...extra,
+      home, sessionId, acquireLease: leases.acquire, listLiveSessions: async () => [], validate: fakeValidator(), now: () => 9000, ...extra,
     }),
   }
 }
@@ -253,7 +253,7 @@ describe('restoreSession', () => {
     })
     expect((await restore(home, PARENT.id).run).kind).toBe('failed')
     expect(read(live)).toBe('POLLUTED')
-    const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+    const result = await convergeRestoreJournals({ home, listLiveSessions: async () => [], acquireLease: fakeLeases().acquire })
     expect(result.converged).toEqual(['9000-session-parent-1'])
     expect(read(live)).toBe('VERIFIED')
     expect(read(join(home, 'electron/quarantine/9000-session-parent-1/sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('POLLUTED')
@@ -306,6 +306,70 @@ describe('restoreSession', () => {
       return rename(from, to)
     })
     expect((await restore(home, PARENT.id).run).kind).toBe('restored')
+  })
+
+  it.each(['child', 'grandchild', 'unlisted'] as const)('refuses an uncovered live %s before changing session history', async (kind) => {
+    const home = makeHome()
+    const stored = [{ sessionId: PARENT.id, dir: SESSION_DIR, header: PARENT,
+      files: { 'session.v4.jsonl.zstd': 'VERIFIED-PARENT' } }]
+    if (kind === 'grandchild') stored.push({ sessionId: CHILD.id, dir: CHILD_DIR, header: CHILD,
+      files: { 'session.v4.jsonl.zstd': 'VERIFIED-CHILD' } })
+    seedCheckpoint(home, '1000', stored)
+    liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'LIVE-PARENT' })
+    const extraDir = '--work-p--/new-descendant'
+    const extraHeader = { ...CHILD, id: 'new-descendant', parentSession: kind === 'grandchild' ? CHILD.id : PARENT.id }
+    if (kind === 'grandchild') liveSession(home, CHILD_DIR, { 'session.v4.jsonl.zstd': 'LIVE-CHILD' })
+    liveSession(home, extraDir, { 'session.v9.jsonl.zstd': 'LIVE-DESCENDANT' })
+    const row = projcacheRow(home, PARENT.id)
+    const { leases, run } = restore(home, PARENT.id, {
+      listLiveSessions: async () => kind === 'unlisted' ? [] : [{ sessionId: extraHeader.id, dir: extraDir, header: extraHeader }],
+    })
+    expect(await run).toMatchObject({ kind: 'refused', reason: { key: 'live-closure-incomplete', dirs: [extraDir] } })
+    expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('LIVE-PARENT')
+    expect(read(join(home, 'sessions', extraDir, 'session.v9.jsonl.zstd'))).toBe('LIVE-DESCENDANT')
+    if (kind === 'grandchild') expect(read(join(home, 'sessions', CHILD_DIR, 'session.v4.jsonl.zstd'))).toBe('LIVE-CHILD')
+    expect(existsSync(row)).toBe(true)
+    expect(await listRestoreJournals(home)).toEqual([])
+    expect(existsSync(join(home, 'electron/quarantine'))).toBe(false)
+    expect(leases.held.size).toBe(0)
+  })
+
+  it.each(['listing', 'inventory'] as const)('leaves session history untouched when live %s fails', async (stage) => {
+    const home = makeHome()
+    seedCheckpoint(home, '1000', [{ sessionId: PARENT.id, dir: SESSION_DIR, header: PARENT,
+      files: { 'session.v4.jsonl.zstd': 'VERIFIED' } }])
+    liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'LIVE' })
+    const leases = fakeLeases()
+    if (stage === 'inventory') {
+      const original = fs.readdir
+      vi.spyOn(fs, 'readdir').mockImplementation(async (...args) => {
+        if (String(args[0]) === join(home, 'sessions')) throw Object.assign(new Error('inventory failed'), { code: 'EIO' })
+        return original(...args)
+      })
+    }
+    const outcome = await restore(home, PARENT.id, {
+      acquireLease: leases.acquire,
+      listLiveSessions: async () => {
+        expect([...leases.held]).toEqual([SESSION_DIR])
+        if (stage === 'listing') throw new Error('listing failed')
+        return []
+      },
+    }).run
+    expect(outcome).toMatchObject({ kind: 'failed', reason: `${stage} failed` })
+    expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('LIVE')
+    expect(await listRestoreJournals(home)).toEqual([])
+    expect(leases.held.size).toBe(0)
+  })
+
+  it('keeps unrelated live sessions outside the restored family', async () => {
+    const home = makeHome()
+    seedCheckpoint(home, '1000', [{ sessionId: PARENT.id, dir: SESSION_DIR, header: PARENT,
+      files: { 'session.v4.jsonl.zstd': 'VERIFIED' } }])
+    liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'LIVE' })
+    const other = { sessionId: 'other', dir: '--work-p--/other', header: { ...PARENT, id: 'other' } }
+    liveSession(home, other.dir, { 'session.v4.jsonl.zstd': 'OTHER' })
+    expect((await restore(home, PARENT.id, { listLiveSessions: async () => [other] }).run).kind).toBe('restored')
+    expect(read(join(home, 'sessions', other.dir, 'session.v4.jsonl.zstd'))).toBe('OTHER')
   })
 
   it('restores the related-source closure: subagent children switch and invalidate too', async () => {
@@ -410,7 +474,7 @@ describe('restoreSession', () => {
       files: { 'session.v4.jsonl.zstd': 'VERIFIED' },
     }])
     const outcome = await restoreSession({
-      home, sessionId: 'session-parent-1', acquireLease: fakeLeases().acquire,
+      home, sessionId: 'session-parent-1', listLiveSessions: async () => [], acquireLease: fakeLeases().acquire,
       validate: fakeValidator(new Set([SESSION_DIR])),
     })
     expect(outcome).toMatchObject({ kind: 'refused', reason: { key: 'revalidation-failed', dirs: [SESSION_DIR] } })
@@ -545,12 +609,32 @@ describe('convergeRestoreJournals', () => {
       })),
     })
     const leases = fakeLeases()
-    const result = await convergeRestoreJournals({ home, acquireLease: leases.acquire })
+    const result = await convergeRestoreJournals({ home, listLiveSessions: async () => [], acquireLease: leases.acquire })
     expect(result).toEqual({ converged: [], conflicted: [], deferred: [journal.id], unresolvable: [] })
     expect(read(join(home, 'sessions', SESSION_DIR, 'metadata.json'))).toBe('CURRENT')
     expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('POLLUTED')
     expect(existsSync(join(home, journal.quarantine))).toBe(false)
     expect(await listRestoreJournals(home)).toHaveLength(1)
+    expect(leases.held.size).toBe(0)
+  })
+
+  it('defers an intent when a new live child appeared during the interruption', async () => {
+    const home = makeHome()
+    liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'LIVE' })
+    seedCheckpoint(home, '1000', [{ sessionId: PARENT.id, dir: SESSION_DIR, header: PARENT,
+      files: { 'session.v4.jsonl.zstd': 'VERIFIED' } }])
+    const journal = await seedIntentJournal(home)
+    liveSession(home, CHILD_DIR, { 'session.v4.jsonl.zstd': 'NEW-CHILD' })
+    const leases = fakeLeases()
+    const outcome = await convergeRestoreJournals({
+      home, acquireLease: leases.acquire,
+      listLiveSessions: async () => [{ sessionId: CHILD.id, dir: CHILD_DIR, header: CHILD }],
+    })
+    expect(outcome.deferred).toEqual([journal.id])
+    expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('LIVE')
+    expect(read(join(home, 'sessions', CHILD_DIR, 'session.v4.jsonl.zstd'))).toBe('NEW-CHILD')
+    expect((await readRestoreJournal((await listRestoreJournals(home))[0]!))?.phase).toBe('intent')
+    expect(existsSync(join(home, journal.quarantine))).toBe(false)
     expect(leases.held.size).toBe(0)
   })
 
@@ -563,7 +647,7 @@ describe('convergeRestoreJournals', () => {
       files: { 'session.v4.jsonl.zstd': 'VERIFIED' },
     }])
     await seedIntentJournal(home)
-    const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+    const result = await convergeRestoreJournals({ home, listLiveSessions: async () => [], acquireLease: fakeLeases().acquire })
     expect(result).toEqual({ converged: ['8000-session-parent-1'], conflicted: [], deferred: [], unresolvable: [] })
     expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('VERIFIED')
     expect(read(join(home, 'electron', 'quarantine', '8000-session-parent-1', 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('POLLUTED')
@@ -609,7 +693,7 @@ describe('convergeRestoreJournals', () => {
     const liveDir = join(home, 'sessions', SESSION_DIR)
     writeFile(join(home, 'electron', 'quarantine', '8000-x', 'sessions', SESSION_DIR, 'session.jsonl.zstd'), 'BASE')
     writeFile(join(liveDir, 'session.jsonl.zstd'), 'BASE')
-    const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+    const result = await convergeRestoreJournals({ home, listLiveSessions: async () => [], acquireLease: fakeLeases().acquire })
     expect(result.converged).toEqual(['8000-x'])
     expect(read(join(liveDir, 'session.v4.jsonl.zstd'))).toBe('VERIFIED')
     expect(read(join(liveDir, 'session.jsonl.zstd'))).toBe('BASE')
@@ -627,7 +711,7 @@ describe('convergeRestoreJournals', () => {
     await seedIntentJournal(home)
     // A crash mid-copy leaves a truncated staged temp; resume must not publish it.
     writeFileSync(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd.restore.tmp'), 'VERI')
-    const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+    const result = await convergeRestoreJournals({ home, listLiveSessions: async () => [], acquireLease: fakeLeases().acquire })
     expect(result.converged).toEqual(['8000-session-parent-1'])
     expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('VERIFIED')
   })
@@ -642,7 +726,7 @@ describe('convergeRestoreJournals', () => {
     await seedIntentJournal(home)
     // Foreign append after the crash: same name, new bytes.
     writeFileSync(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'), 'POLLUTED+FOREIGN-APPEND')
-    const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+    const result = await convergeRestoreJournals({ home, listLiveSessions: async () => [], acquireLease: fakeLeases().acquire })
     expect(result.converged).toEqual([])
     expect(result.conflicted).toEqual(['8000-session-parent-1'])
     // The foreign bytes survive; the journal is kept and marked.
@@ -661,7 +745,7 @@ describe('convergeRestoreJournals', () => {
       files: { 'session.v4.jsonl.zstd': 'VERIFIED' },
     }])
     await seedIntentJournal(home, { phase: 'committed' })
-    const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+    const result = await convergeRestoreJournals({ home, listLiveSessions: async () => [], acquireLease: fakeLeases().acquire })
     expect(result.converged).toEqual(['8000-session-parent-1'])
     expect(existsSync(row)).toBe(false)
     expect(await listRestoreJournals(home)).toEqual([])
@@ -678,7 +762,7 @@ describe('convergeRestoreJournals', () => {
       files: { 'session.v4.jsonl.zstd': 'VERIFIED' },
     }])
     await seedIntentJournal(home, { phase: 'finalized' })
-    const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+    const result = await convergeRestoreJournals({ home, listLiveSessions: async () => [], acquireLease: fakeLeases().acquire })
     expect(result.converged).toEqual(['8000-session-parent-1'])
     expect(await listRestoreJournals(home)).toEqual([])
   })
@@ -693,7 +777,7 @@ describe('convergeRestoreJournals', () => {
     await seedIntentJournal(home)
     const leases = fakeLeases()
     leases.held.add(SESSION_DIR)
-    const result = await convergeRestoreJournals({ home, acquireLease: leases.acquire })
+    const result = await convergeRestoreJournals({ home, listLiveSessions: async () => [], acquireLease: leases.acquire })
     expect(result.deferred).toEqual(['8000-session-parent-1'])
     expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('POLLUTED')
     expect(await listRestoreJournals(home)).toHaveLength(1)
@@ -707,7 +791,7 @@ describe('convergeRestoreJournals', () => {
       files: { 'session.v4.jsonl.zstd': 'VERIFIED' },
     }])
     await seedIntentJournal(home, { phase: 'conflicted', conflict: `${SESSION_DIR}/session.v4.jsonl.zstd` })
-    const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+    const result = await convergeRestoreJournals({ home, listLiveSessions: async () => [], acquireLease: fakeLeases().acquire })
     expect(result).toEqual({ converged: [], conflicted: ['8000-session-parent-1'], deferred: [], unresolvable: [] })
     expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('FOREIGN')
   })
@@ -716,7 +800,7 @@ describe('convergeRestoreJournals', () => {
     const home = makeHome()
     liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'POLLUTED' })
     await seedIntentJournal(home)
-    const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+    const result = await convergeRestoreJournals({ home, listLiveSessions: async () => [], acquireLease: fakeLeases().acquire })
     expect(result).toEqual({ converged: [], conflicted: [], deferred: [], unresolvable: ['8000-session-parent-1'] })
     // Live data and the recovery record both stay: only the user can abandon it.
     expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('POLLUTED')
@@ -728,7 +812,7 @@ describe('convergeRestoreJournals', () => {
     liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'VERIFIED' })
     const row = projcacheRow(home, 'session-parent-1')
     await seedIntentJournal(home, { phase: 'committed' })
-    const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+    const result = await convergeRestoreJournals({ home, listLiveSessions: async () => [], acquireLease: fakeLeases().acquire })
     expect(result).toEqual({ converged: ['8000-session-parent-1'], conflicted: [], deferred: [], unresolvable: [] })
     expect(existsSync(row)).toBe(false)
     expect(await listRestoreJournals(home)).toEqual([])
@@ -750,12 +834,14 @@ describe('convergeRestoreJournals', () => {
       quarantine: 'electron/quarantine/bad-dir',
       members: [{ sessionId: 's', dir: '../escape', header: {}, liveFiles: [], publish: [] }],
     }))
-    const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+    const result = await convergeRestoreJournals({ home, listLiveSessions: async () => [], acquireLease: fakeLeases().acquire })
     expect(result).toEqual({ converged: [], conflicted: [], deferred: ['bad-dir', 'bad-id'], unresolvable: [] })
     const maintain = vi.fn(async () => {})
     expect(await runStartupSessionMaintenance({
       home,
-      gate: async () => (await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })).deferred.length === 0,
+      gate: async () => (await convergeRestoreJournals({
+        home, listLiveSessions: async () => [], acquireLease: fakeLeases().acquire,
+      })).deferred.length === 0,
       maintain, onError: (error) => { throw error },
     })).toBe(false)
     expect(maintain).not.toHaveBeenCalled()
@@ -771,7 +857,7 @@ describe('convergeRestoreJournals', () => {
     const journal = await seedIntentJournal(home)
     const quarantine = join(home, journal.quarantine, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd')
     writeFile(quarantine, 'POLLUTED')
-    const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+    const result = await convergeRestoreJournals({ home, listLiveSessions: async () => [], acquireLease: fakeLeases().acquire })
     expect(result.converged).toEqual([journal.id])
     expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('VERIFIED')
     expect(read(quarantine)).toBe('POLLUTED')
@@ -792,7 +878,9 @@ describe('convergeRestoreJournals', () => {
     })).toEqual([])
     expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('POLLUTED')
     expect(await listPendingRestores(home)).toHaveLength(1)
-    expect((await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })).converged).toEqual([journal.id])
+    expect((await convergeRestoreJournals({
+      home, listLiveSessions: async () => [], acquireLease: fakeLeases().acquire,
+    })).converged).toEqual([journal.id])
     expect(await listPendingRestores(home)).toEqual([])
   })
 
@@ -812,9 +900,13 @@ describe('convergeRestoreJournals', () => {
       }
       return originalRm(...args)
     })
-    expect((await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })).deferred).toEqual([journal.id])
+    expect((await convergeRestoreJournals({
+      home, listLiveSessions: async () => [], acquireLease: fakeLeases().acquire,
+    })).deferred).toEqual([journal.id])
     expect(await listPendingRestores(home)).toEqual([])
-    expect((await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })).converged).toEqual([journal.id])
+    expect((await convergeRestoreJournals({
+      home, listLiveSessions: async () => [], acquireLease: fakeLeases().acquire,
+    })).converged).toEqual([journal.id])
     expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('RESTORED-THEN-APPENDED')
   })
 
@@ -835,12 +927,12 @@ describe('convergeRestoreJournals', () => {
       }
       return originalReadFile(...args)
     })
-    const first = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+    const first = await convergeRestoreJournals({ home, listLiveSessions: async () => [], acquireLease: fakeLeases().acquire })
     expect(first.deferred).toEqual([journal.id])
     expect((await readRestoreJournal(join(restoreJournalsDir(home), `${journal.id}.json`)))?.phase).toBe('committed')
     expect(read(legacyPath)).toBe(document)
     vi.restoreAllMocks()
-    const resumed = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+    const resumed = await convergeRestoreJournals({ home, listLiveSessions: async () => [], acquireLease: fakeLeases().acquire })
     expect(resumed.converged).toEqual([journal.id])
     expect(await listRestoreJournals(home)).toEqual([])
     expect(JSON.parse(read(legacyPath))).toEqual({
@@ -858,7 +950,7 @@ describe('convergeRestoreJournals', () => {
       tables: { sessions: { 'session-parent-1': { stale: true }, 'other-session': { keep: true } } },
     }))
     await seedIntentJournal(home, { phase: 'committed' })
-    const result = await convergeRestoreJournals({ home, acquireLease: fakeLeases().acquire })
+    const result = await convergeRestoreJournals({ home, listLiveSessions: async () => [], acquireLease: fakeLeases().acquire })
     expect(result.converged).toEqual(['8000-session-parent-1'])
     const legacy = JSON.parse(read(legacyPath)) as { tables: { sessions: Record<string, unknown> } }
     expect(Object.keys(legacy.tables.sessions)).toEqual(['other-session'])

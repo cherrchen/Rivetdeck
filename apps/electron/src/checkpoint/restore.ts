@@ -39,6 +39,9 @@ export interface SessionLease {
 /** Session identity the lease seam may consult; a journal member qualifies. */
 export type SessionLeaseSubject = Pick<RestoreJournalMember, 'sessionId' | 'dir' | 'header'>
 
+/** Live headers with backend-derived directories; omitted headers require physical inventory checks. */
+export type ListLiveSessions = () => Promise<readonly SessionLeaseSubject[]>
+
 /** Lease provider: production resolves the backend seam; tests inject fakes. */
 export type AcquireSessionLease = (subject: SessionLeaseSubject) => Promise<SessionLease>
 
@@ -385,6 +388,54 @@ export function resolveRestoreClosure(manifest: CheckpointManifest, targetSessio
   return [...members.values()]
 }
 
+/**
+ * Refuse uncovered descendants and physical sessions whose parentage is unknown.
+ * Selected members retain their immutable stored headers even when the current
+ * reader skips their newer generation; an unlisted new directory has no such evidence.
+ * Callers hold every selected member lease throughout inspection and switching.
+ */
+async function uncoveredLiveSessions(
+  home: string,
+  members: readonly SessionLeaseSubject[],
+  listLiveSessions: ListLiveSessions,
+  signal?: AbortSignal,
+): Promise<string[]> {
+  const observed = new Map(members.map(member => [member.dir, member]))
+  for (const member of await listLiveSessions()) observed.set(member.dir, member)
+  const selected = new Map(members.map(member => [member.sessionId, member.dir]))
+  const uncovered = new Set<string>()
+  const root = join(home, 'sessions')
+  let projects
+  try {
+    projects = await readdir(root, { withFileTypes: true })
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+    throw error
+  }
+  for (const project of projects) {
+    signal?.throwIfAborted()
+    if (!project.isDirectory()) continue
+    const projectDir = join(root, project.name)
+    for (const entry of await readdir(projectDir, { withFileTypes: true })) {
+      signal?.throwIfAborted()
+      if (!entry.isDirectory()) continue
+      const dir = `${project.name}/${entry.name}`
+      const names = await readdir(join(projectDir, entry.name))
+      if (!names.some(isOwnedSessionFile)) continue
+      const live = observed.get(dir)
+      if (live === undefined) {
+        uncovered.add(dir)
+        continue
+      }
+      if (live.header.origin === 'subagent' && live.header.parentSession !== undefined
+        && selected.has(live.header.parentSession) && selected.get(live.sessionId) !== dir) {
+        uncovered.add(dir)
+      }
+    }
+  }
+  return [...uncovered].sort()
+}
+
 /** Newest committed checkpoint whose manifest holds a verified entry for `sessionId`. */
 async function findCheckpoint(
   home: string,
@@ -418,6 +469,7 @@ export type RestoreRefusal =
   | { readonly key: 'host-running' }
   | { readonly key: 'no-checkpoint' }
   | { readonly key: 'incomplete-headers' }
+  | { readonly key: 'live-closure-incomplete'; readonly dirs: readonly string[] }
   | { readonly key: 'revalidation-failed'; readonly dirs: readonly string[] }
   | { readonly key: 'lease-held'; readonly detail: string }
 
@@ -440,6 +492,8 @@ export interface RestoreSessionOptions {
   readonly hostRunning?: (() => boolean) | undefined
   /** `session.lock` acquisition through the backend seam. */
   readonly acquireLease: AcquireSessionLease
+  /** Current readable headers; physical inventory also detects sessions omitted by listing. */
+  readonly listLiveSessions: ListLiveSessions
   /** Re-validation of the checkpoint bytes under the current build. */
   readonly validate: ValidateSessions
   readonly signal?: AbortSignal | undefined
@@ -504,6 +558,13 @@ export async function restoreSession(options: RestoreSessionOptions): Promise<Re
       // Acquire before fingerprinting: the lease proves no live writer, so
       // the recorded pre-state cannot race a foreign append.
       leases.push(await options.acquireLease(member))
+      journalMembers.push(member)
+    }
+    const uncovered = await uncoveredLiveSessions(options.home, journalMembers, options.listLiveSessions, options.signal)
+    if (uncovered.length > 0) {
+      return { kind: 'refused', reason: { key: 'live-closure-incomplete', dirs: uncovered } }
+    }
+    for (const [index, member] of journalMembers.entries()) {
       const liveDir = memberDir(options.home, member.dir)
       const liveFiles: RestoreFingerprint[] = []
       try {
@@ -515,7 +576,7 @@ export async function restoreSession(options: RestoreSessionOptions): Promise<Re
       } catch (error) {
         if ((error as NodeJS.ErrnoException | null)?.code !== 'ENOENT') throw error
       }
-      journalMembers.push({ ...member, liveFiles })
+      journalMembers[index] = { ...member, liveFiles }
     }
     let journal: RestoreJournal = {
       version: 1,
@@ -558,6 +619,8 @@ export async function restoreSession(options: RestoreSessionOptions): Promise<Re
 export interface ConvergeJournalsOptions {
   readonly home: string
   readonly acquireLease: AcquireSessionLease
+  /** Current readable headers; physical inventory also detects sessions omitted by listing. */
+  readonly listLiveSessions: ListLiveSessions
   readonly log?: ((message: string) => void) | undefined
   readonly signal?: AbortSignal | undefined
 }
@@ -620,6 +683,10 @@ export async function convergeRestoreJournals(
       continue
     }
     try {
+      if (journal.phase === 'intent') {
+        const uncovered = await uncoveredLiveSessions(options.home, journal.members, options.listLiveSessions, options.signal)
+        if (uncovered.length > 0) throw new Error(`restore journal ${journal.id} has uncovered live sessions: ${uncovered.join(', ')}`)
+      }
       const terminal = await convergeJournal(options.home, checkpoint?.dir ?? '', journal)
       if (terminal.phase === 'conflicted') {
         conflicted.push(terminal.id)

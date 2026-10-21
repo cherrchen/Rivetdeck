@@ -1,8 +1,8 @@
 /**
  * Exit-checkpoint orchestration entry for `main.ts`. Runs after a promotable
- * drain inside `prepareToInstall`, bounded by a deadline so quitting cannot
- * hang on capture; an aborted attempt discards the `.tmp` candidate and never
- * blocks or fails the exit path.
+ * drain inside `prepareToInstall`. Deadline cancellation discards unpublished
+ * candidates between filesystem operations. After publication, cancellation
+ * preserves the durability flush and skips or stops retention.
  */
 
 import { join } from 'node:path'
@@ -13,6 +13,7 @@ import {
   restoreSession,
   resolveRestoreClosure,
   type AcquireSessionLease,
+  type ListLiveSessions,
   type JournalConvergence,
   type RestoreOutcome,
 } from './restore.ts'
@@ -25,7 +26,7 @@ import { runValidationWorker, validateWorkerModule } from './worker.ts'
 import type { SessionRefusalHit } from './refusal.ts'
 import { readdir } from 'node:fs/promises'
 
-/** Total wall-clock budget for one exit capture; the deadline kills the validation worker. */
+/** Capture cancellation deadline; in-flight filesystem calls and published durability flushes finish. */
 export const CHECKPOINT_CAPTURE_BUDGET_MS = 120_000
 
 /** Startup drift confirmation reuses the capture worker with its own bound. */
@@ -80,11 +81,13 @@ export async function captureExitCheckpoint(
  */
 async function backendLeaseAcquirer(home: string, installAnchor: string): Promise<{
   acquire: AcquireSessionLease
+  list: ListLiveSessions
   dispose(): Promise<void>
 }> {
   const mounted = await mountSessionsBackend(join(home, 'sessions'), installAnchor)
   return {
     acquire: member => mounted.persistence.acquireWriteLease(member.header),
+    list: mounted.listSessions,
     dispose: () => mounted.dispose(),
   }
 }
@@ -110,6 +113,7 @@ export async function convergeDesktopRestoreJournals(options: {
     return await convergeRestoreJournals({
       home: options.home,
       acquireLease: leases.acquire,
+      listLiveSessions: leases.list,
       ...(options.signal === undefined ? {} : { signal: options.signal }),
       ...(options.log === undefined ? {} : { log: options.log }),
     })
@@ -151,6 +155,7 @@ export async function restoreCheckpointSession(options: {
       ...(options.pendingRequestId === undefined ? {} : { pendingRequestId: options.pendingRequestId }),
       ...(options.hostRunning === undefined ? {} : { hostRunning: options.hostRunning }),
       acquireLease: leases.acquire,
+      listLiveSessions: leases.list,
       validate: (sessionsRoot, signal) => runValidationWorker(workerModule, sessionsRoot, anchor, runtime, signal),
       ...(options.log === undefined ? {} : { log: options.log }),
     })

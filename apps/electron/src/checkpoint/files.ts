@@ -38,11 +38,16 @@ export async function createDurableDirectory(path: string, home: string): Promis
  * Persist a staged tree's directory entries from leaves to root before publication.
  * Files must already have been flushed by their writer.
  * @param root - Private staged directory; symbolic links are not traversed.
+ * @param signal - Cancellation between directory operations, before publication.
  * @returns Resolves after every directory has been flushed on POSIX.
  */
-export async function syncDirectoryTree(root: string): Promise<void> {
+export async function syncDirectoryTree(root: string, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted()
   for (const entry of await readdir(root, { withFileTypes: true })) {
-    if (entry.isDirectory()) await syncDirectoryTree(join(root, entry.name))
+    signal?.throwIfAborted()
+    if (entry.isDirectory()) await syncDirectoryTree(join(root, entry.name), signal)
   }
+  signal?.throwIfAborted()
   await syncDirectory(root)
+  signal?.throwIfAborted()
 }

@@ -302,16 +302,28 @@ export async function latestCheckpoint(root: string): Promise<{ dir: string; man
   return undefined
 }
 
-/** Write the manifest inside the candidate, then publish it by directory rename. */
+/**
+ * Write and sync the candidate before publishing it by directory rename.
+ * Cancellation stops unpublished candidates; after rename, root-directory sync
+ * must complete even when cancellation arrives during publication.
+ * @param root - Checkpoint directory.
+ * @param candidate - Staged files awaiting publication.
+ * @param manifest - Verified session and file metadata.
+ * @param signal - Cancellation observed before publication.
+ * @returns Published checkpoint directory after its parent is flushed.
+ */
 export async function commitCandidate(
   root: string,
   candidate: StagedCandidate,
   manifest: CheckpointManifest,
+  signal?: AbortSignal,
 ): Promise<string> {
+  signal?.throwIfAborted()
   await writeManifest(candidate.dir, manifest)
-  await syncDirectoryTree(candidate.dir)
+  await syncDirectoryTree(candidate.dir, signal)
+  signal?.throwIfAborted()
   const target = join(root, candidate.id)
-  await renameDesktopPath(candidate.dir, target)
+  await renameDesktopPath(candidate.dir, target, signal === undefined ? {} : { signal })
   if (process.platform !== 'win32') {
     const handle = await open(root, 'r')
     try {
@@ -392,7 +404,7 @@ export interface ExitCheckpointOptions {
   readonly appVersion: string
   /** Validation worker invoked on the candidate's sessions root. */
   readonly validate: ValidateSessions
-  /** Cancellation cutting the capture short; the candidate is discarded. */
+  /** Cancellation discards unpublished candidates; published checkpoints finish durability. */
   readonly signal?: AbortSignal | undefined
   readonly now?: (() => number) | undefined
   readonly log?: ((message: string) => void) | undefined
@@ -492,10 +504,16 @@ export async function runExitCheckpoint(options: ExitCheckpointOptions): Promise
       files: candidate.files,
       sessions,
     }
-    await commitCandidate(root, candidate, manifest)
+    await commitCandidate(root, candidate, manifest, options.signal)
     candidate = undefined
-    const protectedIds = await protectedRestoreCheckpoints(options.home)
-    if (protectedIds !== undefined) await pruneCheckpoints(root, options.signal, protectedIds)
+    try {
+      if (!options.signal?.aborted) {
+        const protectedIds = await protectedRestoreCheckpoints(options.home)
+        if (protectedIds !== undefined && !options.signal?.aborted) await pruneCheckpoints(root, options.signal, protectedIds)
+      }
+    } catch (error) {
+      log(`checkpoint ${id}: retention stopped (${error instanceof Error ? error.message : String(error)})`)
+    }
     return { kind: 'committed', id, sessions: sessions.length }
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
