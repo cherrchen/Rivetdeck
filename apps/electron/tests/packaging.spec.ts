@@ -141,8 +141,12 @@ it('wires the layered data-cleanup uninstaller through the native helper', async
     expect(nsh).toContain('FileOpen $0 "$APPDATA\\${RIVETDECK_PATH_HISTORY}" w')
     expect(nsh).not.toContain('$hasPerUserInstallation')
     const installMacro = nsh.slice(nsh.indexOf('!macro customInstall'), nsh.indexOf('!macro customUnInstall'))
+    // Seeding is a fresh-install act: a registered replacement retains the active
+    // record even if the probe cannot find it. Before truncating on a reported
+    // absence, a readable open confirms it through an independent channel.
+    expect(installMacro).toContain('${AndIf} $rivetdeckPreviousInstall == "0"')
+    expect(installMacro).toContain('FileOpen $1 "$APPDATA\\${RIVETDECK_PATH_HISTORY}" r')
     // Unregistered legacy installs can still leave data containing an unrecorded home.
-    expect(installMacro).toContain('${If} $rivetdeckPreviousInstall == "0"')
     expect(installMacro).toContain('!insertmacro RivetdeckProbePath "$APPDATA\\${APP_FILENAME}"')
     expect(installMacro).toContain('${If} $R8 == "absent"')
     expect(installMacro).toContain('${AndIf} $rivetdeckLegacyUpdaterCache == "0"')

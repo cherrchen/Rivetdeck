@@ -201,23 +201,30 @@ Var rivetdeckPreviousInstall
     SetShellVarContext current
   ${'${endif}'}
   ${'${IfNot}'} ${'${isUpdated}'}
+  ${'${AndIf}'} $rivetdeckPreviousInstall == "0"
     !insertmacro RivetdeckProbePath "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}"
     ; Only proven absence seeds a record; an indeterminate probe must not truncate a
-    ; file whose claims could not be inspected.
+    ; file whose claims could not be inspected. A readable open confirms absence on
+    ; an independent channel before anything rewrites the record.
     ${'${If}'} $R8 == "absent"
-      FileOpen $0 "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}" w
-      ${'${If}'} $rivetdeckPreviousInstall == "0"
-        !insertmacro RivetdeckProbePath "$APPDATA\\${'${APP_FILENAME}'}"
-        ${'${If}'} $R8 == "absent"
-        ${'${AndIf}'} $rivetdeckLegacyUpdaterCache == "0"
-          FileWrite $0 "complete=1$\\r$\\n"
-        ${'${Else}'}
-          FileWrite $0 "complete=0$\\r$\\n"
-        ${'${EndIf}'}
+      ClearErrors
+      FileOpen $1 "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}" r
+      ${'${IfNot}'} ${'${Errors}'}
+        FileClose $1
       ${'${Else}'}
-        FileWrite $0 "complete=0$\\r$\\n"
+        ClearErrors
+        FileOpen $0 "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}" w
+        ${'${IfNot}'} ${'${Errors}'}
+          !insertmacro RivetdeckProbePath "$APPDATA\\${'${APP_FILENAME}'}"
+          ${'${If}'} $R8 == "absent"
+          ${'${AndIf}'} $rivetdeckLegacyUpdaterCache == "0"
+            FileWrite $0 "complete=1$\\r$\\n"
+          ${'${Else}'}
+            FileWrite $0 "complete=0$\\r$\\n"
+          ${'${EndIf}'}
+          FileClose $0
+        ${'${EndIf}'}
       ${'${EndIf}'}
-      FileClose $0
     ${'${EndIf}'}
   ${'${EndIf}'}
   ${'${if}'} $installMode == "all"
