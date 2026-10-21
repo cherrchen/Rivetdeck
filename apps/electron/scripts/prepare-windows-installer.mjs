@@ -106,15 +106,6 @@ function renderUninstallNsh({ helperDll, updaterCacheName }) {
 !define RIVETDECK_UPDATER_CACHE "${updaterCacheName}"
 !define RIVETDECK_PATH_HISTORY "rivetdeck-path-history.ini"
 
-!macro RivetdeckRetireHistory
-  ClearErrors
-  FileOpen $0 "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}" a
-  ${'${IfNot}'} ${'${Errors}'}
-    FileWrite $0 "$\\r$\\nretired=1$\\r$\\n"
-    FileClose $0
-  ${'${EndIf}'}
-!macroend
-
 ; File-existence checks cannot tell an absent path from one whose attributes cannot
 ; be queried (denied access, an offline share, an I/O fault): both read absent.
 ; Probes feeding the completeness seed or gating retirement therefore use
@@ -136,6 +127,48 @@ function renderUninstallNsh({ helperDll, updaterCacheName }) {
   ${'${else}'}
     StrCpy $R8 "exists"
   ${'${endif}'}
+!macroend
+
+; A directory cannot be confirmed through a readable open, so an "absent" verdict is
+; rechecked through FindFirst, a different kernel path than the attribute query: an
+; existing directory still enumerates its entries when the first probe reads it
+; absent. Absence must survive both channels before completeness relies on it.
+; Clobbers $1, $2, and $3 in addition to the probe's $R8/$R9.
+!macro RivetdeckProbeDir path
+  !insertmacro RivetdeckProbePath ${'${path}'}
+  ${'${if}'} $R8 == "absent"
+    StrCpy $2 ${'${path}'}
+    StrCpy $2 "$2\\*.*"
+    ClearErrors
+    FindFirst $1 $3 $2
+    ${'${IfNot}'} ${'${Errors}'}
+      FindClose $1
+      StrCpy $R8 "exists"
+    ${'${EndIf}'}
+  ${'${endif}'}
+!macroend
+
+; A record must exist before an epoch can be retired: an append-only open would
+; fabricate a bare retired claim that then blocks every later seed. Open for reading
+; first; when the open fails, an unreadable record keeps the failure loud unless the
+; probe proves the file is simply absent. Clobbers $0, $1, $R8, and $R9.
+!macro RivetdeckRetireHistory
+  ClearErrors
+  FileOpen $1 "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}" r
+  ${'${IfNot}'} ${'${Errors}'}
+    FileClose $1
+    ClearErrors
+    FileOpen $0 "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}" a
+    ${'${IfNot}'} ${'${Errors}'}
+      FileWrite $0 "$\\r$\\nretired=1$\\r$\\n"
+      FileClose $0
+    ${'${EndIf}'}
+  ${'${Else}'}
+    !insertmacro RivetdeckProbePath "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}"
+    ${'${If}'} $R8 != "absent"
+      SetErrors
+    ${'${EndIf}'}
+  ${'${EndIf}'}
 !macroend
 
 !ifndef BUILD_UNINSTALLER
@@ -160,7 +193,7 @@ Var rivetdeckPreviousInstall
   ${'${if}'} $installMode == "all"
     SetShellVarContext current
   ${'${endif}'}
-  !insertmacro RivetdeckProbePath "$LOCALAPPDATA\\${'${RIVETDECK_UPDATER_CACHE}'}"
+  !insertmacro RivetdeckProbeDir "$LOCALAPPDATA\\${'${RIVETDECK_UPDATER_CACHE}'}"
   ${'${if}'} $R8 == "absent"
     StrCpy $rivetdeckLegacyUpdaterCache "0"
   ${'${else}'}
@@ -168,16 +201,14 @@ Var rivetdeckPreviousInstall
   ${'${endif}'}
   ${'${IfNot}'} ${'${isUpdated}'}
   ${'${AndIf}'} $rivetdeckPreviousInstall == "0"
-    !insertmacro RivetdeckProbePath "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}"
-    ; Only proven absence skips retirement; an indeterminate probe still attempts it,
-    ; and FileOpen then reports its own error through the same abort path.
-    ${'${If}'} $R8 != "absent"
-      !insertmacro RivetdeckRetireHistory
-      ${'${If}'} ${'${Errors}'}
-        MessageBox MB_OK|MB_ICONEXCLAMATION "$(RIVETDECK_HISTORY_ERROR)" /SD IDOK
-        SetErrorLevel 1
-        Abort
-      ${'${EndIf}'}
+    ; Retirement checks the record through a readable open, so a false "absent"
+    ; verdict cannot leave a live epoch behind; the probe only decides whether an
+    ; unreadable record is an error worth aborting over or simply absent.
+    !insertmacro RivetdeckRetireHistory
+    ${'${If}'} ${'${Errors}'}
+      MessageBox MB_OK|MB_ICONEXCLAMATION "$(RIVETDECK_HISTORY_ERROR)" /SD IDOK
+      SetErrorLevel 1
+      Abort
     ${'${EndIf}'}
   ${'${EndIf}'}
   ${'${if}'} $installMode == "all"
@@ -205,7 +236,9 @@ Var rivetdeckPreviousInstall
     !insertmacro RivetdeckProbePath "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}"
     ; Only proven absence seeds a record; an indeterminate probe must not truncate a
     ; file whose claims could not be inspected. A readable open confirms absence on
-    ; an independent channel before anything rewrites the record.
+    ; an independent channel before anything rewrites the record, and the userData
+    ; probe confirms its own absent verdict through directory enumeration before
+    ; attesting completeness.
     ${'${If}'} $R8 == "absent"
       ClearErrors
       FileOpen $1 "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}" r
@@ -215,7 +248,7 @@ Var rivetdeckPreviousInstall
         ClearErrors
         FileOpen $0 "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}" w
         ${'${IfNot}'} ${'${Errors}'}
-          !insertmacro RivetdeckProbePath "$APPDATA\\${'${APP_FILENAME}'}"
+          !insertmacro RivetdeckProbeDir "$APPDATA\\${'${APP_FILENAME}'}"
           ${'${If}'} $R8 == "absent"
           ${'${AndIf}'} $rivetdeckLegacyUpdaterCache == "0"
             FileWrite $0 "complete=1$\\r$\\n"
@@ -294,7 +327,13 @@ Function un.RivetdeckCleanData
   ${'${EndIf}'}
   ; A real uninstall retires candidates even if cleanup skipped targets or failed.
   ; Appending retains protected homes and unknown claims without rewriting their paths.
+  ; The retire fallback probes through $R8/$R9, which still hold the helper's
+  ; results; park them in registers the macro leaves untouched.
+  StrCpy $R3 $R8
+  StrCpy $R4 $R9
   !insertmacro RivetdeckRetireHistory
+  StrCpy $R8 $R3
+  StrCpy $R9 $R4
   ${'${If}'} ${'${Errors}'}
     SetDetailsView show
     DetailPrint "$(RIVETDECK_HISTORY_ERROR)"

@@ -17,6 +17,8 @@ $residueLog = Join-Path $env:APPDATA 'Rivetdeck-uninstall-residue.log'
 # The path-history record lives beside the default userData so the app can always write
 # it; protection survives removal while cleanup candidates belong to one install epoch.
 $historyFile = Join-Path $env:APPDATA 'rivetdeck-path-history.ini'
+# Per-user registration key the installer writes and the uninstaller removes.
+$uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\88e0b866-a17e-5621-a5c1-5858f3d12431'
 
 function Assert-Exists([string]$Path, [string]$Because) {
   if (-not (Test-Path -LiteralPath $Path)) { throw "Missing $Path ($Because)" }
@@ -36,6 +38,9 @@ function Reset-State {
   foreach ($path in @($userData, $updaterCache, $residueLog, $historyFile)) {
     Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue
   }
+  # A crashed or interrupted install may leave registration behind; a stale key
+  # reads as a previous install epoch and would suppress the fresh-install seed.
+  Remove-Item -LiteralPath $uninstallKey -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 function Install-To([string]$Dir) {
@@ -54,6 +59,15 @@ function Uninstall-From([string]$Dir, [string[]]$ExtraArgs = @()) {
     Start-Sleep -Milliseconds 250
   }
   Assert-Missing (Join-Path $Dir 'Rivetdeck.exe') 'uninstall must remove the install directory'
+  # The uninstaller relocates itself out of $INSTDIR before deleting it, so -Wait
+  # only covers the launcher while the relocated copy still runs its section.
+  # Registration removal is one of its last steps; waiting for the key keeps a
+  # trailing DeleteRegKey from reading as a previous epoch to the next install.
+  $deadline = (Get-Date).AddSeconds(60)
+  while ((Test-Path -LiteralPath $uninstallKey) -and (Get-Date) -lt $deadline) {
+    Start-Sleep -Milliseconds 250
+  }
+  if (Test-Path -LiteralPath $uninstallKey) { throw "Uninstall left registration at $uninstallKey" }
 }
 
 # Minimal attributed userData: one product marker plus representative preserved content.
