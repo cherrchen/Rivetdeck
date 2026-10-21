@@ -171,7 +171,7 @@ async function resumeMember(
     const plan = publish.get(name)
     if (plan !== undefined
       && (await digestFile(join(liveDir, name))).sha256 === plan.digest.sha256) continue
-    throw new RestoreConflict(join(member.dir, name), 'live file appeared after the restore intent was journaled')
+    throw new RestoreConflict(`${member.dir}/${name}`, 'live file appeared after the restore intent was journaled')
   }
 
   for (const name of new Set([...fingerprints.keys(), ...publish.keys()])) {
@@ -193,7 +193,7 @@ async function resumeMember(
           const copiedBeforeUnlink = await fingerprintMatches(livePath, fingerprint)
             && preserved.size === liveDigest.size && preserved.sha256 === liveDigest.sha256
           if (!copiedBeforeUnlink) {
-            throw new RestoreConflict(join(member.dir, name), 'live file was recreated during the interrupted restore')
+            throw new RestoreConflict(`${member.dir}/${name}`, 'live file was recreated during the interrupted restore')
           }
           // A cross-volume copy, or a crash before source-directory fsync,
           // can leave both original names. Persist the retained bytes first.
@@ -204,11 +204,11 @@ async function resumeMember(
         }
       } else if (liveExists) {
         if (!(await fingerprintMatches(livePath, fingerprint))) {
-          throw new RestoreConflict(join(member.dir, name), 'live file changed during the interrupted restore')
+          throw new RestoreConflict(`${member.dir}/${name}`, 'live file changed during the interrupted restore')
         }
         await moveFile(livePath, quarantinePath)
       } else if (!quarantined) {
-        throw new RestoreConflict(join(member.dir, name), 'live file vanished during the interrupted restore')
+        throw new RestoreConflict(`${member.dir}/${name}`, 'live file vanished during the interrupted restore')
       }
     }
 

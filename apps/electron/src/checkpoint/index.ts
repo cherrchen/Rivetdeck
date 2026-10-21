@@ -135,11 +135,12 @@ export async function restoreCheckpointSession(options: {
   readonly appPath: string
   readonly resourcesPath: string
   readonly packaged: boolean
+  readonly hostRuntime?: HostRuntime | undefined
   readonly hostRunning?: (() => boolean) | undefined
   readonly log?: ((message: string) => void) | undefined
 }): Promise<RestoreOutcome> {
   const anchor = resolveDshInstallAnchor(options.appPath)
-  const runtime = resolveHostRuntime({
+  const runtime = options.hostRuntime ?? resolveHostRuntime({
     appPath: options.appPath,
     resourcesPath: options.resourcesPath,
     packaged: options.packaged,
@@ -182,6 +183,7 @@ function restoreOptions(options: DesktopSessionMaintenanceOptions, sessionId: st
   readonly appPath: string
   readonly resourcesPath: string
   readonly packaged: boolean
+  readonly hostRuntime: HostRuntime
   readonly hostRunning: () => boolean
   readonly log: ((message: string) => void) | undefined
 } {
@@ -191,6 +193,7 @@ function restoreOptions(options: DesktopSessionMaintenanceOptions, sessionId: st
     appPath: options.appPath,
     resourcesPath: options.resourcesPath,
     packaged: options.packaged,
+    hostRuntime: options.hostRuntime,
     hostRunning: options.hostRunning,
     log: options.log,
   }

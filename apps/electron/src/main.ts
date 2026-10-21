@@ -450,6 +450,7 @@ async function offerSessionRestore(options: {
     appPath: maintenance.appPath,
     resourcesPath: maintenance.resourcesPath,
     packaged: maintenance.packaged,
+    hostRuntime: maintenance.hostRuntime,
     hostRunning: maintenance.hostRunning,
     ...(maintenance.log === undefined ? {} : { log: maintenance.log }),
   })
