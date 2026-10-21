@@ -120,11 +120,16 @@ it('wires the layered data-cleanup uninstaller through the native helper', async
     expect(nsh).not.toContain('$INSTDIR\\${RIVETDECK_PATH_HISTORY}')
     expect(nsh).not.toContain('CopyFiles')
     // ${FileExists} reads an unqueryable path as absent, so every probe feeding the
-    // completeness seed or gating retirement goes through GetFileAttributesW plus
-    // GetLastError and treats an indeterminate answer conservatively.
+    // completeness seed or gating retirement goes through GetFileAttributesW and
+    // treats an indeterminate answer conservatively. The `?e` option captures the
+    // failure's error code inside the same call — a second System::Call would reset
+    // the thread's last error before GetLastError could read it.
     expect(nsh).toContain('!macro RivetdeckProbePath path')
-    expect(nsh).toContain('kernel32::GetFileAttributesW(w ${path}) i .R8')
-    expect(nsh).toContain('kernel32::GetLastError() i .R8')
+    expect(nsh).toContain('kernel32::GetFileAttributesW(w ${path}) i .R8 ?e')
+    expect(nsh).toContain('Pop $R9')
+    expect(nsh).toContain('$R9 == 2')
+    expect(nsh).toContain('$R9 == 3')
+    expect(nsh).not.toContain('kernel32::GetLastError')
     expect(nsh).toContain('StrCpy $R8 "absent"')
     expect(nsh).toContain('StrCpy $R8 "error"')
     expect(nsh).not.toContain('${FileExists}')

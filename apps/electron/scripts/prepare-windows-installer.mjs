@@ -118,15 +118,17 @@ function renderUninstallNsh({ helperDll, updaterCacheName }) {
 ; File-existence checks cannot tell an absent path from one whose attributes cannot
 ; be queried (denied access, an offline share, an I/O fault): both read absent.
 ; Probes feeding the completeness seed or gating retirement therefore use
-; GetFileAttributesW plus GetLastError so an indeterminate answer takes the
-; conservative branch instead of attesting absence. The result lands in $R8:
+; GetFileAttributesW so an indeterminate answer takes the conservative branch instead
+; of attesting absence. The System plugin resets the thread's last error around each
+; call, so the attribute failure's error survives only through the same call's ?e
+; option — a later GetLastError call would always read zero. The result lands in $R8:
 ; "exists", "absent", or "error".
 !macro RivetdeckProbePath path
-  System::Call 'kernel32::GetFileAttributesW(w ${'${path}'}) i .R8'
+  System::Call 'kernel32::GetFileAttributesW(w ${'${path}'}) i .R8 ?e'
+  Pop $R9
   ${'${if}'} $R8 == -1
-    System::Call 'kernel32::GetLastError() i .R8'
-    ${'${if}'} $R8 == 2
-    ${'${orif}'} $R8 == 3
+    ${'${if}'} $R9 == 2
+    ${'${orif}'} $R9 == 3
       StrCpy $R8 "absent"
     ${'${else}'}
       StrCpy $R8 "error"
