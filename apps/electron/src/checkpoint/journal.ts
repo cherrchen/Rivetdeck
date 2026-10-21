@@ -13,7 +13,7 @@ import { readFile, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { writeDesktopFileAtomic } from '../atomic-file.ts'
 import { createDurableDirectory, syncDirectory } from './files.ts'
-import { isCheckpointDigest, isPathSegment, type CheckpointDigest, type CheckpointSessionHeader } from './manifest.ts'
+import { isSessionIdentity, isCheckpointDigest, isPathSegment, type CheckpointDigest, type CheckpointSessionHeader } from './manifest.ts'
 
 export type RestoreJournalPhase = 'intent' | 'committed' | 'finalized' | 'conflicted'
 
@@ -123,7 +123,7 @@ function isRestoreJournal(parsed: unknown): parsed is RestoreJournal {
     if (!isRecord(member)
       || typeof member.sessionId !== 'string'
       || typeof member.dir !== 'string' || !member.dir.split('/').every(isPathSegment)
-      || !isRecord(member.header)
+      || !isSessionIdentity(member.header, member.sessionId, member.dir)
       || !Array.isArray(member.liveFiles) || !member.liveFiles.every(isFingerprint)
       || !Array.isArray(member.publish) || !member.publish.every(isPublish)) return false
   }

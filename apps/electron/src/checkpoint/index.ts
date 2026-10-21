@@ -1,7 +1,7 @@
 /**
  * Exit-checkpoint orchestration entry for `main.ts`. Runs after a promotable
- * drain inside `prepareToInstall`. Deadline cancellation discards unpublished
- * candidates between filesystem operations. After publication, cancellation
+ * drain inside `prepareToInstall`. Deadline cancellation leaves unpublished
+ * candidates for a later sweep. After publication, cancellation
  * preserves the durability flush and skips or stops retention.
  */
 
@@ -245,8 +245,9 @@ export async function detectUnreadableSessions(
   options: DesktopSessionMaintenanceOptions,
 ): Promise<{ manifest: CheckpointManifest; unreadable: readonly ConfirmedUnreadable[] } | undefined> {
   const anchor = resolveDshInstallAnchor(options.appPath)
+  const signal = AbortSignal.timeout(DETECTION_BUDGET_MS)
   const formatVersion = await resolveSessionFormatVersion(anchor).catch(() => undefined)
-  const detection = await detectCheckpointDrift(options.home, { formatVersion })
+  const detection = await detectCheckpointDrift(options.home, { formatVersion, signal })
   if (detection === undefined) return undefined
   if (detection.candidates.length === 0) return { manifest: detection.manifest, unreadable: [] }
   options.log?.(`drift detected against checkpoint ${detection.checkpointId}: ${detection.candidates.map(c => c.dir).join(', ')}`)
@@ -255,7 +256,7 @@ export async function detectUnreadableSessions(
   try {
     const unreadable = await confirmIdleSessions(detection, leases.acquire, () => runValidationWorker(
       workerModule, join(options.home, 'sessions'), anchor, options.hostRuntime,
-      AbortSignal.timeout(DETECTION_BUDGET_MS),
+      signal,
     ), options.log)
     return { manifest: detection.manifest, unreadable }
   } finally {

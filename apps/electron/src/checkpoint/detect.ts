@@ -10,9 +10,9 @@
  * not foreign drift, and is dropped by the digest check before validation.
  */
 
-import { createHash } from 'node:crypto'
-import { readdir, readFile, stat } from 'node:fs/promises'
+import { readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
+import { digestFile } from './files.ts'
 import { checkpointsRoot, type CheckpointManifest, type CheckpointSessionEntry } from './manifest.ts'
 import { latestCheckpoint, type CheckpointValidationReport } from './capture.ts'
 import { isGenerationFileAnyEncoding, isSessionGenerationFile, parseSessionGeneration } from './session-files.ts'
@@ -39,10 +39,11 @@ export interface DriftDetection {
   readonly candidates: readonly DriftCandidate[]
 }
 
-async function liveFileDigest(path: string): Promise<string | undefined> {
+async function liveFileDigest(path: string, signal?: AbortSignal): Promise<string | undefined> {
   try {
-    return createHash('sha256').update(await readFile(path)).digest('hex')
-  } catch {
+    return (await digestFile(path, signal)).sha256
+  } catch (_error) {
+    signal?.throwIfAborted()
     return undefined
   }
 }
@@ -55,7 +56,7 @@ async function liveFileDigest(path: string): Promise<string | undefined> {
  * @param home - `$DSH_HOME`.
  * @param options.formatVersion - Bundled `SESSION_FORMAT_VERSION`; the `session.vN`
  *   scan flags generations above it. The scan is skipped when undefined.
- * @param options.signal - Cancellation between directories.
+ * @param options.signal - Cancellation between directories and during file hashing.
  */
 export async function detectCheckpointDrift(
   home: string,
@@ -106,7 +107,7 @@ export async function detectCheckpointDrift(
       if (!expect.carried && Number(liveStat.size) === expect.size && String(liveStat.mtimeNs) === expect.mtimeNs) continue
       // Carried sources failed validation even when their stats match.
       // Bytes equal to the checkpoint are the post-restore steady state.
-      if ((await liveFileDigest(livePath)) === expect.sha256) continue
+      if ((await liveFileDigest(livePath, options?.signal)) === expect.sha256) continue
       reasons.add('changed')
     }
     for (const name of liveNames) {

@@ -9,6 +9,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { writeDesktopFileAtomic } from '../atomic-file.ts'
+import { sessionDirRel } from './session-identity.ts'
 import type { ShutdownReport } from '../harness/shutdown-report.ts'
 
 /** Build identity that verified a session copy; verification does not carry over across builds. */
@@ -124,6 +125,26 @@ export function isCheckpointDigest(value: unknown): value is CheckpointDigest {
 }
 
 /**
+ * Check stored header fields and bind the write-lease identity to its file directory.
+ * @param header - Header read from durable JSON.
+ * @param sessionId - Record's session identifier.
+ * @param dir - Record's directory relative to sessions.
+ * @returns Whether the header is valid and identifies exactly this directory.
+ */
+export function isSessionIdentity(header: unknown, sessionId: string, dir: string): header is CheckpointSessionHeader {
+  if (!isRecord(header) || typeof header.id !== 'string' || header.id.length === 0 || header.id !== sessionId) return false
+  for (const key of ['cwd', 'parentSession', 'origin', 'agentPreset', 'type']) {
+    if (header[key] !== undefined && typeof header[key] !== 'string') return false
+  }
+  if (header.cwd === '') return false
+  for (const key of ['createdAt', 'delegationDepth', 'version']) {
+    if (header[key] !== undefined && (typeof header[key] !== 'number' || !Number.isFinite(header[key]))) return false
+  }
+  if (header.isSeeded !== undefined && typeof header.isSeeded !== 'boolean') return false
+  return sessionDirRel(typeof header.cwd === 'string' ? header.cwd : undefined, header.id) === dir
+}
+
+/**
  * Durable-boundary shape check: a version-1 record whose `files`/`sessions`
  * lists or session dirs do not fit is treated as unreadable, never half-read.
  */
@@ -136,7 +157,8 @@ function isManifest(parsed: unknown): parsed is CheckpointManifest {
   }
   for (const entry of parsed.sessions) {
     if (!isRecord(entry)
-      || typeof entry.sessionId !== 'string' || !isRelativePath(entry.dir)) return false
+      || typeof entry.sessionId !== 'string' || !isRelativePath(entry.dir)
+      || (entry.header !== undefined && !isSessionIdentity(entry.header, entry.sessionId, entry.dir))) return false
   }
   return true
 }

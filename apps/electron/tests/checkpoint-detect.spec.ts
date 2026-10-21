@@ -1,8 +1,9 @@
+import * as nativeFs from 'node:fs'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   checkpointsRoot,
   type CheckpointFileEntry,
@@ -23,6 +24,8 @@ import { formatRestoreRefusal, buildRestoreNotice, buildNoCheckpointNotice, buil
 import { en, zh } from '../src/locale.ts'
 import type { CheckpointValidationReport } from '../src/checkpoint/capture.ts'
 
+vi.mock('node:fs', async importOriginal => ({ ...await importOriginal<typeof import('node:fs')>() }))
+
 const roots: string[] = []
 
 function makeHome(): string {
@@ -41,7 +44,7 @@ function sha256(content: string): string {
 }
 
 const SESSION_DIR = '--work--/session-aaaa-1111'
-const SESSION_ID = 'aaaa-1111'
+const SESSION_ID = 'session-aaaa-1111'
 
 /** Commit a checkpoint manifest whose `source` stats mirror the live files just written. */
 function seedCheckpoint(
@@ -94,10 +97,54 @@ async function detection(home: string, formatVersion = 4): Promise<DriftDetectio
 }
 
 afterEach(() => {
+  vi.restoreAllMocks()
   while (roots.length > 0) rmSync(roots.pop()!, { recursive: true, force: true })
 })
 
 describe('detectCheckpointDrift', () => {
+  it('hashes a changed-stat file in bounded chunks and closes its stream', async () => {
+    const home = makeHome()
+    const bytes = 'x'.repeat(256 * 1024)
+    session(home, 'session.v4.jsonl.zstd', bytes)
+    seedCheckpoint(home, '1000', { 'session.v4.jsonl.zstd': bytes })
+    const path = join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd')
+    utimesSync(path, 1, 1)
+    const create = nativeFs.createReadStream
+    const streams: nativeFs.ReadStream[] = []
+    const sizes: number[] = []
+    vi.spyOn(nativeFs, 'createReadStream').mockImplementation((...args) => {
+      const stream = create(...args)
+      streams.push(stream)
+      stream.on('data', chunk => sizes.push(chunk.length))
+      return stream
+    })
+    expect((await detection(home))?.candidates).toEqual([])
+    expect(streams).toHaveLength(1)
+    expect(streams[0]?.closed).toBe(true)
+    expect(sizes.length).toBeGreaterThan(1)
+    expect(Math.max(...sizes)).toBeLessThan(bytes.length)
+  })
+
+  it('propagates cancellation during hashing after closing the active stream', async () => {
+    const home = makeHome()
+    session(home, 'session.v4.jsonl.zstd', 'x'.repeat(256 * 1024))
+    seedCheckpoint(home, '1000', { 'session.v4.jsonl.zstd': 'x'.repeat(256 * 1024) })
+    utimesSync(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'), 1, 1)
+    const controller = new AbortController()
+    const failure = new Error('detection deadline')
+    const create = nativeFs.createReadStream
+    const streams: nativeFs.ReadStream[] = []
+    vi.spyOn(nativeFs, 'createReadStream').mockImplementation((...args) => {
+      const stream = create(...args)
+      streams.push(stream)
+      stream.once('data', () => { controller.abort(failure) })
+      return stream
+    })
+    await expect(detectCheckpointDrift(home, { signal: controller.signal })).rejects.toBe(failure)
+    expect(streams).toHaveLength(1)
+    expect(streams[0]?.closed).toBe(true)
+  })
+
   it('returns undefined without any committed checkpoint', async () => {
     const home = makeHome()
     expect(await detection(home)).toBeUndefined()
@@ -405,7 +452,7 @@ describe('resolveSessionRefusal', () => {
 
 describe('restore dialog copy', () => {
   const facts = {
-    sessionId: SESSION_ID,
+    sessionId: 'aaaa-1111',
     members: [{ capturedAt: 1_700_000_000_000 }, { capturedAt: 1_600_000_000_000 }],
     quarantine: '/home/u/.dsh/electron/quarantine',
     requiresRelaunch: false,

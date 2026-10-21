@@ -27,7 +27,7 @@ import {
 import { readShutdownReportFile } from '../harness/shutdown-report.ts'
 import { listPendingRestores } from './pending.ts'
 import { listRestoreJournals, readRestoreJournal } from './journal.ts'
-import { createDurableDirectory, syncDirectoryTree } from './files.ts'
+import { createDurableDirectory, removeStagedTree, syncDirectoryTree } from './files.ts'
 import { isPromotableReport } from './promotion.ts'
 
 /** Files that never belong to a checkpoint copy: transient locks and staged artifacts. */
@@ -188,16 +188,16 @@ export interface StagedCandidate {
 }
 
 /** Remove in-flight candidates left by an interrupted earlier capture. */
-export async function sweepStaleCandidates(root: string): Promise<void> {
+export async function sweepStaleCandidates(root: string, signal?: AbortSignal): Promise<void> {
   let names: string[]
   try {
     names = await readdir(root)
   } catch {
     return
   }
-  await Promise.all(names
-    .filter(name => name.endsWith('.tmp'))
-    .map(name => rm(join(root, name), { recursive: true, force: true })))
+  for (const name of names.filter(name => name.endsWith('.tmp'))) {
+    await removeStagedTree(join(root, name), signal)
+  }
 }
 
 /**
@@ -223,8 +223,8 @@ export async function stageCandidate(
 }
 
 /** Remove an uncommitted candidate; committed checkpoints are never discarded here. */
-export async function discardCandidate(candidate: StagedCandidate): Promise<void> {
-  await rm(candidate.dir, { recursive: true, force: true })
+export async function discardCandidate(candidate: StagedCandidate, signal?: AbortSignal): Promise<void> {
+  await removeStagedTree(candidate.dir, signal)
 }
 
 /**
@@ -254,7 +254,7 @@ export async function carryForwardSession(
   const kept = candidate.files.filter(entry => sessionDirOf(entry.path) !== sessionDir)
   candidate.files.length = 0
   candidate.files.push(...kept)
-  await rm(join(candidate.dir, 'sessions', ...sessionDir.split('/')), { recursive: true, force: true })
+  await removeStagedTree(join(candidate.dir, 'sessions', ...sessionDir.split('/')), signal)
   const prefix = `sessions/${sessionDir}/`
   for (const entry of previous.files) {
     signal?.throwIfAborted()
@@ -404,7 +404,7 @@ export interface ExitCheckpointOptions {
   readonly appVersion: string
   /** Validation worker invoked on the candidate's sessions root. */
   readonly validate: ValidateSessions
-  /** Cancellation discards unpublished candidates; published checkpoints finish durability. */
+  /** Cancellation leaves unfinished candidates for a later sweep; published checkpoints finish durability. */
   readonly signal?: AbortSignal | undefined
   readonly now?: (() => number) | undefined
   readonly log?: ((message: string) => void) | undefined
@@ -422,15 +422,15 @@ export async function runExitCheckpoint(options: ExitCheckpointOptions): Promise
     return { kind: 'skipped', reason: 'shutdown report is not promotable' }
   }
   const root = checkpointsRoot(options.home)
-  await sweepStaleCandidates(root)
-  if (!(await hasHeadroom(options.home))) {
-    return { kind: 'skipped', reason: 'insufficient free space for checkpoint staging' }
-  }
   const now = options.now ?? (() => Date.now())
   const id = String(now())
-  const previous = await latestCheckpoint(root)
   let candidate: StagedCandidate | undefined
   try {
+    await sweepStaleCandidates(root, options.signal)
+    if (!(await hasHeadroom(options.home))) {
+      return { kind: 'skipped', reason: 'insufficient free space for checkpoint staging' }
+    }
+    const previous = await latestCheckpoint(root)
     candidate = await stageCandidate(options.home, id, options.signal)
     const validatorBase = { appVersion: options.appVersion }
     let finalReport: CheckpointValidationReport
@@ -451,7 +451,7 @@ export async function runExitCheckpoint(options: ExitCheckpointOptions): Promise
         staged.files.length = 0
         staged.files.push(...kept)
         staged.sessionDirs.delete(dir)
-        await rm(join(staged.dir, 'sessions', ...dir.split('/')), { recursive: true, force: true })
+        await removeStagedTree(join(staged.dir, 'sessions', ...dir.split('/')), options.signal)
       }
       if (previous === undefined) {
         for (const dir of failedDirs) await exclude(dir)
@@ -519,7 +519,9 @@ export async function runExitCheckpoint(options: ExitCheckpointOptions): Promise
     const reason = error instanceof Error ? error.message : String(error)
     return { kind: 'aborted', reason }
   } finally {
-    if (candidate !== undefined) await discardCandidate(candidate).catch(() => undefined)
+    if (candidate !== undefined && !options.signal?.aborted) {
+      await discardCandidate(candidate, options.signal).catch(() => undefined)
+    }
   }
 }
 

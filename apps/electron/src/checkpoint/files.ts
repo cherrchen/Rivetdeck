@@ -1,6 +1,10 @@
-/** POSIX directory durability for checkpoint publication and journaled file replacement. */
+/** Checkpoint file hashing, cancellable candidate cleanup, and directory durability. */
 
-import { mkdir, open, readdir } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { createReadStream } from 'node:fs'
+import { lstat, mkdir, open, readdir, rmdir, unlink } from 'node:fs/promises'
+import { Writable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import { dirname, join, resolve } from 'node:path'
 
 /**
@@ -50,4 +54,57 @@ export async function syncDirectoryTree(root: string, signal?: AbortSignal): Pro
   signal?.throwIfAborted()
   await syncDirectory(root)
   signal?.throwIfAborted()
+}
+
+/**
+ * Hash file bytes with bounded buffering and close the stream before returning.
+ * @param path - File to read.
+ * @param signal - Cancellation also interrupts an active read.
+ * @returns Byte count and SHA-256 digest.
+ */
+export async function digestFile(path: string, signal?: AbortSignal): Promise<{ size: number; sha256: string }> {
+  signal?.throwIfAborted()
+  const stream = createReadStream(path, { signal })
+  const hash = createHash('sha256')
+  let size = 0
+  await pipeline(stream, new Writable({
+    write(chunk: Buffer, _encoding, callback) {
+      size += chunk.length
+      hash.update(chunk)
+      callback()
+    },
+  }), { signal })
+  signal?.throwIfAborted()
+  return { size, sha256: hash.digest('hex') }
+}
+
+/**
+ * Remove a private staged tree, stopping between filesystem operations on cancellation.
+ * @param path - Staged directory; child symbolic links are unlinked without traversal.
+ * @param signal - Cancellation leaves the remainder for a later sweep.
+ * @returns Resolves after removal; rejects on cancellation or filesystem failure.
+ */
+export async function removeStagedTree(path: string, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted()
+  let entries
+  try {
+    const info = await lstat(path)
+    signal?.throwIfAborted()
+    if (!info.isDirectory()) {
+      await unlink(path)
+      return
+    }
+    entries = await readdir(path, { withFileTypes: true })
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+    throw error
+  }
+  for (const entry of entries) {
+    signal?.throwIfAborted()
+    const child = join(path, entry.name)
+    if (entry.isDirectory()) await removeStagedTree(child, signal)
+    else await unlink(child)
+  }
+  signal?.throwIfAborted()
+  await rmdir(path)
 }

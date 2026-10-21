@@ -11,7 +11,6 @@
  * journal is deleted.
  */
 
-import { createHash } from 'node:crypto'
 import { constants } from 'node:fs'
 import { access, copyFile, open, readFile, readdir, rm, stat, unlink } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
@@ -28,7 +27,7 @@ import {
   type RestorePublish,
 } from './journal.ts'
 import type { ValidateSessions } from './capture.ts'
-import { createDurableDirectory, syncDirectory } from './files.ts'
+import { digestFile, createDurableDirectory, syncDirectory } from './files.ts'
 import { dequeuePendingRestore, type PendingRestoreRequestId } from './pending.ts'
 import { isGenerationFileAnyEncoding, isSessionGenerationFile } from './session-files.ts'
 
@@ -63,12 +62,6 @@ async function pathExists(path: string): Promise<boolean> {
   } catch {
     return false
   }
-}
-
-/** sha256 of a file's current bytes. */
-async function digestFile(path: string): Promise<{ size: number; sha256: string }> {
-  const buffer = await readFile(path)
-  return { size: buffer.length, sha256: createHash('sha256').update(buffer).digest('hex') }
 }
 
 /** Move a live file to quarantine, durably preserving its bytes before cross-volume unlink. */

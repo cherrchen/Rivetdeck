@@ -157,6 +157,30 @@ afterEach(() => {
 })
 
 describe('restoreSession', () => {
+  it.each([
+    { id: 'other' }, { cwd: '/other' }, { cwd: '' }, { cwd: 42 },
+    { parentSession: {} }, { origin: [] }, { createdAt: 'yesterday' },
+    { isSeeded: 'yes' }, { delegationDepth: 'one' }, { agentPreset: false },
+    { version: '4' }, { type: 1 },
+  ])('refuses a malformed or mismatched manifest header %j before leasing', async (patch) => {
+    const home = makeHome()
+    liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'LIVE' })
+    seedCheckpoint(home, '1000', [{
+      sessionId: PARENT.id, dir: SESSION_DIR, header: PARENT,
+      files: { 'session.v4.jsonl.zstd': 'VERIFIED' },
+    }])
+    const path = join(checkpointsRoot(home), '1000', 'manifest.json')
+    const manifest = JSON.parse(read(path)) as CheckpointManifest
+    writeFileSync(path, JSON.stringify({ ...manifest, sessions: manifest.sessions.map(entry => ({
+      ...entry, header: { ...entry.header, ...patch },
+    })) }))
+    const acquire = vi.fn(fakeLeases().acquire)
+    expect((await restore(home, PARENT.id, { acquireLease: acquire }).run).kind).toBe('refused')
+    expect(acquire).not.toHaveBeenCalled()
+    expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('LIVE')
+    expect(await listRestoreJournals(home)).toEqual([])
+  })
+
   it('restores generation files while preserving extension artifacts', async () => {
     const home = makeHome()
     liveSession(home, SESSION_DIR, {
@@ -532,16 +556,17 @@ describe('restoreSession', () => {
   it('keeps journal, quarantine, and projcache paths inside the home when the session id is hostile', async () => {
     const home = makeHome()
     const hostile = 'evil/../../x'
-    liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'POLLUTED' })
+    const encodedDir = '--work-p--/evil~002F..~002F..~002Fx'
+    liveSession(home, encodedDir, { 'session.v4.jsonl.zstd': 'POLLUTED' })
     // Without the safe-key guard the row rm resolves to this planted file.
     writeFile(join(home, 'storages', 'session_projcache', 'x.json'), '{}')
     seedCheckpoint(home, '1000', [{
-      sessionId: hostile, dir: SESSION_DIR, header: { ...PARENT, id: hostile },
+      sessionId: hostile, dir: encodedDir, header: { ...PARENT, id: hostile },
       files: { 'session.v4.jsonl.zstd': 'VERIFIED' },
     }])
     const outcome = await restore(home, hostile).run
-    expect(outcome).toMatchObject({ kind: 'restored', quarantine: 'electron/quarantine/9000-session-parent-1' })
-    expect(read(join(home, 'electron', 'quarantine', '9000-session-parent-1', 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('POLLUTED')
+    expect(outcome).toMatchObject({ kind: 'restored', quarantine: 'electron/quarantine/9000-evil~002F..~002F..~002Fx' })
+    expect(read(join(home, 'electron', 'quarantine', '9000-evil~002F..~002F..~002Fx', 'sessions', encodedDir, 'session.v4.jsonl.zstd'))).toBe('POLLUTED')
     expect(existsSync(join(home, 'electron', 'x'))).toBe(false)
     expect(existsSync(join(home, 'storages', 'session_projcache', 'x.json'))).toBe(true)
   })
@@ -624,6 +649,24 @@ describe('convergeRestoreJournals', () => {
     await writeRestoreJournal(home, journal)
     return journal
   }
+
+  it.each([{ id: 'other' }, { cwd: '/other' }, { parentSession: 42 }])(
+    'blocks a journal with an invalid lease header %j before modifying live bytes', async (patch) => {
+      const home = makeHome()
+      liveSession(home, SESSION_DIR, { 'session.v4.jsonl.zstd': 'LIVE' })
+      const journal = await seedIntentJournal(home)
+      const path = join(restoreJournalsDir(home), `${journal.id}.json`)
+      writeFileSync(path, JSON.stringify({ ...journal, members: journal.members.map(member => ({
+        ...member, header: { ...member.header, ...patch },
+      })) }))
+      const acquire = vi.fn(fakeLeases().acquire)
+      const result = await convergeRestoreJournals({ home, acquireLease: acquire })
+      expect(result.deferred).toEqual([journal.id])
+      expect(acquire).not.toHaveBeenCalled()
+      expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('LIVE')
+      expect(existsSync(path)).toBe(true)
+    },
+  )
 
   it('defers an intent that would publish an extension file without touching live data', async () => {
     const home = makeHome()

@@ -14,6 +14,7 @@ import {
   pruneCheckpoints,
   runExitCheckpoint,
   stageCandidate,
+  sweepStaleCandidates,
   type ValidateSessions,
 } from '../src/checkpoint/capture.ts'
 import { checkpointsRoot, readManifest, type CheckpointManifest } from '../src/checkpoint/manifest.ts'
@@ -464,6 +465,30 @@ describe('runExitCheckpoint', () => {
     expect(committedIds(home)).toEqual([])
   })
 
+  it('stops candidate cleanup on cancellation and removes its remainder in the next sweep', async () => {
+    const home = makeHome()
+    populateHome(home)
+    await writeReport(home)
+    const controller = new AbortController()
+    const unlink = fs.unlink
+    const removed: string[] = []
+    vi.spyOn(fs, 'unlink').mockImplementation(async (path) => {
+      await unlink(path)
+      removed.push(String(path))
+      controller.abort()
+    })
+    const outcome = await runExitCheckpoint({
+      home, childPid: CHILD_PID, appVersion: 'test', now: () => 2000, signal: controller.signal,
+      validate: async () => { throw new Error('validation failed') },
+    })
+    expect(outcome.kind).toBe('aborted')
+    expect(removed).toHaveLength(1)
+    expect(readdirSync(checkpointsRoot(home))).toEqual(['2000.tmp'])
+    vi.restoreAllMocks()
+    await sweepStaleCandidates(checkpointsRoot(home))
+    expect(readdirSync(checkpointsRoot(home))).toEqual([])
+  })
+
   it('does not publish when validation finishes after cancellation', async () => {
     const home = makeHome()
     populateHome(home)
@@ -474,7 +499,7 @@ describe('runExitCheckpoint', () => {
       validate: async (root) => { const report = await fakeValidator()(root); controller.abort(); return report },
     })
     expect(outcome.kind).toBe('aborted')
-    expect(readdirSync(checkpointsRoot(home))).toEqual([])
+    expect(readdirSync(checkpointsRoot(home))).toEqual(['2000.tmp'])
   })
 
   it('stops directory traversal after cancellation and keeps existing checkpoints', async () => {
@@ -496,7 +521,7 @@ describe('runExitCheckpoint', () => {
     })
     expect(outcome.kind).toBe('aborted')
     expect(rename.mock.calls.some(([, to]) => String(to) === join(checkpointsRoot(home), '2000'))).toBe(false)
-    expect(readdirSync(checkpointsRoot(home))).toEqual(['1000'])
+    expect(readdirSync(checkpointsRoot(home))).toEqual(['1000', '2000.tmp'])
   })
 
   it.skipIf(process.platform === 'win32')('does not publish after cancellation during the final directory flush', async () => {
@@ -518,7 +543,7 @@ describe('runExitCheckpoint', () => {
       home, childPid: CHILD_PID, appVersion: 'test', validate: fakeValidator(), now: () => 2000, signal: controller.signal,
     })
     expect(outcome.kind).toBe('aborted')
-    expect(readdirSync(checkpointsRoot(home))).toEqual(['1000'])
+    expect(readdirSync(checkpointsRoot(home))).toEqual(['1000', '2000.tmp'])
   })
 
   it('finishes publication and skips pruning when cancellation arrives after rename', async () => {
