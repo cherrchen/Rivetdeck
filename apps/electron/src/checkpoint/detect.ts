@@ -15,9 +15,7 @@ import { readdir, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { checkpointsRoot, type CheckpointManifest, type CheckpointSessionEntry } from './manifest.ts'
 import { latestCheckpoint, type CheckpointValidationReport } from './capture.ts'
-
-/** Canonical generation filename; captures the version suffix of `session.vN` files. */
-const GENERATION_NAME = /^session(?:\.v(\d+))?\.jsonl(?:\.\w+)?$/
+import { isSessionGenerationFile, parseSessionGeneration } from './session-files.ts'
 
 export type DriftReason = 'changed' | 'missing' | 'extra' | 'newer-generation'
 
@@ -83,7 +81,7 @@ export async function detectCheckpointDrift(
     }
     let liveNames: string[]
     try {
-      liveNames = (await readdir(liveDir)).filter(name => GENERATION_NAME.test(name))
+      liveNames = (await readdir(liveDir)).filter(isSessionGenerationFile)
     } catch {
       liveNames = []
     }
@@ -108,11 +106,11 @@ export async function detectCheckpointDrift(
       reasons.add('changed')
     }
     for (const name of liveNames) {
-      const version = GENERATION_NAME.exec(name)?.[1]
+      const version = parseSessionGeneration(name)
       if (!recorded.has(name)) reasons.add('extra')
       if (version !== undefined && options?.formatVersion !== undefined
-        && Number(version) > options.formatVersion) {
-        newerGeneration = Math.max(newerGeneration ?? 0, Number(version))
+        && version > options.formatVersion) {
+        newerGeneration = Math.max(newerGeneration ?? 0, version)
         reasons.add('newer-generation')
       }
     }

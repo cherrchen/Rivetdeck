@@ -194,6 +194,23 @@ describe('detectCheckpointDrift', () => {
     expect(found?.candidates).toEqual([])
   })
 
+  it('ignores extension artifacts and noncanonical generation names', async () => {
+    const home = makeHome()
+    session(home, 'session.v4.jsonl.zstd', 'V4-BYTES')
+    seedCheckpoint(home, '1000', { 'session.v4.jsonl.zstd': 'V4-BYTES' })
+    // Extension-owned names, staged temporaries, and noncanonical version tags
+    // are not session history: no `extra` and no `newer-generation`.
+    session(home, 'session.jsonl.index', 'INDEX')
+    session(home, 'session.v4.jsonl.backup', 'BACKUP')
+    session(home, 'session.v9.jsonl.backup', 'BACKUP-V9')
+    session(home, 'session.v4.jsonl.tmp', 'STAGED')
+    session(home, 'session.v04.jsonl.zstd', 'LEADING-ZERO')
+    session(home, 'session.v0.jsonl.zstd', 'ZERO-TAGGED')
+    session(home, 'metadata.json', 'META')
+    const found = await detection(home)
+    expect(found?.candidates).toEqual([])
+  })
+
   it('does not flag generation files at or below the bundled version', async () => {
     const home = makeHome()
     session(home, 'session.v4.jsonl.zstd', 'V4-BYTES')

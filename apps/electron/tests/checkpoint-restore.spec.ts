@@ -161,16 +161,25 @@ describe('restoreSession', () => {
     const home = makeHome()
     liveSession(home, SESSION_DIR, {
       'session.v4.jsonl.zstd': 'POLLUTED', 'metadata.json': 'CURRENT',
+      'session.jsonl.index': 'LIVE-INDEX', 'session.v4.jsonl.backup': 'LIVE-BACKUP',
+      'session.v04.jsonl.zstd': 'NONCANONICAL', 'session.v4.jsonl.tmp': 'STAGE',
     })
     seedCheckpoint(home, '1000', [{
       sessionId: 'session-parent-1', dir: SESSION_DIR, header: PARENT,
-      files: { 'session.v4.jsonl.zstd': 'VERIFIED', 'metadata.json': 'OLD', 'removed.json': 'OLD' },
+      files: {
+        'session.v4.jsonl.zstd': 'VERIFIED', 'metadata.json': 'OLD', 'removed.json': 'OLD',
+        'session.jsonl.index': 'OLD-INDEX', 'session.v4.jsonl.backup': 'OLD-BACKUP',
+      },
     }])
     const outcome = await restore(home, 'session-parent-1').run
     expect(outcome.kind).toBe('restored')
     expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('VERIFIED')
     expect(read(join(home, 'sessions', SESSION_DIR, 'metadata.json'))).toBe('CURRENT')
     expect(existsSync(join(home, 'sessions', SESSION_DIR, 'removed.json'))).toBe(false)
+    expect(read(join(home, 'sessions', SESSION_DIR, 'session.jsonl.index'))).toBe('LIVE-INDEX')
+    expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.backup'))).toBe('LIVE-BACKUP')
+    expect(read(join(home, 'sessions', SESSION_DIR, 'session.v04.jsonl.zstd'))).toBe('NONCANONICAL')
+    expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.tmp'))).toBe('STAGE')
     if (outcome.kind !== 'restored') throw new Error('restore failed')
     expect(readdirSync(join(home, outcome.quarantine, 'sessions', SESSION_DIR))).toEqual(['session.v4.jsonl.zstd'])
   })

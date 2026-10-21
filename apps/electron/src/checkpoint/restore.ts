@@ -30,6 +30,7 @@ import {
 import type { ValidateSessions } from './capture.ts'
 import { createDurableDirectory, syncDirectory } from './files.ts'
 import { dequeuePendingRestore, type PendingRestoreRequestId } from './pending.ts'
+import { isSessionGenerationFile } from './session-files.ts'
 
 /** Held `session.lock` write lease; released by closing it. */
 export interface SessionLease {
@@ -48,13 +49,6 @@ export type AcquireSessionLease = (subject: SessionLeaseSubject) => Promise<Sess
 /** Staged replacement name inside the member dir, next to the canonical file. */
 function stagedName(canonical: string): string {
   return `${canonical}.restore.tmp`
-}
-
-/** True for session-generation files a restore owns inside a member dir. */
-function isOwnedSessionFile(name: string): boolean {
-  if (name === 'session.lock') return false
-  if (name.endsWith('.tmp')) return false
-  return /^session(?:\.v\d+)?\.jsonl(?:\.\w+)?$/.test(name)
 }
 
 /** Absolute member directory for a `sessions/`-relative journal dir. */
@@ -172,7 +166,7 @@ async function resumeMember(
   await createDurableDirectory(quarantineMemberDir, home)
   const fingerprints = new Map(member.liveFiles.map(entry => [entry.name, entry]))
   const publish = new Map(member.publish.map(entry => [entry.name, entry]))
-  const current = (await readdir(liveDir)).filter(isOwnedSessionFile)
+  const current = (await readdir(liveDir)).filter(isSessionGenerationFile)
 
   // Foreign-drift pre-check: a canonical file that is neither a recorded live
   // fingerprint nor our own already-published bytes appeared after the intent
@@ -254,8 +248,8 @@ async function applySwitch(
 ): Promise<void> {
   // Persisted intents may have been created by a build with a broader publish set.
   for (const member of journal.members) {
-    if (member.publish.some(plan => !isOwnedSessionFile(plan.name))
-      || member.liveFiles.some(file => !isOwnedSessionFile(file.name))) {
+    if (member.publish.some(plan => !isSessionGenerationFile(plan.name))
+      || member.liveFiles.some(file => !isSessionGenerationFile(file.name))) {
       throw new Error(`restore journal ${journal.id} includes files outside session history`)
     }
   }
@@ -421,7 +415,7 @@ async function uncoveredLiveSessions(
       if (!entry.isDirectory()) continue
       const dir = `${project.name}/${entry.name}`
       const names = await readdir(join(projectDir, entry.name))
-      if (!names.some(isOwnedSessionFile)) continue
+      if (!names.some(isSessionGenerationFile)) continue
       const live = observed.get(dir)
       if (live === undefined) {
         uncovered.add(dir)
@@ -552,7 +546,7 @@ export async function restoreSession(options: RestoreSessionOptions): Promise<Re
         liveFiles: [],
         publish: found.manifest.files
           .filter(file => file.path.startsWith(`sessions/${entry.dir}/`)
-            && isOwnedSessionFile(file.path.slice(`sessions/${entry.dir}/`.length)))
+            && isSessionGenerationFile(file.path.slice(`sessions/${entry.dir}/`.length)))
           .map(file => ({ name: file.path.slice(`sessions/${entry.dir}/`.length), digest: file.digest })),
       }
       // Acquire before fingerprinting: the lease proves no live writer, so
@@ -569,7 +563,7 @@ export async function restoreSession(options: RestoreSessionOptions): Promise<Re
       const liveFiles: RestoreFingerprint[] = []
       try {
         for (const name of await readdir(liveDir)) {
-          if (!isOwnedSessionFile(name)) continue
+          if (!isSessionGenerationFile(name)) continue
           const fileStat = await stat(join(liveDir, name), { bigint: true })
           liveFiles.push({ name, size: Number(fileStat.size), mtimeNs: String(fileStat.mtimeNs) })
         }
