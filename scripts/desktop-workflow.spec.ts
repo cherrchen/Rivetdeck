@@ -174,7 +174,10 @@ describe('Desktop synchronization and release workflows', () => {
     // The supervised Host's stdio wiring is Windows-only: the Linux job never opens
     // the null device, so a Windows runner is the only place the spawn path is real.
     const windowsJob = workflowJob(ci, 'windows-host-startup')
-    expect(windowsJob).toMatchObject({ 'runs-on': 'windows-latest' })
+    expect(windowsJob).toMatchObject({
+      'runs-on': '${{ matrix.os }}',
+      strategy: { 'fail-fast': false, matrix: { os: ['windows-latest', 'windows-11-arm'] } },
+    })
     if (!Array.isArray(windowsJob.steps)) {
       throw new TypeError('Desktop CI must define the Windows Host startup steps')
     }
@@ -185,6 +188,8 @@ describe('Desktop synchronization and release workflows', () => {
     expect(checkpointBuild?.run).toContain('build:main')
     const checkpointTest = windowsJob.steps.filter(isRecord).find(step => step.name === 'Test Windows checkpoint shutdown')
     expect(checkpointTest?.run).toBe('pnpm --filter @dsh-electron/dsh-electron exec vitest run --config vitest.ownership.config.ts tests/checkpoint-host.live.e2e.ts')
+    const checkpointUnits = windowsJob.steps.filter(isRecord).find(step => step.name === 'Test Windows checkpoint capture and restore')
+    expect(checkpointUnits?.run).toBe('pnpm exec vitest run apps/electron/tests/checkpoint')
 
     const packageJob = workflowJob(release, 'package')
     if (!isRecord(packageJob.strategy) || !isRecord(packageJob.strategy.matrix) || !Array.isArray(packageJob.strategy.matrix.include)) {

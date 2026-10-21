@@ -56,6 +56,8 @@ Git 产物验收比较原生文件系统路径，使 Windows 短路径名与 Git
 
 Checkpoint 捕获和恢复在发布暂存文件前，通过可写句柄将文件刷盘；Windows 的文件刷盘要求写入权限。POSIX 发布还同步暂存目录层级与隔离移动两侧的父目录。回归测试覆盖可写刷盘、目录同步失败、跨卷复制中断，以及删除 journal 前确认排队请求。
 
+Desktop CI 在原生 Windows x64 和 ARM64 runner 上运行 checkpoint 捕获、漂移检测、恢复以及真实 Host 关闭测试。漂移 fixture 将写入前后的修改时间固定为整秒，确保文件系统时间戳相同时仍能检测到大小变化。
+
 Electron 应用是私有安装程序，不作为 npm 发布成员。依赖同步使用 `workspace:^` 复制上游 CLI 的 workspace 依赖，排除实验性 peer 依赖，并保留可选 bundle 所需的稳定 peer 依赖；仓库的 `constraints` 检查对该应用执行此范围要求，并继续对上游包执行上游发布规则。
 
 仓库的 Python 集成测试要求 PATH 中的 `python3` 指向 CPython 3.10+。若 mise 提示 shim 未激活，可为命令激活已安装版本，例如 `mise exec python@3.13.12 -- pnpm test packages/experimental/code-runtime-python/tests/runtime.spec.ts packages/experimental/code-runtime-python/tests/boot-write-failure.spec.ts`。请使用本机已安装的版本；运行测试前，`python3 --version` 必须成功。

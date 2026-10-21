@@ -149,9 +149,13 @@ jobs:
         run: pnpm --filter @dsh-electron/dsh-electron test:network-runtime
 
   windows-host-startup:
-    name: Windows Host startup
+    name: ${{ matrix.os }} Host startup and checkpoints
     if: github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]' || github.base_ref == 'main'
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-11-arm]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
 
@@ -183,6 +187,9 @@ jobs:
 
       - name: Test Windows checkpoint shutdown
         run: pnpm --filter @dsh-electron/dsh-electron exec vitest run --config vitest.ownership.config.ts tests/checkpoint-host.live.e2e.ts
+
+      - name: Test Windows checkpoint capture and restore
+        run: pnpm exec vitest run apps/electron/tests/checkpoint
 
       - name: Test Windows Network Runtime
         run: pnpm --filter @dsh-electron/dsh-electron test:network-runtime

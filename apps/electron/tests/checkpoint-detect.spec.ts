@@ -304,14 +304,18 @@ describe('detectCheckpointDrift', () => {
 })
 
 describe('confirmUnreadable', () => {
-  it('confirms only candidates that fail the live read path', async () => {
+  it('confirms only unreadable candidates when changed bytes share the recorded mtime', async () => {
     const home = makeHome()
     session(home, 'session.v4.jsonl.zstd', 'V4-BYTES')
+    const path = join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd')
+    // Whole seconds round-trip on Windows; size drift must survive an unchanged mtime.
+    utimesSync(path, 1, 1)
     const manifest = seedCheckpoint(home, '1000', { 'session.v4.jsonl.zstd': 'V4-BYTES' })
-    // A different-length rewrite drifts on size alone; equal-length content
-    // would rely on mtime granularity the test cannot guarantee.
     session(home, 'session.v4.jsonl.zstd', 'POLLUTED-DATA')
+    utimesSync(path, 1, 1)
+    expect(String(statSync(path, { bigint: true }).mtimeNs)).toBe(manifest.files[0]?.source?.mtimeNs)
     const found = await detection(home)
+    expect(found?.candidates.map(candidate => candidate.reasons)).toEqual([['changed']])
     const report = (ok: boolean): CheckpointValidationReport => ({
       sessionFormatVersion: 4,
       sessions: [{ sessionId: SESSION_ID, dir: SESSION_DIR, ok, ...(ok ? {} : { error: 'refusal' }) }],
