@@ -163,12 +163,14 @@ describe('restoreSession', () => {
       'session.v4.jsonl.zstd': 'POLLUTED', 'metadata.json': 'CURRENT',
       'session.jsonl.index': 'LIVE-INDEX', 'session.v4.jsonl.backup': 'LIVE-BACKUP',
       'session.v04.jsonl.zstd': 'NONCANONICAL', 'session.v4.jsonl.tmp': 'STAGE',
+      'session.jsonl': 'LIVE-PLAINTEXT', 'session.v9.jsonl': 'LIVE-PLAINTEXT-V9',
     })
     seedCheckpoint(home, '1000', [{
       sessionId: 'session-parent-1', dir: SESSION_DIR, header: PARENT,
       files: {
         'session.v4.jsonl.zstd': 'VERIFIED', 'metadata.json': 'OLD', 'removed.json': 'OLD',
         'session.jsonl.index': 'OLD-INDEX', 'session.v4.jsonl.backup': 'OLD-BACKUP',
+        'session.jsonl': 'OLD-PLAINTEXT',
       },
     }])
     const outcome = await restore(home, 'session-parent-1').run
@@ -180,6 +182,10 @@ describe('restoreSession', () => {
     expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.backup'))).toBe('LIVE-BACKUP')
     expect(read(join(home, 'sessions', SESSION_DIR, 'session.v04.jsonl.zstd'))).toBe('NONCANONICAL')
     expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.tmp'))).toBe('STAGE')
+    // The opposite encoding's generations are foreign to the mounted backend:
+    // live residue is neither quarantined nor overwritten by captured copies.
+    expect(read(join(home, 'sessions', SESSION_DIR, 'session.jsonl'))).toBe('LIVE-PLAINTEXT')
+    expect(read(join(home, 'sessions', SESSION_DIR, 'session.v9.jsonl'))).toBe('LIVE-PLAINTEXT-V9')
     if (outcome.kind !== 'restored') throw new Error('restore failed')
     expect(readdirSync(join(home, outcome.quarantine, 'sessions', SESSION_DIR))).toEqual(['session.v4.jsonl.zstd'])
   })

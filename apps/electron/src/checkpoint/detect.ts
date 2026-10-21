@@ -71,7 +71,9 @@ export async function detectCheckpointDrift(
     const recorded = new Map<string, { size: number; mtimeNs: string; sha256: string; hasSource: boolean; carried: boolean }>()
     for (const file of manifest.files) {
       if (!file.path.startsWith(`sessions/${entry.dir}/`)) continue
-      recorded.set(file.path.slice(`sessions/${entry.dir}/`.length), {
+      const name = file.path.slice(`sessions/${entry.dir}/`.length)
+      if (!isSessionGenerationFile(name)) continue
+      recorded.set(name, {
         size: file.source?.size ?? -1,
         mtimeNs: file.source?.mtimeNs ?? '',
         sha256: file.digest.sha256,

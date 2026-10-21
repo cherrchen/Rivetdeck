@@ -15,6 +15,7 @@ import { pathToFileURL } from 'node:url'
 import type { CheckpointValidationReport, SessionValidationResult } from './capture.ts'
 import type { CheckpointSessionHeader } from './manifest.ts'
 import type { ListLiveSessions } from './restore.ts'
+import { SESSION_LOG_COMPRESSION } from './session-files.ts'
 
 /** Minimal typed surface of `@deepseek-ai/dsh-session-persistence-jsonl` used here. */
 interface BackendModule {
@@ -139,8 +140,8 @@ export interface MountedSessionsBackend {
 /**
  * Mount the bundled JSONL backend on one sessions root in-process. Restore
  * uses this in Main for `acquireWriteLease`; validation uses it inside the
- * worker. `compression` matches the deployment (backend default is zstd and
- * the base patch sets no override).
+ * worker. `compression` is {@link SESSION_LOG_COMPRESSION} — the single
+ * deployment encoding the checkpoint filename grammar mirrors.
  */
 export async function mountSessionsBackend(
   sessionsRoot: string,
@@ -149,7 +150,7 @@ export async function mountSessionsBackend(
   const { backend, cordis, session } = await loadBackendModules(installAnchor)
   const ctx = new cordis.Context()
   try {
-    await ctx.plugin(backend.default, { root: sessionsRoot, compression: 'zstd' })
+    await ctx.plugin(backend.default, { root: sessionsRoot, compression: SESSION_LOG_COMPRESSION })
   } catch (error) {
     await ctx.fiber.dispose().catch(() => undefined)
     throw error
