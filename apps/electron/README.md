@@ -56,7 +56,7 @@ Git artifact acceptance compares native filesystem paths so Windows short names 
 
 Checkpoint capture and restore flush staged files through writable handles before publishing them; Windows requires write access for file flushes. POSIX publication also flushes the staged directory hierarchy and both parents of quarantine moves. Regression tests cover writable flushes, directory-sync failure, cross-volume copy interruption, and pending-request acknowledgment before journal deletion.
 
-Desktop CI runs checkpoint capture, drift detection, restore, and live Host shutdown tests on native Windows x64 and ARM64 runners. Drift fixtures pin whole-second modification times across writes so size changes remain detectable when filesystem timestamps coincide.
+Desktop CI runs checkpoint capture, drift detection, restore, and live Host shutdown tests on native Windows x64 and ARM64 runners. The checkpoint unit step and release Electron suite use the repository's 90-second test and cleanup budget for real file copies, flushes, and journal publication. Drift fixtures pin whole-second modification times across writes so size changes remain detectable when filesystem timestamps coincide.
 
 The Electron application is a private installer, not an npm release member. Its dependency sync copies upstream CLI workspace dependencies using `workspace:^`, excludes experimental peers, and retains stable peers required by optional bundles; the repository's `constraints` check applies that range to this application and keeps the upstream publication rules on upstream packages.
 

@@ -190,8 +190,12 @@ describe('Desktop synchronization and release workflows', () => {
     expect(checkpointTest?.run).toBe('pnpm --filter @dsh-electron/dsh-electron exec vitest run --config vitest.ownership.config.ts tests/checkpoint-host.live.e2e.ts')
     const checkpointUnits = windowsJob.steps.filter(isRecord).find(step => step.name === 'Test Windows checkpoint capture and restore')
     expect(checkpointUnits?.run).toBe('pnpm exec vitest run apps/electron/tests/checkpoint')
+    expect(checkpointUnits?.env).toMatchObject({ DSH_COVERAGE_TEST_TIMEOUT_MS: '90000' })
 
     const packageJob = workflowJob(release, 'package')
+    if (!Array.isArray(packageJob.steps)) throw new TypeError('Desktop release must define packaging steps')
+    const releaseTest = packageJob.steps.filter(isRecord).find(step => step.name === 'Test Electron runtime')
+    expect(releaseTest?.env).toMatchObject({ DSH_COVERAGE_TEST_TIMEOUT_MS: '90000' })
     if (!isRecord(packageJob.strategy) || !isRecord(packageJob.strategy.matrix) || !Array.isArray(packageJob.strategy.matrix.include)) {
       throw new TypeError('Desktop release package job must define an include matrix')
     }

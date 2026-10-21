@@ -189,6 +189,9 @@ jobs:
         run: pnpm --filter @dsh-electron/dsh-electron exec vitest run --config vitest.ownership.config.ts tests/checkpoint-host.live.e2e.ts
 
       - name: Test Windows checkpoint capture and restore
+        env:
+          # Real file copies, flushes, and journal publication use the native-test budget.
+          DSH_COVERAGE_TEST_TIMEOUT_MS: '90000'
         run: pnpm exec vitest run apps/electron/tests/checkpoint
 
       - name: Test Windows Network Runtime
