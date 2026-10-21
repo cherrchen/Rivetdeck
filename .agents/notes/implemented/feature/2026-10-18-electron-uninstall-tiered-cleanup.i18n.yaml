@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for 2026-10-18-electron-uninstall-tiered-cleanup.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-18-electron-uninstall-tiered-cleanup.md
+/agent-note-electron-uninstall-uses-tiered-data-cleanup:
+  en: b3c703876acf7089
+  zh: f109ee85e95d3d16
+/agent-note-electron-uninstall-uses-tiered-data-cleanup/problem:
+  en: bb007a86732ddd8b
+  zh: 31365dec3e8d3a5b
+/agent-note-electron-uninstall-uses-tiered-data-cleanup/decision:
+  en: a84ba2b23fdc2e4a
+  zh: ab5ac379361be1f7
+/agent-note-electron-uninstall-uses-tiered-data-cleanup/external-precedents:
+  en: a076ca2420800999
+  zh: f2fa888a1f0443be
+/agent-note-electron-uninstall-uses-tiered-data-cleanup/upstream-port-basis:
+  en: 2c184500768dd0bd
+  zh: f9f2f2c87e24a463
+/agent-note-electron-uninstall-uses-tiered-data-cleanup/alternatives-considered:
+  en: 179ad48e640cf8de
+  zh: 3993923f8729316b
+/agent-note-electron-uninstall-uses-tiered-data-cleanup/deferred:
+  en: 7774e29989633298
+  zh: 5d083d2c52404dd8
+/agent-note-electron-uninstall-uses-tiered-data-cleanup/consequences:
+  en: 22934fc65ea452e1
+  zh: d869bae4bbb20703

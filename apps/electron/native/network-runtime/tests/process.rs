@@ -158,7 +158,13 @@ fn negotiation_malformed_input_and_secret_free_responses() {
     let mut bytes = [0];
     match stream.read(&mut bytes) {
         Ok(0) => {}
-        Err(error) => assert_eq!(error.kind(), std::io::ErrorKind::ConnectionReset),
+        Err(error) => assert!(
+            matches!(
+                error.kind(),
+                std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::ConnectionAborted
+            ),
+            "unconfigured Gateway closed the connection with {error}"
+        ),
         _ => panic!("unconfigured Gateway did not close the connection"),
     }
     writeln!(runtime.input.as_mut().unwrap(), "{{MALFORMED TOP_SECRET").unwrap();

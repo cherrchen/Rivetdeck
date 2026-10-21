@@ -69,7 +69,7 @@ it('generates checked Windows ZIP extraction while retaining default NSIS compil
   try {
     await prepare({ electronPlatformName: 'darwin', packager: { projectDir } })
     expect(existsSync(join(projectDir, '.electron-build/nsis'))).toBe(false)
-    const sevenZip = String.raw`C:\Program Files\7-Zip\7za.exe`
+    const sevenZip = String.raw`C:\Program Files\$&-7-Zip\7za.exe`
     await prepareWindowsInstallerScript(projectDir, sevenZip)
     const extraction = await readFile(join(projectDir, '.electron-build/nsis/extractAppPackage.nsh'), 'utf8')
     expect(extraction).toContain(`File /oname=$PLUGINSDIR\\dsh-7za.exe "${sevenZip}"`)
@@ -81,6 +81,8 @@ it('generates checked Windows ZIP extraction while retaining default NSIS compil
     expect(extraction).not.toContain('nsisunz::Unzip')
     const include = await readFile(join(projectDir, '.electron-build/nsis/include.nsh'), 'utf8')
     expect(include).toContain('!cd')
+    expect(include).toContain(`!include "${join(projectDir, '.electron-build/nsis/uninstall-strings.nsh')}"`)
+    expect(include).toContain(`!include "${join(projectDir, '.electron-build/nsis/uninstall.nsh')}"`)
     const section = await readFile(join(projectDir, '.electron-build/nsis/installSection.nsh'), 'utf8')
     expect(section).toContain(`!include "${join(projectDir, '.electron-build/nsis/installer.nsh')}"`)
     const installer = await readFile(join(projectDir, '.electron-build/nsis/installer.nsh'), 'utf8')
@@ -89,5 +91,194 @@ it('generates checked Windows ZIP extraction while retaining default NSIS compil
     const uninstaller = await readFile(join(projectDir, '.electron-build/nsis/uninstaller.nsh'), 'utf8')
     expect(uninstaller).toContain('Function un.onInit')
     expect(uninstaller).toContain('Section "un.${UNINSTALL_SECTION_NAME}"')
+    // The stock --delete-app-data bypass must be gone; install-dir removal keeps
+    // the extended-length prefix so deep installation directories still clean.
+    expect(uninstaller).not.toContain('isDeleteAppData')
+    expect(uninstaller).not.toContain('RMDir /r "$APPDATA')
+    expect(uninstaller).toContain('RMDir /r "\\\\?\\$INSTDIR"')
   } finally { await rm(projectDir, { recursive: true, force: true }) }
+})
+
+it('wires the layered data-cleanup uninstaller through the native helper', async () => {
+  const { mkdtemp, rm } = await import('node:fs/promises')
+  const { tmpdir } = await import('node:os')
+  const { prepareWindowsInstallerScript } = await import('../scripts/prepare-windows-installer.mjs')
+  const electronRoot = join(import.meta.dirname, '..')
+  const projectDir = await mkdtemp(join(tmpdir(), 'dsh-nsis-'))
+  try {
+    await prepareWindowsInstallerScript(projectDir, 'C:\\tools\\7za.exe',
+      { helperDll: 'C:\\build\\rivetdeck-uninstall.dll', updaterCacheName: 'rivetdeck-updater' })
+    const output = join(projectDir, '.electron-build/nsis')
+    const nsh = await readFile(join(output, 'uninstall.nsh'), 'utf8')
+
+    // Replacement and update flows keep data; the record beside the default userData is
+    // outside $INSTDIR, so it already survives for the succeeding install.
+    // Options are parsed with FileFunc, not the StdUtils-backed flag macros: the custom
+    // functions compile before the plugin directory registers StdUtils.
+    expect(nsh).toContain('${GetOptions} $R0 "--updated"')
+    expect(nsh).toContain('/KEEP_APP_DATA')
+    expect(nsh).not.toContain('$INSTDIR\\${RIVETDECK_PATH_HISTORY}')
+    expect(nsh).not.toContain('CopyFiles')
+    // ${FileExists} reads an unqueryable path as absent, so every probe feeding the
+    // completeness seed or gating retirement goes through GetFileAttributesW and
+    // treats an indeterminate answer conservatively. The `?e` option captures the
+    // failure's error code inside the same call — a second System::Call would reset
+    // the thread's last error before GetLastError could read it.
+    expect(nsh).toContain('!macro RivetdeckProbePath path')
+    expect(nsh).toContain('kernel32::GetFileAttributesW(w ${path}) i .R8 ?e')
+    expect(nsh).toContain('Pop $R9')
+    expect(nsh).toContain('$R9 == 2')
+    expect(nsh).toContain('$R9 == 3')
+    expect(nsh).not.toContain('kernel32::GetLastError')
+    expect(nsh).toContain('StrCpy $R8 "absent"')
+    expect(nsh).toContain('StrCpy $R8 "error"')
+    expect(nsh).not.toContain('${FileExists}')
+    expect(nsh.split('!insertmacro RivetdeckProbePath "$APPDATA\\${RIVETDECK_PATH_HISTORY}"')).toHaveLength(3)
+    // Directory probes confirm an "absent" verdict through FindFirst on a second
+    // channel before it may attest completeness.
+    expect(nsh).toContain('!macro RivetdeckProbeDir path')
+    expect(nsh).toContain('FindFirst $1 $3 $2')
+    expect(nsh).toContain('FindClose $1')
+    // Retirement only appends to a record that exists: a bare "retired=1" file
+    // fabricated by an append-mode open would block every later seed.
+    const retireMacro = nsh.slice(nsh.indexOf('!macro RivetdeckRetireHistory'), nsh.indexOf('!ifndef BUILD_UNINSTALLER'))
+    expect(retireMacro).toContain('FileOpen $1 "$APPDATA\\${RIVETDECK_PATH_HISTORY}" r')
+    expect(retireMacro).toContain('FileOpen $0 "$APPDATA\\${RIVETDECK_PATH_HISTORY}" a')
+    expect(retireMacro).toContain('${If} $R8 != "absent"')
+    expect(retireMacro).toContain('SetErrors')
+    expect(nsh).toContain('FileWrite $0 "complete=1$\\r$\\n"')
+    // Fresh installs seed the record beside userData so the app can always rewrite it;
+    // active records survive replacements. The install flags cannot detect a fresh
+    // install — /currentuser forces $hasPerUserInstallation to 1.
+    expect(nsh).toContain('FileOpen $0 "$APPDATA\\${RIVETDECK_PATH_HISTORY}" w')
+    expect(nsh).not.toContain('$hasPerUserInstallation')
+    const installMacro = nsh.slice(nsh.indexOf('!macro customInstall'), nsh.indexOf('!macro customUnInstall'))
+    // Seeding is a fresh-install act: a registered replacement retains the active
+    // record even if the probe cannot find it. Before truncating on a reported
+    // absence, a readable open confirms it through an independent channel.
+    expect(installMacro).toContain('${AndIf} $rivetdeckPreviousInstall == "0"')
+    expect(installMacro).toContain('FileOpen $1 "$APPDATA\\${RIVETDECK_PATH_HISTORY}" r')
+    // Unregistered legacy installs can still leave data containing an unrecorded home.
+    expect(installMacro).toContain('!insertmacro RivetdeckProbeDir "$APPDATA\\${APP_FILENAME}"')
+    expect(installMacro).toContain('${If} $R8 == "absent"')
+    expect(installMacro).toContain('${AndIf} $rivetdeckLegacyUpdaterCache == "0"')
+    expect(installMacro).toContain('FileWrite $0 "complete=0$\\r$\\n"')
+    // installApplicationFiles stores a copy of the installer inside the updater cache
+    // before customInstall runs, so legacy cache presence is sampled during .onInit.
+    const initMacro = nsh.slice(nsh.indexOf('!macro customInit'), nsh.indexOf('!macro customInstall'))
+    expect(initMacro).toContain('!insertmacro RivetdeckProbeDir "$LOCALAPPDATA\\${RIVETDECK_UPDATER_CACHE}"')
+    expect(initMacro).toContain('${if} $R8 == "absent"')
+    expect(initMacro).toContain('StrCpy $rivetdeckLegacyUpdaterCache "1"')
+    expect(initMacro).toContain('StrCpy $rivetdeckLegacyUpdaterCache "0"')
+    expect(initMacro).toContain('SetShellVarContext current')
+    expect(initMacro).toContain('SetShellVarContext all')
+    expect(nsh.match(/^Var rivetdeckLegacyUpdaterCache$/gm)).toHaveLength(1)
+    expect(nsh).not.toContain('Var /GLOBAL rivetdeckLegacyUpdaterCache')
+    expect(initMacro).toContain('ReadRegStr $R0 HKCU "${UNINSTALL_REGISTRY_KEY}" UninstallString')
+    expect(initMacro).toContain('ReadRegStr $R1 HKLM "${UNINSTALL_REGISTRY_KEY}" UninstallString')
+    expect(initMacro).toContain('!insertmacro RivetdeckRetireHistory')
+    expect(initMacro).toContain('SetErrorLevel 1')
+    expect(initMacro).toContain('Abort')
+    expect(installMacro).not.toContain('FileExists} "$LOCALAPPDATA')
+    // Electron data is always per-user: under an all-users install the section runs in
+    // the "all" shell context where $APPDATA is ProgramData, so the seed brackets its
+    // write with the same context switch the uninstall side uses.
+    expect(installMacro).toContain('SetShellVarContext current')
+    expect(installMacro).toContain('SetShellVarContext all')
+
+    // History, env protection, tiered targets, and the updater cache reach the helper.
+    expect(nsh).toContain('ReadEnvStr $UnHome DSH_HOME')
+    expect(nsh).toContain('StrCpy $UnTarget "$APPDATA\\${APP_FILENAME}"')
+    expect(nsh).toContain('StrCpy $UnHistory "$APPDATA\\${RIVETDECK_PATH_HISTORY}"')
+    expect(nsh).toContain('$LOCALAPPDATA\\${RIVETDECK_UPDATER_CACHE}')
+    expect(nsh).toContain('!define RIVETDECK_UPDATER_CACHE "rivetdeck-updater"')
+    expect(nsh).toContain('File "/oname=$PLUGINSDIR\\rivetdeck-uninstall.dll" "${RIVETDECK_UNINSTALL_HELPER}"')
+    // The bundled NSIS 3.0.4.1 System parser cannot quote a DLL path in a proc spec.
+    expect(nsh).toContain('kernel32::LoadLibraryW(w "$PLUGINSDIR\\rivetdeck-uninstall.dll") p .R4')
+    expect(nsh).toContain('kernel32::GetProcAddress(p R4, m "UninstallCleanup") p .R3')
+    expect(nsh).toContain('${If} $R4 != 0')
+    expect(nsh).toContain('${If} $R3 != 0')
+    expect(nsh).toContain('::$R3(w "$UnTarget", w "$INSTDIR", w "$UnHome", w "$UnHistory"')
+    expect(nsh).toContain('kernel32::FreeLibrary(p R4)')
+    expect(nsh).not.toContain('rivetdeck-uninstall.dll"::')
+    expect(nsh).toContain('${GetOptions} $R0 "--delete-app-data"')
+    expect(nsh).toContain('DetailPrint "$(RIVETDECK_UNINSTALL_RESIDUE)"')
+    expect(nsh).toContain('*i .R7, *i .R9) i .R8 ?cr')
+    expect(nsh).toContain('Pop $R5')
+    expect(nsh).toContain('${If} $R5 != "ok"')
+    expect(nsh).toContain('${If} $R8 != 0')
+    expect(nsh).toContain('${OrIf} $R9 != 0')
+    expect(nsh).toContain('${If} $R7 > 0\n  ${AndIf} $R9 == 0')
+    for (const key of ['HELPER_ERROR', 'ERROR', 'REPORT_ERROR', 'SKIPPED']) {
+      expect(nsh).toContain(`$(RIVETDECK_UNINSTALL_${key})`)
+    }
+    expect(nsh).toContain('SetDetailsView show')
+    expect(nsh).toContain('MessageBox MB_OK|MB_ICONEXCLAMATION')
+    expect(nsh).toContain('!macro customUnInstall')
+    expect(nsh).toContain('!macro customInstall')
+    expect(nsh).toContain('Call un.RivetdeckCleanData')
+    expect(nsh).not.toContain('RMDir')
+
+    // The custom include is parsed before the stock script loads LogicLib/FileFunc, so the
+    // file provides them itself; function bodies must not touch variables multiUser.nsh
+    // only declares later (the shell-context switch lives in the expanding macro instead).
+    expect(nsh.indexOf('!include "LogicLib.nsh"')).toBeLessThan(nsh.indexOf('Function un.'))
+    expect(nsh.indexOf('!include "FileFunc.nsh"')).toBeLessThan(nsh.indexOf('Function un.'))
+    const functions = nsh.slice(nsh.indexOf('Function un.'))
+    expect(functions).not.toContain('$installMode')
+    const retirement = functions.indexOf('!insertmacro RivetdeckRetireHistory')
+    expect(retirement).toBeGreaterThan(functions.indexOf('kernel32::FreeLibrary'))
+    expect(functions.slice(0, retirement).match(/    Return/g)).toHaveLength(2)
+    expect(nsh).toContain('retired=1$\\r$\\n')
+    expect(nsh).toContain('$(RIVETDECK_HISTORY_ERROR)')
+
+    // Localized residue text is generated from the owned dictionary, not hardcoded.
+    const strings = await readFile(join(output, 'uninstall-strings.nsh'), 'utf8')
+    expect(strings).toContain('LangString RIVETDECK_UNINSTALL_RESIDUE 1033 ')
+    expect(strings).toContain('LangString RIVETDECK_UNINSTALL_RESIDUE 2052 ')
+    for (const language of [1033, 2052]) {
+      for (const key of ['HELPER_ERROR', 'ERROR', 'REPORT_ERROR', 'SKIPPED']) {
+        expect(strings).toContain(`LangString RIVETDECK_UNINSTALL_${key} ${language} `)
+      }
+    }
+    const messages = await readFile(join(electronRoot, 'installer/uninstall-messages.yml'), 'utf8')
+    expect(messages).toContain('RIVETDECK_UNINSTALL_RESIDUE')
+    expect(messages).toContain('zh:')
+
+    // The native helper and its orchestration exist and export the System::Call entry.
+    const helper = await readFile(join(electronRoot, 'installer/uninstall-data.cpp'), 'utf8')
+    expect(helper).toContain('UninstallCleanup')
+    expect(helper).toContain('__cdecl')
+    const orchestration = await readFile(join(electronRoot, 'installer/uninstall-cleanup.h'), 'utf8')
+    for (const claim of ['managed-toolchains', 'active.json', 'Partitions', 'GPUCache',
+      'L"userData"', 'L"dshHome"', 'L"complete"', 'installation.pending']) {
+      expect(orchestration).toContain(claim)
+    }
+    for (const required of ['LoadHistory', 'VerifyManagedToolchains', 'VerifyShimDirectory',
+      'VerifyUpdaterCache', 'CheckUserDataAttribution', 'QueryPath', 'unresolvableProtection',
+      'desktop-preferences.json', 'network-secrets']) {
+      expect(orchestration).toContain(required)
+    }
+    const primitives = await readFile(join(electronRoot, 'installer/uninstall-data.h'), 'utf8')
+    for (const required of ['FILE_FLAG_OPEN_REPARSE_POINT', 'Pin', 'RemoveTree',
+      'RemoveEmptyParents', 'Contains']) {
+      expect(primitives).toContain(required)
+    }
+    expect(existsSync(join(electronRoot, 'tests/windows-uninstall-data.cpp'))).toBe(true)
+    expect(existsSync(join(electronRoot, 'scripts/prepare-windows-uninstall-helper.ps1'))).toBe(true)
+
+    // The launch-time recorder writes the same file the uninstaller reads.
+    const main = await readFile(join(electronRoot, 'src/main.ts'), 'utf8')
+    expect(main).toContain('mergeLaunchPathHistory')
+    const recorder = await readFile(join(electronRoot, 'src/path-history.ts'), 'utf8')
+    expect(recorder).toContain("PATH_HISTORY_FILE = 'rivetdeck-path-history.ini'")
+  } finally { await rm(projectDir, { recursive: true, force: true }) }
+})
+
+it('escapes NSIS metacharacters in generated LangStrings', async () => {
+  const { renderNsisStrings } = await import('../scripts/prepare-windows-installer.mjs')
+  // A literal $ doubles; quotes and line breaks use $\-escapes so the dictionary text
+  // cannot break out of its LangString or feed variables to the compiler.
+  const strings = renderNsisStrings({ MSG: { en: 'costs $5 "now"\r\nnext' } })
+  expect(strings).toContain('LangString MSG 1033 "costs $$5 $\\"now$\\"$\\r$\\nnext"')
 })

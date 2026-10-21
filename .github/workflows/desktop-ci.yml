@@ -277,6 +277,12 @@ jobs:
           $installer = (Get-ChildItem dist/electron -Filter '*.exe' -File | Select-Object -First 1).FullName
           if (-not $installer) { throw 'Windows NSIS installer is missing.' }
           ./apps/electron/scripts/smoke-windows-installer.ps1 -InstallerPath $installer -Architecture x64
+      - name: Verify Windows uninstall data scenarios
+        if: runner.os == 'Windows'
+        run: |
+          $installer = (Get-ChildItem dist/electron -Filter '*.exe' -File | Select-Object -First 1).FullName
+          if (-not $installer) { throw 'Windows NSIS installer is missing.' }
+          ./apps/electron/scripts/smoke-windows-uninstall-scenarios.ps1 -InstallerPath $installer
       - name: Smoke-test runtime lifecycle and Core plugins (Windows)
         if: runner.os == 'Windows'
         run: |

@@ -1,0 +1,25 @@
+# Bilingual-pair consistency record for uninstall-data-cleanup.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/electron/uninstall-data-cleanup.md
+/uninstall-and-data-cleanup:
+  en: 4e646c04fb5caa7c
+  zh: bd573a8f250c78a7
+/uninstall-and-data-cleanup/current-uninstall-behavior:
+  en: be4d726368eac014
+  zh: 5309b417f23fb5e0
+/uninstall-and-data-cleanup/write-locations-and-ownership:
+  en: be726c2bf4526107
+  zh: da558a02f739704b
+/uninstall-and-data-cleanup/path-history-and-protection:
+  en: 4483cde5bb9ea5ab
+  zh: 8c0c6c20b47919cc
+/uninstall-and-data-cleanup/deletion-rules:
+  en: a1333e192a7cd762
+  zh: cd5c8237fad8948e
+/uninstall-and-data-cleanup/other-platforms:
+  en: 4969a619819dd2c4
+  zh: 471023fd6f4b52e5
+/uninstall-and-data-cleanup/known-limitations:
+  en: 330862a3f1d96a39
+  zh: 49b1b61df60f96c8

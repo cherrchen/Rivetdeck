@@ -1,4 +1,5 @@
-/** Real packaged Desktop smoke; --startup-only checks Core boot without advancing onboarding. */
+/** Real packaged Desktop smoke; --startup-only checks Core boot without advancing onboarding.
+ * A supplied --user-data-dir is caller-owned and survives scratch cleanup. */
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
@@ -13,8 +14,10 @@ const executablePath = resolve(process.argv[2])
 const artifactsIndex = process.argv.indexOf('--artifacts')
 assert.ok(artifactsIndex === -1 || (process.argv[artifactsIndex + 1] && !process.argv[artifactsIndex + 1].startsWith('--')), '--artifacts requires an output directory')
 const artifacts = artifactsIndex === -1 ? undefined : resolve(process.argv[artifactsIndex + 1])
+const userDataIndex = process.argv.indexOf('--user-data-dir')
+assert.ok(userDataIndex === -1 || (process.argv[userDataIndex + 1] && !process.argv[userDataIndex + 1].startsWith('--')), '--user-data-dir requires a directory')
 const scratch = await createSmokeScratch('dsh-runtime-smoke-', process.argv.includes('--store'))
-const userData = join(scratch, 'userData')
+const userData = userDataIndex === -1 ? join(scratch, 'userData') : resolve(process.argv[userDataIndex + 1])
 const env = { ...process.env, DSH_HOME: join(scratch, 'harness'), DSH_TELEMETRY_DISABLED: '1' }
 delete env.ELECTRON_RUN_AS_NODE
 if (process.argv.includes('--offline')) {

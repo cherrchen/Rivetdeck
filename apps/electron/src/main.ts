@@ -65,6 +65,7 @@ import { readDesktopManifest, resolveUpdateRepository, usesStoreUpdates } from '
 import { microsoftStoreUpdateMenu } from './store-update-menu.ts'
 import { RENDERER_ENTRY_URL, RENDERER_ORIGIN } from './bridge-types.ts'
 import { DesktopPreferencesStore, loadUpdateChannel, saveUpdateChannel, type UpdateChannel } from './preferences.ts'
+import { mergeLaunchPathHistory } from './path-history.ts'
 import { DesktopNetworkController } from './network/controller.ts'
 import { ElectronProxyApplier } from './network/electron-proxy.ts'
 import { presentNetworkFailure } from './network/failure-dialog.ts'
@@ -792,9 +793,20 @@ if (!primaryInstance) {
   app.quit()
 } else {
   void app.whenReady().then(async () => {
-    installRendererProtocol(resolveRendererRoot(app.getAppPath()), transport.harnessProxy)
     const appPath = app.getAppPath()
     const userDataPath = app.getPath('userData')
+    harnessHome = process.env.DSH_HOME ?? resolveHarnessHome(app.getPath('home'))
+    // Startup must stop if protection cannot be persisted: an older complete record
+    // cannot authorize cleanup after this launch starts using an unrecorded home.
+    if (process.platform === 'win32' && app.isPackaged) {
+      await mergeLaunchPathHistory({
+        appDataDir: app.getPath('appData'),
+        defaultUserData: join(app.getPath('appData'), app.name),
+        userData: userDataPath,
+        dshHome: harnessHome,
+      })
+    }
+    installRendererProtocol(resolveRendererRoot(appPath), transport.harnessProxy)
     network = new DesktopNetworkController({
       userDataPath,
       preferences: new DesktopPreferencesStore(userDataPath),
@@ -889,7 +901,6 @@ if (!primaryInstance) {
           console.error('desktop checkpoint: open-time restore prompt failed', error)
         })
     }
-    harnessHome = process.env.DSH_HOME ?? resolveHarnessHome(app.getPath('home'))
     // Pending restores confirmed during the last run execute in this pre-Host
     // window; then stat-diff + vN scan + worker confirmation surface foreign
     // writes and offer an in-place restore before the Host can read live data.
