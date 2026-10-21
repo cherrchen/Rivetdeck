@@ -163,7 +163,6 @@ describe('restoreSession', () => {
       'session.v4.jsonl.zstd': 'POLLUTED', 'metadata.json': 'CURRENT',
       'session.jsonl.index': 'LIVE-INDEX', 'session.v4.jsonl.backup': 'LIVE-BACKUP',
       'session.v04.jsonl.zstd': 'NONCANONICAL', 'session.v4.jsonl.tmp': 'STAGE',
-      'session.jsonl': 'LIVE-PLAINTEXT', 'session.v9.jsonl': 'LIVE-PLAINTEXT-V9',
     })
     seedCheckpoint(home, '1000', [{
       sessionId: 'session-parent-1', dir: SESSION_DIR, header: PARENT,
@@ -178,16 +177,33 @@ describe('restoreSession', () => {
     expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.zstd'))).toBe('VERIFIED')
     expect(read(join(home, 'sessions', SESSION_DIR, 'metadata.json'))).toBe('CURRENT')
     expect(existsSync(join(home, 'sessions', SESSION_DIR, 'removed.json'))).toBe(false)
+    // A captured copy under the opposite encoding is never published.
+    expect(existsSync(join(home, 'sessions', SESSION_DIR, 'session.jsonl'))).toBe(false)
     expect(read(join(home, 'sessions', SESSION_DIR, 'session.jsonl.index'))).toBe('LIVE-INDEX')
     expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.backup'))).toBe('LIVE-BACKUP')
     expect(read(join(home, 'sessions', SESSION_DIR, 'session.v04.jsonl.zstd'))).toBe('NONCANONICAL')
     expect(read(join(home, 'sessions', SESSION_DIR, 'session.v4.jsonl.tmp'))).toBe('STAGE')
-    // The opposite encoding's generations are foreign to the mounted backend:
-    // live residue is neither quarantined nor overwritten by captured copies.
-    expect(read(join(home, 'sessions', SESSION_DIR, 'session.jsonl'))).toBe('LIVE-PLAINTEXT')
-    expect(read(join(home, 'sessions', SESSION_DIR, 'session.v9.jsonl'))).toBe('LIVE-PLAINTEXT-V9')
     if (outcome.kind !== 'restored') throw new Error('restore failed')
     expect(readdirSync(join(home, outcome.quarantine, 'sessions', SESSION_DIR))).toEqual(['session.v4.jsonl.zstd'])
+  })
+
+  it('conflicts on an opposite-encoding generation instead of switching past it', async () => {
+    const home = makeHome()
+    liveSession(home, SESSION_DIR, {
+      'session.v4.jsonl.zstd': 'POLLUTED', 'session.jsonl': 'FOREIGN-PLAINTEXT',
+    })
+    seedCheckpoint(home, '1000', [{
+      sessionId: 'session-parent-1', dir: SESSION_DIR, header: PARENT,
+      files: { 'session.v4.jsonl.zstd': 'VERIFIED' },
+    }])
+    // A canonical name in the other encoding is a foreign write the mounted
+    // backend refuses (`encodingMismatch`): the switch must stop, not leave it
+    // behind after a "successful" restore. The file itself is never touched.
+    const outcome = await restore(home, 'session-parent-1').run
+    expect(outcome).toMatchObject({ kind: 'conflicted', conflict: `${SESSION_DIR}/session.jsonl` })
+    const liveDir = join(home, 'sessions', SESSION_DIR)
+    expect(read(join(liveDir, 'session.jsonl'))).toBe('FOREIGN-PLAINTEXT')
+    expect(read(join(liveDir, 'session.v4.jsonl.zstd'))).toBe('POLLUTED')
   })
 
   it('replaces live files with verified checkpoint bytes and invalidates projcache', async () => {

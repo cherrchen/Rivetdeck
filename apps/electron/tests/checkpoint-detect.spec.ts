@@ -198,23 +198,34 @@ describe('detectCheckpointDrift', () => {
     const home = makeHome()
     session(home, 'session.v4.jsonl.zstd', 'V4-BYTES')
     seedCheckpoint(home, '1000', { 'session.v4.jsonl.zstd': 'V4-BYTES' })
-    // Extension-owned names, staged temporaries, noncanonical version tags,
-    // and the opposite encoding's generations are not session history: no
-    // `extra` and no `newer-generation`.
+    // Extension-owned names, staged temporaries, and noncanonical version
+    // tags are not session history: no `extra` and no `newer-generation`.
     session(home, 'session.jsonl.index', 'INDEX')
     session(home, 'session.v4.jsonl.backup', 'BACKUP')
     session(home, 'session.v9.jsonl.backup', 'BACKUP-V9')
     session(home, 'session.v4.jsonl.tmp', 'STAGED')
     session(home, 'session.v04.jsonl.zstd', 'LEADING-ZERO')
     session(home, 'session.v0.jsonl.zstd', 'ZERO-TAGGED')
-    session(home, 'session.jsonl', 'PLAINTEXT')
-    session(home, 'session.v9.jsonl', 'PLAINTEXT-V9')
     session(home, 'metadata.json', 'META')
     const found = await detection(home)
     expect(found?.candidates).toEqual([])
   })
 
-  it('ignores drift on recorded files outside the configured encoding', async () => {
+  it('reports opposite-encoding generations as extra without owning them', async () => {
+    const home = makeHome()
+    session(home, 'session.v4.jsonl.zstd', 'V4-BYTES')
+    seedCheckpoint(home, '1000', { 'session.v4.jsonl.zstd': 'V4-BYTES' })
+    // Canonical names under the other encoding are foreign artifacts the
+    // mounted backend refuses: flagged `extra` for diagnosis, but version
+    // parsing stays on the configured encoding — never `newer-generation`.
+    session(home, 'session.jsonl', 'PLAINTEXT')
+    session(home, 'session.v9.jsonl', 'PLAINTEXT-V9')
+    const found = await detection(home)
+    expect(found?.candidates[0]?.reasons).toEqual(['extra'])
+    expect(found?.candidates[0]?.newerGeneration).toBeUndefined()
+  })
+
+  it('ignores drift on recorded files outside the canonical generation set', async () => {
     const home = makeHome()
     session(home, 'session.v4.jsonl.zstd', 'V4-BYTES')
     session(home, 'session.jsonl', 'PLAINTEXT')
@@ -225,9 +236,10 @@ describe('detectCheckpointDrift', () => {
       'metadata.json': 'META',
     })
     // Capture archives broadly, but restore owns only configured-encoding
-    // generations: drift on other recorded names cannot start a restore.
-    session(home, 'session.jsonl', 'CHANGED-PLAINTEXT')
+    // generations: recorded foreign names get no `changed`/`missing` —
+    // a vanished opposite-encoding file is silent too.
     session(home, 'metadata.json', 'CHANGED-META')
+    rmSync(join(home, 'sessions', SESSION_DIR, 'session.jsonl'))
     const found = await detection(home)
     expect(found?.candidates).toEqual([])
   })

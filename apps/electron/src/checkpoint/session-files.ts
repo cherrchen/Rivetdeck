@@ -36,6 +36,21 @@ const COMPRESSION_SUFFIX = COMPRESSION_SUFFIXES[SESSION_LOG_COMPRESSION]
 const GENERATION_STEM = /^session(?:\.v([1-9][0-9]*))?\.jsonl$/
 
 /**
+ * Parse one canonical generation basename — the stem grammar plus the
+ * safe-integer bound, matching `parseSessionFormatLogFilename`.
+ * @param stem - The basename with its compression suffix already removed.
+ * @returns Its format version (the unversioned `session.jsonl` stem is 0),
+ *   or `undefined` when the stem is not canonical.
+ */
+function parseStem(stem: string): number | undefined {
+  const match = GENERATION_STEM.exec(stem)
+  if (match === null) return undefined
+  if (match[1] === undefined) return 0
+  const version = Number(match[1])
+  return Number.isSafeInteger(version) ? version : undefined
+}
+
+/**
  * Parse the generation version a canonical filename encodes under the
  * configured encoding.
  * @param name - One entry from a session directory.
@@ -44,11 +59,7 @@ const GENERATION_STEM = /^session(?:\.v([1-9][0-9]*))?\.jsonl$/
  */
 export function parseSessionGeneration(name: string): number | undefined {
   if (!name.endsWith(COMPRESSION_SUFFIX)) return undefined
-  const match = GENERATION_STEM.exec(name.slice(0, name.length - COMPRESSION_SUFFIX.length))
-  if (match === null) return undefined
-  if (match[1] === undefined) return 0
-  const version = Number(match[1])
-  return Number.isSafeInteger(version) ? version : undefined
+  return parseStem(name.slice(0, name.length - COMPRESSION_SUFFIX.length))
 }
 
 /**
@@ -59,4 +70,24 @@ export function parseSessionGeneration(name: string): number | undefined {
  */
 export function isSessionGenerationFile(name: string): boolean {
   return parseSessionGeneration(name) !== undefined
+}
+
+/**
+ * True for a canonical generation basename under either artifact encoding —
+ * `parseGenerationLogFilename` under `zstd` or `none`. Checkpoint watches for
+ * these names only to refuse on foreign writes: an opposite-encoding
+ * generation appearing mid-restore would leave the backend refusing the
+ * session after an otherwise successful switch. Ownership — fingerprinting,
+ * quarantine, publishing, drift bookkeeping — stays with the configured
+ * encoding in {@link isSessionGenerationFile}; the watch never moves or
+ * publishes these files.
+ * @param name - One entry from a session directory.
+ * @returns Whether the name is a canonical generation file in some encoding.
+ */
+export function isGenerationFileAnyEncoding(name: string): boolean {
+  for (const suffix of Object.values(COMPRESSION_SUFFIXES)) {
+    if (!name.endsWith(suffix)) continue
+    if (parseStem(name.slice(0, name.length - suffix.length)) !== undefined) return true
+  }
+  return false
 }

@@ -30,7 +30,7 @@ import {
 import type { ValidateSessions } from './capture.ts'
 import { createDurableDirectory, syncDirectory } from './files.ts'
 import { dequeuePendingRestore, type PendingRestoreRequestId } from './pending.ts'
-import { isSessionGenerationFile } from './session-files.ts'
+import { isGenerationFileAnyEncoding, isSessionGenerationFile } from './session-files.ts'
 
 /** Held `session.lock` write lease; released by closing it. */
 export interface SessionLease {
@@ -166,11 +166,13 @@ async function resumeMember(
   await createDurableDirectory(quarantineMemberDir, home)
   const fingerprints = new Map(member.liveFiles.map(entry => [entry.name, entry]))
   const publish = new Map(member.publish.map(entry => [entry.name, entry]))
-  const current = (await readdir(liveDir)).filter(isSessionGenerationFile)
-
-  // Foreign-drift pre-check: a canonical file that is neither a recorded live
-  // fingerprint nor our own already-published bytes appeared after the intent
-  // was journaled, or a mid-switch write landed between phases.
+  // Foreign-drift pre-check: a canonical generation name in any encoding
+  // that is neither a recorded live fingerprint nor our own already-published
+  // bytes appeared after the intent was journaled, or a mid-switch write
+  // landed between phases. Opposite-encoding names are watched too — never
+  // owned or moved — because leaving one behind after a successful switch
+  // leaves the backend refusing the session outright (`encodingMismatch`).
+  const current = (await readdir(liveDir)).filter(isGenerationFileAnyEncoding)
   for (const name of current) {
     if (fingerprints.has(name)) continue
     const plan = publish.get(name)

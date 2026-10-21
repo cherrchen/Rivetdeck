@@ -15,7 +15,7 @@ import { readdir, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { checkpointsRoot, type CheckpointManifest, type CheckpointSessionEntry } from './manifest.ts'
 import { latestCheckpoint, type CheckpointValidationReport } from './capture.ts'
-import { isSessionGenerationFile, parseSessionGeneration } from './session-files.ts'
+import { isGenerationFileAnyEncoding, isSessionGenerationFile, parseSessionGeneration } from './session-files.ts'
 
 export type DriftReason = 'changed' | 'missing' | 'extra' | 'newer-generation'
 
@@ -83,7 +83,9 @@ export async function detectCheckpointDrift(
     }
     let liveNames: string[]
     try {
-      liveNames = (await readdir(liveDir)).filter(isSessionGenerationFile)
+      // Foreign canonical names in any encoding are reported as `extra`;
+      // ownership and version parsing stay on the configured encoding.
+      liveNames = (await readdir(liveDir)).filter(isGenerationFileAnyEncoding)
     } catch {
       liveNames = []
     }
