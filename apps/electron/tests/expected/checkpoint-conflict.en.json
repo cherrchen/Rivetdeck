@@ -1,0 +1,11 @@
+{
+  "type": "info",
+  "title": "Session restore stopped",
+  "message": "Restore stopped at --work--/child/session.v4.jsonl.zstd. Some related sessions may already have been restored. Replaced files are preserved under /home/user/.dsh/electron/quarantine/9000-parent. Keep restore record 9000-parent for recovery and quit other Harness instances before recovering the remaining sessions.",
+  "detail": "",
+  "buttons": [
+    "Later"
+  ],
+  "defaultId": 0,
+  "cancelId": 0
+}

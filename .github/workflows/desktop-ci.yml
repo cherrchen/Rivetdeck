@@ -175,6 +175,15 @@ jobs:
           DSH_ELECTRON_CORE_SMOKE: '1'
         run: pnpm exec vitest run apps/electron/tests/runtime.spec.ts
 
+      - name: Build Host for checkpoint shutdown
+        run: |
+          pnpm run build
+          pnpm --filter @dsh-electron/dsh-electron build:runtime-plugins
+          pnpm --filter @dsh-electron/dsh-electron build:main
+
+      - name: Test Windows checkpoint shutdown
+        run: pnpm --filter @dsh-electron/dsh-electron exec vitest run --config vitest.ownership.config.ts tests/checkpoint-host.live.e2e.ts
+
       - name: Test Windows Network Runtime
         run: pnpm --filter @dsh-electron/dsh-electron test:network-runtime
 

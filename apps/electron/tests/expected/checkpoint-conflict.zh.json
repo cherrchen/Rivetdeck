@@ -1,0 +1,11 @@
+{
+  "type": "info",
+  "title": "恢复已中止",
+  "message": "恢复在 --work--/child/session.v4.jsonl.zstd 处停止。部分关联会话可能已经恢复。被替换的文件保留在隔离区 /home/user/.dsh/electron/quarantine/9000-parent。请保留恢复记录 9000-parent 以便找回数据，并在继续恢复剩余会话前退出其它 Harness 实例。",
+  "detail": "",
+  "buttons": [
+    "稍后"
+  ],
+  "defaultId": 0,
+  "cancelId": 0
+}

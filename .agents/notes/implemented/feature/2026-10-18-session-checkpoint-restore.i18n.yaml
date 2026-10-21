@@ -1,0 +1,25 @@
+# Bilingual-pair consistency record for 2026-10-18-session-checkpoint-restore.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-18-session-checkpoint-restore.md
+/agent-note-desktop-session-checkpoint-and-journaled-restore:
+  en: 410d03dbfea4b1eb
+  zh: b3ab772826333cd4
+/agent-note-desktop-session-checkpoint-and-journaled-restore/problem:
+  en: ddf3c6e9b82c03f2
+  zh: fdef021c250dd844
+/agent-note-desktop-session-checkpoint-and-journaled-restore/decision:
+  en: 344cdb2ff6e00b1f
+  zh: 15ff274bd1c2e116
+/agent-note-desktop-session-checkpoint-and-journaled-restore/alternatives-considered:
+  en: 12a242a3df0b8e19
+  zh: 974ba1c720bd12b5
+/agent-note-desktop-session-checkpoint-and-journaled-restore/consequences:
+  en: e0f6446e35a830dd
+  zh: 7021477edf4cd6a6
+/agent-note-desktop-session-checkpoint-and-journaled-restore/testing:
+  en: b9b361e73236488b
+  zh: ced6c3d80fdb04bd
+/agent-note-desktop-session-checkpoint-and-journaled-restore/deferred:
+  en: 63dc21569fc037b7
+  zh: bbe023e4148fc0e6

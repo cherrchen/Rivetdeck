@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for shared-dsh-home.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/electron/shared-dsh-home.md
+/sharing-the-harness-home-between-desktop-and-cli:
+  en: dec135b0f5b70d90
+  zh: ddee11358142cbfd
+/sharing-the-harness-home-between-desktop-and-cli/summary:
+  en: 326cc1deb6fe5110
+  zh: 9044c620521a2548
+/sharing-the-harness-home-between-desktop-and-cli/contents:
+  en: 76b9d0a0e19586a0
+  zh: 37fbadd76c710a76
+/sharing-the-harness-home-between-desktop-and-cli/what-is-shared:
+  en: 82af75fde1975d50
+  zh: 83e5001cdd97686c
+/sharing-the-harness-home-between-desktop-and-cli/typical-usage:
+  en: 838d3db09fa259f1
+  zh: 74adbd81cb971ec2
+/sharing-the-harness-home-between-desktop-and-cli/when-versions-differ:
+  en: 14798096b419cfa9
+  zh: 8ce3516712b078af
+/sharing-the-harness-home-between-desktop-and-cli/what-you-can-do-today:
+  en: 4dd0e4a8861b5b79
+  zh: 615960304b930d02
+/sharing-the-harness-home-between-desktop-and-cli/rollback-path:
+  en: b6439fa63296804f
+  zh: b3a4e263d5cab80e

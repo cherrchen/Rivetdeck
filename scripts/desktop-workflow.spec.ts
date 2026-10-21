@@ -180,7 +180,11 @@ describe('Desktop synchronization and release workflows', () => {
     }
     const windowsTest = windowsJob.steps.filter(isRecord).find(step => step.name === 'Test supervised Host startup')
     expect(windowsTest?.run).toBe('pnpm exec vitest run apps/electron/tests/runtime.spec.ts')
-    expect(windowsJob.steps.filter(isRecord).map(step => step.name)).not.toContain('Build upstream application')
+    const checkpointBuild = windowsJob.steps.filter(isRecord).find(step => step.name === 'Build Host for checkpoint shutdown')
+    expect(checkpointBuild?.run).toContain('pnpm run build')
+    expect(checkpointBuild?.run).toContain('build:main')
+    const checkpointTest = windowsJob.steps.filter(isRecord).find(step => step.name === 'Test Windows checkpoint shutdown')
+    expect(checkpointTest?.run).toBe('pnpm --filter @dsh-electron/dsh-electron exec vitest run --config vitest.ownership.config.ts tests/checkpoint-host.live.e2e.ts')
 
     const packageJob = workflowJob(release, 'package')
     if (!isRecord(packageJob.strategy) || !isRecord(packageJob.strategy.matrix) || !Array.isArray(packageJob.strategy.matrix.include)) {

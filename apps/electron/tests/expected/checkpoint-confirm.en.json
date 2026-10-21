@@ -1,0 +1,12 @@
+{
+  "type": "warning",
+  "title": "Restore session data?",
+  "message": "Session \"aaaa-1111\" cannot be read by this version of Rivetdeck. A verified checkpoint is available; its included sessions have capture times starting at __OLDEST_CAPTURE_TIME__.",
+  "detail": "A verified checkpoint can restore this session together with its related subagent sessions (1). The oldest included session copy was captured at __OLDEST_CAPTURE_TIME__.\n\nChanges recorded after each session’s capture time will be hidden; this range can start as early as __OLDEST_CAPTURE_TIME__. The current files move to a new directory under quarantine /home/u/.dsh/electron/quarantine.\n\nKeep every other DeepSeek Harness or Rivetdeck instance quit while the restore runs.\n\nRollback restores session history only — workspace files, external tool effects, and plugin data keep their current state, and a persisted schedule may still deliver into the restored session.",
+  "buttons": [
+    "Restore Now",
+    "Not Now"
+  ],
+  "defaultId": 0,
+  "cancelId": 1
+}
