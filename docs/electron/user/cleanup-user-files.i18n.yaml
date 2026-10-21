@@ -3,8 +3,8 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/electron/user/cleanup-user-files.md
 /cleaning-up-rivetdeck-user-files:
-  en: afd06c68ecbe7ae8
-  zh: e396dce800537e87
+  en: 5e318084432f4ac0
+  zh: 5089a282179572e4
 /cleaning-up-rivetdeck-user-files/windows-nsis-installer:
   en: 7845190e9631361d
   zh: f4699e4421d8f4cd

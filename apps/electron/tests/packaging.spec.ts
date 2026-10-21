@@ -119,7 +119,16 @@ it('wires the layered data-cleanup uninstaller through the native helper', async
     expect(nsh).toContain('/KEEP_APP_DATA')
     expect(nsh).not.toContain('$INSTDIR\\${RIVETDECK_PATH_HISTORY}')
     expect(nsh).not.toContain('CopyFiles')
-    expect(nsh).toContain('${AndIfNot} ${FileExists} "$APPDATA\\${RIVETDECK_PATH_HISTORY}"')
+    // ${FileExists} reads an unqueryable path as absent, so every probe feeding the
+    // completeness seed or gating retirement goes through GetFileAttributesW plus
+    // GetLastError and treats an indeterminate answer conservatively.
+    expect(nsh).toContain('!macro RivetdeckProbePath path')
+    expect(nsh).toContain('kernel32::GetFileAttributesW(w ${path}) i .R8')
+    expect(nsh).toContain('kernel32::GetLastError() i .R8')
+    expect(nsh).toContain('StrCpy $R8 "absent"')
+    expect(nsh).toContain('StrCpy $R8 "error"')
+    expect(nsh).not.toContain('${FileExists}')
+    expect(nsh.split('!insertmacro RivetdeckProbePath "$APPDATA\\${RIVETDECK_PATH_HISTORY}"')).toHaveLength(3)
     expect(nsh).toContain('FileWrite $0 "complete=1$\\r$\\n"')
     // Fresh installs seed the record beside userData so the app can always rewrite it;
     // active records survive replacements. The install flags cannot detect a fresh
@@ -129,13 +138,15 @@ it('wires the layered data-cleanup uninstaller through the native helper', async
     const installMacro = nsh.slice(nsh.indexOf('!macro customInstall'), nsh.indexOf('!macro customUnInstall'))
     // Unregistered legacy installs can still leave data containing an unrecorded home.
     expect(installMacro).toContain('${If} $rivetdeckPreviousInstall == "0"')
-    expect(installMacro).toContain('${AndIfNot} ${FileExists} "$APPDATA\\${APP_FILENAME}"')
+    expect(installMacro).toContain('!insertmacro RivetdeckProbePath "$APPDATA\\${APP_FILENAME}"')
+    expect(installMacro).toContain('${If} $R8 == "absent"')
     expect(installMacro).toContain('${AndIf} $rivetdeckLegacyUpdaterCache == "0"')
     expect(installMacro).toContain('FileWrite $0 "complete=0$\\r$\\n"')
     // installApplicationFiles stores a copy of the installer inside the updater cache
     // before customInstall runs, so legacy cache presence is sampled during .onInit.
     const initMacro = nsh.slice(nsh.indexOf('!macro customInit'), nsh.indexOf('!macro customInstall'))
-    expect(initMacro).toContain('${if} ${FileExists} "$LOCALAPPDATA\\${RIVETDECK_UPDATER_CACHE}"')
+    expect(initMacro).toContain('!insertmacro RivetdeckProbePath "$LOCALAPPDATA\\${RIVETDECK_UPDATER_CACHE}"')
+    expect(initMacro).toContain('${if} $R8 == "absent"')
     expect(initMacro).toContain('StrCpy $rivetdeckLegacyUpdaterCache "1"')
     expect(initMacro).toContain('StrCpy $rivetdeckLegacyUpdaterCache "0"')
     expect(initMacro).toContain('SetShellVarContext current')
@@ -145,7 +156,7 @@ it('wires the layered data-cleanup uninstaller through the native helper', async
     expect(initMacro).toContain('ReadRegStr $R0 HKCU "${UNINSTALL_REGISTRY_KEY}" UninstallString')
     expect(initMacro).toContain('ReadRegStr $R1 HKLM "${UNINSTALL_REGISTRY_KEY}" UninstallString')
     expect(initMacro).toContain('!insertmacro RivetdeckRetireHistory')
-    expect(initMacro).toContain('SetErrorLevel 1\n      Abort')
+    expect(initMacro).toContain('SetErrorLevel 1\n        Abort')
     expect(installMacro).not.toContain('FileExists} "$LOCALAPPDATA')
     // Electron data is always per-user: under an all-users install the section runs in
     // the "all" shell context where $APPDATA is ProgramData, so the seed brackets its
@@ -222,7 +233,7 @@ it('wires the layered data-cleanup uninstaller through the native helper', async
       expect(orchestration).toContain(claim)
     }
     for (const required of ['LoadHistory', 'VerifyManagedToolchains', 'VerifyShimDirectory',
-      'VerifyUpdaterCache', 'IsAttributedUserData', 'unresolvableProtection',
+      'VerifyUpdaterCache', 'CheckUserDataAttribution', 'QueryPath', 'unresolvableProtection',
       'desktop-preferences.json', 'network-secrets']) {
       expect(orchestration).toContain(required)
     }

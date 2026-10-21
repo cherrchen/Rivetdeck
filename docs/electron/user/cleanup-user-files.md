@@ -2,7 +2,7 @@
 
 English | [中文](cleanup-user-files.zh.md)
 
-This guide lists the files Rivetdeck leaves behind after removal and how to delete what remains on each platform. Uninstall removes the program and rebuildable data only; the locations below hold settings, credentials, browser storage, or shared agent data that are never deleted on their own. The full ownership and safety policy lives in the [Uninstall and Data Cleanup](../uninstall-data-cleanup.md) design document.
+This guide lists the files Rivetdeck leaves behind after removal and how to delete what remains on each platform. Uninstall removes the program and rebuildable data only; the locations below hold settings, credentials, browser storage, or shared agent data that are never deleted on their own. The full ownership and safety policy lives in the [Uninstall and Data Cleanup](../uninstall-data-cleanup.md) reference.
 
 ## Windows (NSIS installer)
 

@@ -46,15 +46,26 @@ static BOOL WINAPI CleanupWriteFile(HANDLE file, LPCVOID bytes, DWORD size, LPDW
     }
     return WriteFile(file, bytes, size, written, overlapped);
 }
+static std::wstring attributesFaultPath;
+static DWORD attributesFaultError = ERROR_ACCESS_DENIED;
+static DWORD WINAPI CleanupGetFileAttributes(LPCWSTR path) {
+    if (!attributesFaultPath.empty() && _wcsicmp(path, attributesFaultPath.c_str()) == 0) {
+        SetLastError(attributesFaultError);
+        return INVALID_FILE_ATTRIBUTES;
+    }
+    return GetFileAttributesW(path);
+}
 #define FindFirstFileW CleanupFindFirst
 #define FindNextFileW CleanupFindNext
 #define FindClose CleanupFindClose
 #define WriteFile CleanupWriteFile
+#define GetFileAttributesW CleanupGetFileAttributes
 #include "../installer/uninstall-cleanup.h"
 #undef FindFirstFileW
 #undef FindNextFileW
 #undef FindClose
 #undef WriteFile
+#undef GetFileAttributesW
 
 static void File(const std::wstring& path, DWORD attributes = FILE_ATTRIBUTE_NORMAL) {
     HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, attributes, nullptr);
@@ -293,12 +304,21 @@ int wmain(int argc, wchar_t** argv) {
     Mkdir(attributed);
     File(attributed + L"\\Local State");
     File(attributed + L"\\Cookies");
-    assert(!uninstall_cleanup::IsAttributedUserData(attributed));
+    bool attribution = true;
+    assert(uninstall_cleanup::CheckUserDataAttribution(attributed, attribution) == ERROR_SUCCESS);
+    assert(!attribution);
     File(attributed + L"\\desktop-preferences.json");
-    assert(uninstall_cleanup::IsAttributedUserData(attributed));
+    assert(uninstall_cleanup::CheckUserDataAttribution(attributed, attribution) == ERROR_SUCCESS);
+    assert(attribution);
     const std::wstring bare = root + L"\\bare-root";
     Mkdir(bare);
-    assert(!uninstall_cleanup::IsAttributedUserData(bare));
+    assert(uninstall_cleanup::CheckUserDataAttribution(bare, attribution) == ERROR_SUCCESS);
+    assert(!attribution);
+    // A marker that cannot be queried keeps ownership unverified instead of reading absent.
+    attributesFaultPath = L"\\\\?\\" + bare + L"\\desktop-preferences.json";
+    assert(uninstall_cleanup::CheckUserDataAttribution(bare, attribution) == ERROR_ACCESS_DENIED);
+    assert(!attribution);
+    attributesFaultPath.clear();
     File(userData + L"\\Local State");
 
     // Tiered cleanup (no delete flag): rebuildables removed, preferences and browser data kept.
@@ -664,6 +684,50 @@ int wmain(int argc, wchar_t** argv) {
         assert(uninstall_cleanup::Cleanup(request) == ERROR_INVALID_NAME);
         assert(residue == 0 && removed == 0);
         assert(Exists(enumerationData + L"\\Local State"));
+    }
+
+    // An attribute query that fails for a reason other than absence is residue plus a
+    // cleanup error — never a silently "missing" target.
+    const std::wstring deniedData = root + L"\\denied-data";
+    Mkdir(deniedData);
+    File(deniedData + L"\\Local State");
+    File(deniedData + L"\\desktop-preferences.json");
+    Mkdir(deniedData + L"\\Cache");
+    File(deniedData + L"\\Cache\\data_0");
+    const std::wstring deniedHistory = root + L"\\denied.ini";
+    WriteText(deniedHistory, "complete=1\r\nuserData=" + Narrow(deniedData) + "\r\n");
+    {
+        uninstall_cleanup::CleanupRequest request;
+        request.userData = deniedData.c_str();
+        request.installation = installation.c_str();
+        request.protectedHome = L"";
+        request.historyFile = deniedHistory.c_str();
+        request.updaterCache = updater.c_str();
+        request.residueReport = report.c_str();
+        int residue = 0;
+        request.residue = &residue;
+        // A named cache that cannot be queried is skipped, reported, and returned.
+        attributesFaultPath = L"\\\\?\\" + deniedData + L"\\Cache";
+        assert(uninstall_cleanup::Cleanup(request) == ERROR_ACCESS_DENIED);
+        assert(Exists(deniedData + L"\\Cache\\data_0"));
+        std::string bytes;
+        assert(uninstall_cleanup::ReadFileBytes(report, bytes) == ERROR_SUCCESS);
+        assert(bytes.find(Narrow(deniedData + L"\\Cache")) != std::string::npos);
+        assert(bytes.find("could not be queried") != std::string::npos);
+        assert(residue > 0);
+        // An unqueryable root reports as residue instead of counting as done.
+        attributesFaultPath = L"\\\\?\\" + deniedData;
+        assert(uninstall_cleanup::Cleanup(request) == ERROR_ACCESS_DENIED);
+        assert(Exists(deniedData + L"\\desktop-preferences.json"));
+        assert(residue > 0);
+        // With proven absence the query still reads absent, not an error.
+        attributesFaultPath.clear();
+        attributesFaultError = ERROR_FILE_NOT_FOUND;
+        attributesFaultPath = L"\\\\?\\" + deniedData + L"\\GPUCache";
+        assert(uninstall_cleanup::Cleanup(request) == ERROR_SUCCESS);
+        assert(!Exists(deniedData + L"\\Cache"));
+        attributesFaultPath.clear();
+        attributesFaultError = ERROR_ACCESS_DENIED;
     }
 
     assert(RemoveDirectoryW(installation.c_str()));

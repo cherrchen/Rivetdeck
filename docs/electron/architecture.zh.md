@@ -921,7 +921,7 @@ generated Host overlay copy
 
 通用 Harness 状态不属于那里。
 
-[卸载与数据清理](uninstall-data-cleanup.zh.md) 持有 `userData`、更新器缓存、`$DSH_HOME` 及共享位置的写入根目录清单与归属划分，以及经评审的卸载清理策略。CURRENT 卸载在删除安装目录之外，还经原生清理辅助程序按安装实例路径历史记录删除经验证的可重建目标——`managed-toolchains/`、`electron/toolchains/bin`、具名缓存、更新器缓存——同时保留设置、凭据与浏览器存储。
+[卸载与数据清理](uninstall-data-cleanup.zh.md) 持有 `userData`、更新器缓存、`$DSH_HOME` 及共享位置的写入根目录清单与归属划分，以及卸载清理策略。CURRENT 卸载在删除安装目录之外，还经原生清理辅助程序按安装实例路径历史记录删除经验证的可重建目标——`managed-toolchains/`、`electron/toolchains/bin`、具名缓存、更新器缓存——同时保留设置、凭据与浏览器存储。
 
 # 第九部分 — 文档与 Agent 规则
 

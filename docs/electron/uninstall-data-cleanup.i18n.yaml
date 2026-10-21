@@ -3,53 +3,23 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/electron/uninstall-data-cleanup.md
 /uninstall-and-data-cleanup:
-  en: f5903fc61574c77b
-  zh: 06bf54f1019d1f7c
+  en: 4e646c04fb5caa7c
+  zh: bd573a8f250c78a7
 /uninstall-and-data-cleanup/current-uninstall-behavior:
-  en: 985249cc6dadc36c
-  zh: 777c046fa24ec9a8
+  en: be4d726368eac014
+  zh: 5309b417f23fb5e0
 /uninstall-and-data-cleanup/write-locations-and-ownership:
-  en: 8e69c80c134d64a6
-  zh: 8c00af062123021a
-/uninstall-and-data-cleanup/upstream-apps-desktop-design:
-  en: ddd8097597e33200
-  zh: 41d85a64bc0850d6
-/uninstall-and-data-cleanup/upstream-apps-desktop-design/ownership-split:
-  en: dcfc8a4de659a7f5
-  zh: 6f1d06104cf95294
-/uninstall-and-data-cleanup/upstream-apps-desktop-design/structural-difference-bundled-versus-managed-runtimes:
-  en: 3c7cef81536544cb
-  zh: c56b5268db5e46d3
-/uninstall-and-data-cleanup/upstream-apps-desktop-design/uninstaller-flow:
-  en: e9ab60ff6296b9b2
-  zh: 7c4d845dc7c11dd8
-/uninstall-and-data-cleanup/upstream-apps-desktop-design/deletion-safety-uninstall-data-h:
-  en: 50bbb01a50ca8414
-  zh: fdb20103840b5b76
-/uninstall-and-data-cleanup/upstream-apps-desktop-design/limits-of-the-upstream-path-discovery-model:
-  en: 6dfe56a225584b95
-  zh: f832efeebba4f0bd
-/uninstall-and-data-cleanup/external-precedents:
-  en: af3cebf7aa2c3234
-  zh: 24e317592dfbaca7
-/uninstall-and-data-cleanup/candidate-designs:
-  en: 5ce598be390228df
-  zh: 9637c1412785fb72
-/uninstall-and-data-cleanup/path-discovery-and-protection:
-  en: 88f072bee6f4d249
-  zh: 8ed5125c4ac3be61
-/uninstall-and-data-cleanup/safety-requirements:
-  en: dc14225aeb70bcbc
-  zh: 82e2fc00a02bfc38
+  en: be726c2bf4526107
+  zh: da558a02f739704b
+/uninstall-and-data-cleanup/path-history-and-protection:
+  en: 4483cde5bb9ea5ab
+  zh: 8c0c6c20b47919cc
+/uninstall-and-data-cleanup/deletion-rules:
+  en: a1333e192a7cd762
+  zh: cd5c8237fad8948e
 /uninstall-and-data-cleanup/other-platforms:
-  en: 7b74fc3b70518a49
-  zh: 064b33208378964e
-/uninstall-and-data-cleanup/review-conclusions:
-  en: 8026d9b712b89026
-  zh: d88fe8dff1bebaec
-/uninstall-and-data-cleanup/acceptance-criteria-for-implementation:
-  en: 30504666fc33674a
-  zh: da188c70533e4d73
+  en: 4969a619819dd2c4
+  zh: 471023fd6f4b52e5
 /uninstall-and-data-cleanup/known-limitations:
-  en: fc839bbc471a665a
-  zh: a7c044b4337b94de
+  en: 330862a3f1d96a39
+  zh: 49b1b61df60f96c8

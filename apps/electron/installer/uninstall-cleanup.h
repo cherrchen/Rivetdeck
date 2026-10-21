@@ -270,23 +270,37 @@ inline bool VerifyUpdaterCache(const std::wstring& root) {
     });
 }
 
+// Returns ERROR_SUCCESS when `path` provably exists, an absence error
+// (ERROR_FILE_NOT_FOUND or ERROR_PATH_NOT_FOUND) when it does not, and the attribute
+// query's own error when neither can be decided — an indeterminate answer must never
+// read as absence.
+inline DWORD QueryPath(const std::wstring& path) {
+    return GetFileAttributesW((L"\\\\?\\" + path).c_str()) != INVALID_FILE_ATTRIBUTES
+        ? ERROR_SUCCESS : GetLastError();
+}
+
 // A userData root is only ours when it carries a marker this product writes. Generic
 // Chromium directories (Local State, Cache, Cookies, ...) are created by any Electron
-// application and never prove ownership of a recorded root.
-inline bool IsAttributedUserData(const std::wstring& root) {
+// application and never prove ownership of a recorded root. `attributed` receives the
+// verdict; when no marker answers and at least one probe fails for a reason other than
+// absence, that error is returned instead of a verdict.
+inline DWORD CheckUserDataAttribution(const std::wstring& root, bool& attributed) {
     static const wchar_t* markers[] = {
         L"managed-toolchains", L"desktop-preferences.json",    L"electron-host.patch.yml",
         L"network-secrets",    L"network-startup-override.json",
     };
+    attributed = false;
+    DWORD firstError = ERROR_SUCCESS;
     for (const wchar_t* marker : markers) {
-        const DWORD attributes = GetFileAttributesW((L"\\\\?\\" + root + L'\\' + marker).c_str());
-        if (attributes != INVALID_FILE_ATTRIBUTES) return true;
+        const DWORD error = QueryPath(root + L'\\' + marker);
+        if (error == ERROR_SUCCESS) {
+            attributed = true;
+            return ERROR_SUCCESS;
+        }
+        if (error != ERROR_FILE_NOT_FOUND && error != ERROR_PATH_NOT_FOUND
+            && firstError == ERROR_SUCCESS) firstError = error;
     }
-    return false;
-}
-
-inline bool PathExists(const std::wstring& path) {
-    return GetFileAttributesW((L"\\\\?\\" + path).c_str()) != INVALID_FILE_ATTRIBUTES;
+    return firstError;
 }
 
 // Reports are UTF-8 `skipped\t<path>\t<reason>` lines consumed by people and smoke tests.
@@ -342,6 +356,17 @@ struct CleanupState {
         entries.push_back(path + L'\t' + reason);
     }
 
+    // True only when the target provably exists; an indeterminate query is reported
+    // as residue and counted as a cleanup error instead of reading as absence.
+    bool exists(const std::wstring& path) {
+        const DWORD error = QueryPath(path);
+        if (error == ERROR_SUCCESS) return true;
+        if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND) return false;
+        note(error);
+        skip(path, L"could not be queried");
+        return false;
+    }
+
     bool protect(const std::wstring& path) {
         PushUnique(protection, path);
         std::wstring resolved;
@@ -383,7 +408,7 @@ inline void RemoveNamedCaches(CleanupState& state, const std::wstring& root,
     };
     for (const wchar_t* cache : caches) {
         const std::wstring path = root + L'\\' + cache;
-        if (!PathExists(path)) continue;
+        if (!state.exists(path)) continue;
         if (completeHistory) state.remove(path, installation, protectedHome);
         else state.skip(path, L"cache isolation requires complete history");
     }
@@ -395,13 +420,13 @@ inline void CleanupUserDataTiered(CleanupState& state, const std::wstring& root,
                                   const std::wstring& installation, const std::wstring& protectedHome,
                                   bool completeHistory) {
     const std::wstring toolchains = root + L"\\managed-toolchains";
-    if (PathExists(toolchains)) {
+    if (state.exists(toolchains)) {
         if (!completeHistory) state.skip(toolchains, L"runtime isolation requires complete history");
         else if (VerifyManagedToolchains(toolchains)) state.remove(toolchains, installation, protectedHome);
         else state.skip(toolchains, L"unexpected content");
     }
     const std::wstring shims = root + L"\\electron\\toolchains\\bin";
-    if (PathExists(shims)) {
+    if (state.exists(shims)) {
         if (VerifyShimDirectory(shims)) {
             state.remove(shims, installation, protectedHome);
             // A parent that still holds residue ends the walk with ERROR_DIR_NOT_EMPTY;
@@ -464,14 +489,21 @@ inline DWORD Cleanup(const CleanupRequest& request) {
 
     if (unresolvable) {
         for (const std::wstring& root : roots)
-            if (PathExists(root)) state.skip(root, L"a protected path could not be resolved");
-        if (updaterOk && PathExists(updaterCache))
+            if (state.exists(root)) state.skip(root, L"a protected path could not be resolved");
+        if (updaterOk && state.exists(updaterCache))
             state.skip(updaterCache, L"a protected path could not be resolved");
     } else {
         for (const std::wstring& root : roots) {
-            if (!PathExists(root)) continue;
-            if (!IsAttributedUserData(root)) {
-                state.skip(root, L"not a recognized application data directory");
+            if (!state.exists(root)) continue;
+            bool attributed = false;
+            const DWORD attributionError = CheckUserDataAttribution(root, attributed);
+            if (!attributed) {
+                if (attributionError != ERROR_SUCCESS) {
+                    state.note(attributionError);
+                    state.skip(root, L"attribution could not be verified");
+                } else {
+                    state.skip(root, L"not a recognized application data directory");
+                }
                 continue;
             }
             if (request.deleteAppData != 0 && !mayRemoveAll)
@@ -482,7 +514,7 @@ inline DWORD Cleanup(const CleanupRequest& request) {
             }
             CleanupUserDataTiered(state, root, installation, protectedHome, completeHistory);
         }
-        if (updaterOk && PathExists(updaterCache)) {
+        if (updaterOk && state.exists(updaterCache)) {
             if (!completeHistory) state.skip(updaterCache, L"updater isolation requires complete history");
             else if (VerifyUpdaterCache(updaterCache)) state.remove(updaterCache, installation, protectedHome);
             else state.skip(updaterCache, L"unexpected content");

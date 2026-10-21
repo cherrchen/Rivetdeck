@@ -115,6 +115,27 @@ function renderUninstallNsh({ helperDll, updaterCacheName }) {
   ${'${EndIf}'}
 !macroend
 
+; File-existence checks cannot tell an absent path from one whose attributes cannot
+; be queried (denied access, an offline share, an I/O fault): both read absent.
+; Probes feeding the completeness seed or gating retirement therefore use
+; GetFileAttributesW plus GetLastError so an indeterminate answer takes the
+; conservative branch instead of attesting absence. The result lands in $R8:
+; "exists", "absent", or "error".
+!macro RivetdeckProbePath path
+  System::Call 'kernel32::GetFileAttributesW(w ${'${path}'}) i .R8'
+  ${'${if}'} $R8 == -1
+    System::Call 'kernel32::GetLastError() i .R8'
+    ${'${if}'} $R8 == 2
+    ${'${orif}'} $R8 == 3
+      StrCpy $R8 "absent"
+    ${'${else}'}
+      StrCpy $R8 "error"
+    ${'${endif}'}
+  ${'${else}'}
+    StrCpy $R8 "exists"
+  ${'${endif}'}
+!macroend
+
 !ifndef BUILD_UNINSTALLER
 Var rivetdeckLegacyUpdaterCache
 Var rivetdeckPreviousInstall
@@ -137,19 +158,24 @@ Var rivetdeckPreviousInstall
   ${'${if}'} $installMode == "all"
     SetShellVarContext current
   ${'${endif}'}
-  ${'${if}'} ${'${FileExists}'} "$LOCALAPPDATA\\${'${RIVETDECK_UPDATER_CACHE}'}"
-    StrCpy $rivetdeckLegacyUpdaterCache "1"
-  ${'${else}'}
+  !insertmacro RivetdeckProbePath "$LOCALAPPDATA\\${'${RIVETDECK_UPDATER_CACHE}'}"
+  ${'${if}'} $R8 == "absent"
     StrCpy $rivetdeckLegacyUpdaterCache "0"
+  ${'${else}'}
+    StrCpy $rivetdeckLegacyUpdaterCache "1"
   ${'${endif}'}
   ${'${IfNot}'} ${'${isUpdated}'}
   ${'${AndIf}'} $rivetdeckPreviousInstall == "0"
-  ${'${AndIf}'} ${'${FileExists}'} "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}"
-    !insertmacro RivetdeckRetireHistory
-    ${'${If}'} ${'${Errors}'}
-      MessageBox MB_OK|MB_ICONEXCLAMATION "$(RIVETDECK_HISTORY_ERROR)" /SD IDOK
-      SetErrorLevel 1
-      Abort
+    !insertmacro RivetdeckProbePath "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}"
+    ; Only proven absence skips retirement; an indeterminate probe still attempts it,
+    ; and FileOpen then reports its own error through the same abort path.
+    ${'${If}'} $R8 != "absent"
+      !insertmacro RivetdeckRetireHistory
+      ${'${If}'} ${'${Errors}'}
+        MessageBox MB_OK|MB_ICONEXCLAMATION "$(RIVETDECK_HISTORY_ERROR)" /SD IDOK
+        SetErrorLevel 1
+        Abort
+      ${'${EndIf}'}
     ${'${EndIf}'}
   ${'${EndIf}'}
   ${'${if}'} $installMode == "all"
@@ -173,16 +199,24 @@ Var rivetdeckPreviousInstall
     SetShellVarContext current
   ${'${endif}'}
   ${'${IfNot}'} ${'${isUpdated}'}
-  ${'${AndIfNot}'} ${'${FileExists}'} "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}"
-    FileOpen $0 "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}" w
-    ${'${If}'} $rivetdeckPreviousInstall == "0"
-    ${'${AndIfNot}'} ${'${FileExists}'} "$APPDATA\\${'${APP_FILENAME}'}"
-    ${'${AndIf}'} $rivetdeckLegacyUpdaterCache == "0"
-      FileWrite $0 "complete=1$\\r$\\n"
-    ${'${Else}'}
-      FileWrite $0 "complete=0$\\r$\\n"
+    !insertmacro RivetdeckProbePath "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}"
+    ; Only proven absence seeds a record; an indeterminate probe must not truncate a
+    ; file whose claims could not be inspected.
+    ${'${If}'} $R8 == "absent"
+      FileOpen $0 "$APPDATA\\${'${RIVETDECK_PATH_HISTORY}'}" w
+      ${'${If}'} $rivetdeckPreviousInstall == "0"
+        !insertmacro RivetdeckProbePath "$APPDATA\\${'${APP_FILENAME}'}"
+        ${'${If}'} $R8 == "absent"
+        ${'${AndIf}'} $rivetdeckLegacyUpdaterCache == "0"
+          FileWrite $0 "complete=1$\\r$\\n"
+        ${'${Else}'}
+          FileWrite $0 "complete=0$\\r$\\n"
+        ${'${EndIf}'}
+      ${'${Else}'}
+        FileWrite $0 "complete=0$\\r$\\n"
+      ${'${EndIf}'}
+      FileClose $0
     ${'${EndIf}'}
-    FileClose $0
   ${'${EndIf}'}
   ${'${if}'} $installMode == "all"
     SetShellVarContext all

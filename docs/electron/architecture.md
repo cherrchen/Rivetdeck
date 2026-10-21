@@ -921,7 +921,7 @@ generated Host overlay copy
 
 General Harness state does not belong there.
 
-[Uninstall and Data Cleanup](uninstall-data-cleanup.md) owns the write-root inventory and ownership split across `userData`, the updater cache, `$DSH_HOME`, and shared locations, together with the reviewed uninstall cleanup policy. CURRENT uninstall removes the install directory plus verified rebuildable targets — `managed-toolchains/`, `electron/toolchains/bin`, named caches, the updater cache — through a native cleanup helper driven by a per-install path-history record, preserving settings, credentials, and browser storage.
+[Uninstall and Data Cleanup](uninstall-data-cleanup.md) owns the write-root inventory and ownership split across `userData`, the updater cache, `$DSH_HOME`, and shared locations, together with the uninstall cleanup policy. CURRENT uninstall removes the install directory plus verified rebuildable targets — `managed-toolchains/`, `electron/toolchains/bin`, named caches, the updater cache — through a native cleanup helper driven by a per-install path-history record, preserving settings, credentials, and browser storage.
 
 # Part IX — Documentation and Agent Rules
 
