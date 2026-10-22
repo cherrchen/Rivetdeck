@@ -22,6 +22,7 @@
   },
   "include": [
     "runtime/plugins/*/src/client/**/*.ts",
-    "runtime/plugins/*/src/client/**/*.tsx"
+    "runtime/plugins/*/src/client/**/*.tsx",
+    "../../packages/client/ui-plugin-manager/src/client/assets.d.ts"
   ]
 }

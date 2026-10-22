@@ -20,7 +20,7 @@ import { SESSION_LOG_COMPRESSION } from './session-files.ts'
 
 /** Minimal typed surface of `@deepseek-ai/dsh-session-persistence-jsonl` used here. */
 interface BackendModule {
-  readonly default: unknown
+  readonly apply: unknown
 }
 
 interface CordisModule {
@@ -105,7 +105,7 @@ export async function mountSessionsBackend(
   const { backend, cordis, session } = await loadBackendModules(installAnchor)
   const ctx = new cordis.Context()
   try {
-    await ctx.plugin(backend.default, { root: sessionsRoot, compression: SESSION_LOG_COMPRESSION })
+    await ctx.plugin(backend, { root: sessionsRoot, compression: SESSION_LOG_COMPRESSION })
   } catch (error) {
     await ctx.fiber.dispose().catch(() => undefined)
     throw error

@@ -2,6 +2,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import * as timers from 'node:timers/promises'
 import { afterEach, expect, it, onTestFinished, vi } from 'vitest'
 import type { Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
@@ -9,6 +10,11 @@ import Settings from '@deepseek-ai/dsh-settings'
 import { boot, initProfile, readProfilePatches, type ProfileContext } from '@deepseek-ai/dsh-app-boot'
 import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
 import { DesktopConfigEditor } from '../src/desktop-config-editor.ts'
+
+vi.mock('node:timers/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:timers/promises')>()
+  return { ...actual, setTimeout: vi.fn(actual.setTimeout) }
+})
 
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 
@@ -61,31 +67,21 @@ async function hold(profile: ProfileContext) {
 it('waits beyond the upstream deadline and reads the package writer’s committed configuration', async () => {
   const { ctx, profile } = await fixture()
   const writer = await hold(profile)
-  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
-  let retryScheduled = Promise.withResolvers<undefined>()
-  const schedule = globalThis.setTimeout
-  const timerSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation((callback, delay, ...args) => {
-    const timer = schedule(callback, delay, ...args)
-    retryScheduled.resolve(undefined)
-    return timer
-  })
+  vi.useFakeTimers({ toFake: ['Date'] })
+  const timerSpy = vi.spyOn(timers, 'setTimeout')
   let outcome: 'saved' | 'failed' | undefined
   const edit = ctx.settings.update('probe', { count: 7 }).then(() => { outcome = 'saved' }, () => { outcome = 'failed' })
   try {
-    // The lock retry timer signals completed filesystem contention checks before the clock advances.
-    await retryScheduled.promise
-    expect(vi.getTimerCount()).toBeGreaterThan(0)
-    retryScheduled = Promise.withResolvers<undefined>()
+    await vi.waitFor(() => { expect(timerSpy.mock.calls.length).toBeGreaterThan(0) })
+    const retries = timerSpy.mock.calls.length
     vi.setSystemTime(Date.now() + 2500)
-    await vi.advanceTimersToNextTimerAsync()
-    await Promise.race([retryScheduled.promise, edit])
+    await vi.waitFor(() => { expect(timerSpy.mock.calls.length).toBeGreaterThan(retries) })
     expect(outcome).toBeUndefined()
     writeFileSync(profile.patchPath, '- id: probe\n  config:\n    count: 3\n    title: installed\n')
   } finally {
     timerSpy.mockRestore()
     writer.release()
     await writer.done
-    await vi.runOnlyPendingTimersAsync()
     vi.useRealTimers()
     await edit
   }

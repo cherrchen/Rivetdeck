@@ -19,7 +19,7 @@ describe('desktop About document', () => {
       messages: en,
       projectUrl: 'https://github.com/example/rivetdeck',
       version: '1.2.3',
-      websiteUrl: 'https://rivetdeck.hometown123.top',
+      websiteUrl: 'https://cherrchen.github.io/rivetdeck-website',
     }).replace(/^data:text\/html;charset=utf-8,/, ''))
 
     expect(document).toContain(`<dt>${en.aboutVersionLabel}</dt><dd>1.2.3</dd>`)
@@ -31,14 +31,14 @@ describe('desktop About document', () => {
     expect(github).toBeGreaterThan(-1)
     expect(homepage).toBeGreaterThan(github)
     expect(document).toContain('https://github.com/example/rivetdeck')
-    expect(document).toContain('https://rivetdeck.hometown123.top')
+    expect(document).toContain('https://cherrchen.github.io/rivetdeck-website')
   })
 
   it('treats trailing-slash homepage URLs as the same external target', () => {
-    expect(normalizeAboutExternalUrl('https://rivetdeck.hometown123.top/'))
-      .toBe('https://rivetdeck.hometown123.top')
-    expect(normalizeAboutExternalUrl('https://rivetdeck.hometown123.top'))
-      .toBe('https://rivetdeck.hometown123.top')
+    expect(normalizeAboutExternalUrl('https://cherrchen.github.io/rivetdeck-website/'))
+      .toBe('https://cherrchen.github.io/rivetdeck-website')
+    expect(normalizeAboutExternalUrl('https://cherrchen.github.io/rivetdeck-website'))
+      .toBe('https://cherrchen.github.io/rivetdeck-website')
   })
 
   it('prefers packaged build-info.json over the environment', async () => {
@@ -74,11 +74,11 @@ describe('desktop About document', () => {
   it('keeps repository and homepage URLs distinct', () => {
     expect(resolveProjectUrl({
       repository: { type: 'git', url: 'https://github.com/example/rivetdeck.git' },
-      homepage: 'https://rivetdeck.hometown123.top',
+      homepage: 'https://cherrchen.github.io/rivetdeck-website',
     })).toBe('https://github.com/example/rivetdeck')
     expect(resolveHomepageUrl({
       repository: { type: 'git', url: 'https://github.com/example/rivetdeck.git' },
-      homepage: 'https://rivetdeck.hometown123.top/',
-    })).toBe('https://rivetdeck.hometown123.top')
+      homepage: 'https://cherrchen.github.io/rivetdeck-website/',
+    })).toBe('https://cherrchen.github.io/rivetdeck-website')
   })
 })

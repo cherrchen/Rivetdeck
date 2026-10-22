@@ -40,7 +40,7 @@ Windows 卸载在 `customUnInstall` 中运行编译的原生辅助程序（`inst
 
 ## 上游移植基础
 
-上游 `apps/desktop` 应用实现了下游所缺的清理模型；来源：`apps/desktop/installer/uninstall.nsh`、`apps/desktop/installer/uninstall-data.h`、`apps/desktop/scripts/installer.nsh`、`apps/desktop/scripts/windows-directory-installer.mjs`——其决策见 [Windows 卸载保留 Harness home](2026-09-08-desktop-uninstall-preserve-dsh-home.zh.md)。
+上游 `apps/desktop` 应用实现了下游所缺的清理模型；来源：`apps/desktop/installer/uninstall.nsh`、`apps/desktop/installer/uninstall-data.h`、`apps/desktop/scripts/installer.nsh`、`apps/desktop/scripts/windows-directory-installer.mjs`——其决策见 [Windows 卸载保留 Harness home](../../archived/feature/2026-09-08-desktop-uninstall-preserve-dsh-home.md)。
 
 归属划分：上游在真正卸载时删除全部 Electron 自有数据且不触碰 Harness home——安装目录（含捆绑的 primary runtime）、Electron `userData`（同时保存日志与崩溃报告）与更新器缓存被删除；`DSH_HOME` 下的一切保留，包括应用专属的 `profiles/desktop` profile 与锁。
 

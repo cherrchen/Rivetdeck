@@ -40,7 +40,7 @@ Two observations drove the tier split. First, retention-by-default remains the d
 
 ## Upstream port basis
 
-The upstream `apps/desktop` app implements the cleanup model the downstream lacked; sources: `apps/desktop/installer/uninstall.nsh`, `apps/desktop/installer/uninstall-data.h`, `apps/desktop/scripts/installer.nsh`, `apps/desktop/scripts/windows-directory-installer.mjs` — see [Windows uninstall retains the Harness home](2026-09-08-desktop-uninstall-preserve-dsh-home.md) for its decision.
+The upstream `apps/desktop` app implements the cleanup model the downstream lacked; sources: `apps/desktop/installer/uninstall.nsh`, `apps/desktop/installer/uninstall-data.h`, `apps/desktop/scripts/installer.nsh`, `apps/desktop/scripts/windows-directory-installer.mjs` — see [Windows uninstall retains the Harness home](../../archived/feature/2026-09-08-desktop-uninstall-preserve-dsh-home.md) for its decision.
 
 Ownership split: upstream removes all Electron-owned data on a real uninstall and never touches the Harness home — the install directory (including its bundled primary runtime), Electron `userData` (which also holds logs and crash reports), and the updater cache go; everything under `DSH_HOME`, including the app-specific `profiles/desktop` profile and lock, stays.
 

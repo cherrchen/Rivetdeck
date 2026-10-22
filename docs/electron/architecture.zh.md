@@ -4,7 +4,7 @@
 
 > 状态：**下游架构规范**
 >
-> 范围：`cherrchen/deepseek-harness-electron`，尤其是 `apps/electron/**`
+> 范围：`cherrchen/Rivetdeck`，尤其是 `apps/electron/**`
 >
 > 读者：维护者、coding agent（编程智能体）、评审人与未来贡献者
 >

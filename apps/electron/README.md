@@ -117,7 +117,7 @@ The Windows workflow signs a temporary package copy with a disposable test certi
 
 Before the first automated update, deploy and enable `desktop-store-queue.yml` on the repository default branch (`main`) through the normal promotion PR. GitHub runs scheduled and `workflow_run` workflows from that branch; enqueueing checks this prerequisite and fails if the dispatcher is unavailable. Then publish the approved initial submission in Partner Center, including `Publish now` if its publication mode is Manual. Associate a Microsoft Entra directory with the Partner Center account, add an Entra application under Account settings → Users with the Manager role, and obtain its tenant ID, client ID, and new key value. Microsoft documents these [submission API prerequisites](https://learn.microsoft.com/en-us/windows/uwp/monetize/create-and-manage-submissions-using-windows-store-services#how-to-associate-an-azure-ad-application-with-your-partner-center-account). Copy the account Seller ID from Partner Center Account settings → Organization profile → Legal info.
 
-Add these repository Actions secrets in [Rivetdeck settings](https://github.com/cherrchen/rivetdeck/settings/secrets/actions); use the client secret value, not its key ID, and rotate it before expiration:
+Add these repository Actions secrets in [Rivetdeck settings](https://github.com/cherrchen/Rivetdeck/settings/secrets/actions); use the client secret value, not its key ID, and rotate it before expiration:
 
 | Secret | Value |
 |--------|-------|

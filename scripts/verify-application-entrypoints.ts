@@ -37,6 +37,7 @@ const EXECUTABLE_SOURCE_ALLOWLIST = new Map<string, string>([
   ['apps/electron/scripts/restore-agents-downstream.mjs', 'build-only downstream instruction restoration'],
   ['apps/electron/scripts/set-version.mjs', 'build-only desktop release version setter'],
   ['apps/electron/scripts/sync-version.mjs', 'build-only desktop dependency and version synchronization'],
+  ['apps/electron/scripts/verify-checkpoint-prereqs.mjs', 'test-only desktop checkpoint prerequisite validation'],
   ['packages/context/time-context/tests/fixtures/driver.ts', 'test-only subprocess driver'],
   ['packages/experimental/webworker-packer/bin.js', 'build-only wrapper'],
   ['packages/experimental/webworker-packer/src/bin.ts', 'build-only implementation'],

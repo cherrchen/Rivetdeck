@@ -3,8 +3,8 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/electron/architecture.md
 /rivetdeck-architecture-and-development-guide:
-  en: 38fd989591997427
-  zh: 8b274dfdc7f029d5
+  en: 4732024f420c28a1
+  zh: aab0f5c8859c7e39
 /rivetdeck-architecture-and-development-guide/1-purpose:
   en: db2ae5da2e9e6930
   zh: ffb69793969b7e1f

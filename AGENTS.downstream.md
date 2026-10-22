@@ -51,7 +51,7 @@ Prefixes `codex/*`, `dev/*`, `cursor/*`, and `agent/*` are development branches 
 
 ## Upstream synchronization
 
-[`sync-upstream.yml`](.github/workflows/sync-upstream.yml) is pinned to **`dsh-v0.2.0-rc.2`**: the six-hour master schedule is disabled, and `workflow_dispatch` must set `allow_master_sync` before it may merge `upstream/master`. The target branch is **`develop`** — never `main`. Re-enable the schedule only after an explicit decision to leave that pin.
+[`sync-upstream.yml`](.github/workflows/sync-upstream.yml) is pinned to **`dsh-v0.2.1-rc.2`**: the six-hour master schedule is disabled, and `workflow_dispatch` must set `allow_master_sync` before it may merge `upstream/master`. The target branch is **`develop`** — never `main`. Re-enable the schedule only after an explicit decision to leave that pin.
 
 ```
 upstream/master  →  develop  →  v{a.b.c}-beta.{x}
@@ -201,6 +201,16 @@ All other workflow files are retained from upstream for clean synchronization bu
 | RC / Stable tag on `main` | Yes (via `desktop-promote.yml` or manual dispatch) |
 | Beta tag on `main` | **No** |
 | RC / Stable tag on `develop` | **No** |
+
+## Pull request evidence
+
+Pull requests in this downstream repository do not require GIF evidence, including PRs with product-visible GUI changes. This rule overrides the upstream `record-browser-gif` skill default. Record or attach a GIF only when the user explicitly requests one.
+
+## Local lint limits
+
+Run repository-wide lint only when synchronizing an upstream DSH version. For all other work, lint only the added or modified files in the diff against the target branch, including staged and unstaged changes. This restriction also applies when an upstream instruction or skill requests full lint.
+
+Repository-wide lint must use concurrency 1: set `DSH_OXLINT_THREADS=1` so both Oxlint and its type-aware backend use one worker. Run it serially with full documentation checks (`pnpm run doc-sync` and equivalent aggregates); never run those checks at the same time.
 
 ## Commands
 

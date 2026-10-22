@@ -125,6 +125,8 @@ export class DesktopPluginManager extends PluginManager {
       ...pkg.manifest.version === undefined ? {} : { version: pkg.manifest.version },
       ...pkg.manifest.description === undefined ? {} : { description: pkg.manifest.description },
       meta: { ...meta, description: { en: localized('en'), zh: localized('zh') } },
+      official: false,
+      availability: pkg.source === 'application' ? 'installation' : 'profile',
       installed: true, optional: false, enabled: pkg.enabled,
       removable: pkg.source === 'profile' && !pkg.required,
       ...(pkg.required ? { readOnlyReason: 'management-required' as const } : {}),

@@ -117,7 +117,7 @@ Windows 工作流用临时测试证书签名包副本，在两种原生架构上
 
 首次自动更新前，通过正常的 promotion PR 将 `desktop-store-queue.yml` 部署并启用到仓库默认分支（`main`）。GitHub 从该分支运行 schedule 和 `workflow_run` 工作流；入队时检查此前置条件，调度器不可用则失败。然后在 Partner Center 发布已获审核通过的初始提交；若发布模式为 Manual，需点击 `Publish now`。将 Microsoft Entra 目录关联到 Partner Center 账户，在 Account settings → Users 中添加 Entra 应用并赋予 Manager 角色，然后取得 tenant ID、client ID 和新建密钥的值。微软文档说明了这些[提交 API 前置条件](https://learn.microsoft.com/en-us/windows/uwp/monetize/create-and-manage-submissions-using-windows-store-services#how-to-associate-an-azure-ad-application-with-your-partner-center-account)。从 Partner Center 的 Account settings → Organization profile → Legal info 复制账户 Seller ID。
 
-在 [Rivetdeck 设置](https://github.com/cherrchen/rivetdeck/settings/secrets/actions)中添加以下仓库 Actions secrets；使用 client secret 的值而非密钥 ID，并在到期前轮换：
+在 [Rivetdeck 设置](https://github.com/cherrchen/Rivetdeck/settings/secrets/actions)中添加以下仓库 Actions secrets；使用 client secret 的值而非密钥 ID，并在到期前轮换：
 
 | Secret | 值 |
 |--------|-------|

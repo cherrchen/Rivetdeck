@@ -338,9 +338,7 @@ interface RealSession {
 /** Create one real session through the bundled backend write path. */
 async function createRealSession(home: string, id: string, cwd: string, parentSession?: string): Promise<RealSession> {
   const req = createRequire(BACKEND_ANCHOR)
-  const backend = await import(pathToFileURL(req.resolve('@deepseek-ai/dsh-session-persistence-jsonl')).href) as {
-    default: unknown
-  }
+  const backend = await import(pathToFileURL(req.resolve('@deepseek-ai/dsh-session-persistence-jsonl')).href) as { apply: unknown }
   const cordis = await import(pathToFileURL(req.resolve('@deepseek-ai/cordis')).href) as {
     Context: new () => {
       plugin(plugin: unknown, config: unknown): Promise<unknown>
@@ -359,7 +357,7 @@ async function createRealSession(home: string, id: string, cwd: string, parentSe
     SessionId(id: string): unknown
   }
   const ctx = new cordis.Context()
-  await ctx.plugin(backend.default, { root: join(home, 'sessions'), compression: 'zstd' })
+  await ctx.plugin(backend, { root: join(home, 'sessions'), compression: 'zstd' })
   const handle = await ctx.sessionPersistence.create({
     version: session.SESSION_FORMAT_VERSION,
     id: session.SessionId(id),

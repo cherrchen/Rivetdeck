@@ -4,7 +4,7 @@ English | [中文](architecture.zh.md)
 
 > Status: **Downstream architecture specification**
 >
-> Scope: `cherrchen/deepseek-harness-electron`, especially `apps/electron/**`
+> Scope: `cherrchen/Rivetdeck`, especially `apps/electron/**`
 >
 > Audience: maintainers, coding agents, reviewers, and future contributors
 >

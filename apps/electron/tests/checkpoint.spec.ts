@@ -785,9 +785,7 @@ describe('validateSessionsRoot (real bundled backend)', () => {
     const root = mkdtempSync(join(tmpdir(), 'dsh-validate-'))
     roots.push(root)
     const req = createRequire(INSTALL_ANCHOR)
-    const backend = await import(pathToFileURL(req.resolve('@deepseek-ai/dsh-session-persistence-jsonl')).href) as {
-      default: unknown
-    }
+    const backend = await import(pathToFileURL(req.resolve('@deepseek-ai/dsh-session-persistence-jsonl')).href) as { apply: unknown }
     const cordis = await import(pathToFileURL(req.resolve('@deepseek-ai/cordis')).href) as {
       Context: new () => {
         plugin(plugin: unknown, config: unknown): Promise<unknown>
@@ -806,7 +804,7 @@ describe('validateSessionsRoot (real bundled backend)', () => {
       SessionId(id: string): unknown
     }
     const ctx = new cordis.Context()
-    await ctx.plugin(backend.default, { root, compression: 'zstd' })
+    await ctx.plugin(backend, { root, compression: 'zstd' })
     const handle = await ctx.sessionPersistence.create({
       version: session.SESSION_FORMAT_VERSION,
       id: session.SessionId('phase2-valid'),

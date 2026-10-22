@@ -67,7 +67,7 @@ async function loadBackendModules() {
     fail(`backend lib missing at ${BACKEND_LIB}; run \`pnpm run build\` first`)
   }
   const backendRequire = createRequire(BACKEND_LIB)
-  const backend = (await import(pathToFileURL(BACKEND_LIB).href)).default
+  const backend = await import(pathToFileURL(BACKEND_LIB).href)
   const cordis = await import(pathToFileURL(backendRequire.resolve('@deepseek-ai/cordis')).href)
   const session = await import(pathToFileURL(backendRequire.resolve('@deepseek-ai/dsh-session')).href)
   return { backend, cordis, session }

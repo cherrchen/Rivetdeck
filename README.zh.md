@@ -18,7 +18,7 @@ Rivetdeck 将 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness
 
 ## 安装
 
-请从[最新发布版本](https://github.com/cherrchen/deepseek-harness-electron/releases/latest)下载对应平台的安装包：
+请从[最新发布版本](https://github.com/cherrchen/Rivetdeck/releases/latest)下载对应平台的安装包：
 
 - macOS：适用于 Apple Silicon 和 Intel Mac 的 DMG 或 ZIP
 - Windows：适用于 x64 和 ARM64 的 NSIS 安装程序
@@ -33,8 +33,8 @@ Rivetdeck 将 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness
 安装受支持的 Node.js 版本（`^22.19.0` 或 `>=24`）和 pnpm，然后构建 Harness 运行时并启动 Electron：
 
 ```sh
-git clone https://github.com/cherrchen/deepseek-harness-electron.git
-cd deepseek-harness-electron
+git clone https://github.com/cherrchen/Rivetdeck.git
+cd Rivetdeck
 pnpm install
 pnpm run build
 pnpm --filter @dsh-electron/dsh-electron start
