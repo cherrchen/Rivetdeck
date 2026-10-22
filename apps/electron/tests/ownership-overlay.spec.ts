@@ -166,7 +166,7 @@ describe('ownership-aware Electron overlay', () => {
         const description = git?.meta?.description
         if (description === undefined || typeof description === 'string') throw new Error('Localized source label missing')
         expect(description.en).toContain('Electron bundled')
-        expect(git?.removable).toBe(false)
+        expect(git).toMatchObject({ removable: false, official: false, availability: 'installation' })
         expect(bundles.every(pkg => pkg.installed && pkg.readOnlyReason === undefined)).toBe(true)
         expect(runtime.packages().filter(pkg => pkg.required).map(pkg => pkg.name)).toContain(
           '@dsh-electron/dsh-electron-desktop-capabilities',

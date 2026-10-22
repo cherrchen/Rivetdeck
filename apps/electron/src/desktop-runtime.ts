@@ -74,7 +74,10 @@ export class DesktopRuntime {
       installAnchor: this.profile.installAnchor,
       profile: { ...profile, layers: [] }, home: this.profile.home,
     })
-    this.resolution = { ...resolution, localPackageNames: [] }
+    this.resolution = {
+      profilesDir: resolution.profilesDir, profileDir: resolution.profileDir,
+      entries: resolution.entries, linkedRoots: resolution.linkedRoots, localPackageNames: [],
+    }
     return this.resolution
   }
 
