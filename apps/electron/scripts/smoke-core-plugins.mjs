@@ -53,7 +53,7 @@ try {
     application.process().stderr.on('data', bytes => process.stderr.write(bytes))
     application.process().stdout.on('data', bytes => process.stdout.write(bytes))
     const page = await application.firstWindow({ timeout: 120_000 })
-    await page.getByRole('button', { name: /Settings|设置/, exact: true }).waitFor({ timeout: 120_000 })
+    await page.getByRole('button', { name: /Account menu|账号菜单/, exact: true }).waitFor({ timeout: 120_000 })
     await page.getByRole('dialog', { name: /Optional Runtime Environments|可选运行环境/ }).waitFor({ timeout: 120_000 })
     const output = await application.evaluate((_, request) => {
       if (process.windowsStore !== true) throw new Error('Core plugin probe requires the installed Store application identity')

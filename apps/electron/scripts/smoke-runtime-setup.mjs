@@ -70,13 +70,18 @@ async function launch() {
     }).catch(error => { console.error('Settings response could not be read:', error) }))
   })
   await page.waitForFunction(() => window.deepseekDesktop !== undefined)
-  await page.getByRole('button', { name: /Settings|设置/, exact: true }).waitFor({ timeout: 120_000 })
+  await page.getByRole('button', { name: /Account menu|账号菜单/, exact: true }).waitFor({ timeout: 120_000 })
   return page
 }
 async function close() {
   if (application === undefined) return
   await application.close()
   application = undefined
+}
+/** Settings lives inside the sidebar account menu. */
+async function openSettings(page) {
+  await page.getByRole('button', { name: /Account menu|账号菜单/, exact: true }).click()
+  await page.getByRole('menuitem', { name: /Settings|设置/, exact: true }).click()
 }
 async function smoke() {
   let page = await launch()
@@ -148,7 +153,7 @@ async function smoke() {
   assert.equal((await page.evaluate(() => window.deepseekDesktop.runtimes.getState())).onboardingCompleted, true)
   await page.getByRole('button', { name: /Close|关闭|Configure later|稍后配置/, exact: true }).click({ timeout: 60_000 })
   await page.screenshot({ path: join(scratch, 'home.png') })
-  await page.getByRole('button', { name: /Settings|设置/, exact: true }).click()
+  await openSettings(page)
   await page.getByText(/Network & Runtimes|网络与运行环境/, { exact: true }).first().click()
   await page.getByRole('heading', { name: /Network & Runtimes|网络与运行环境/, exact: true }).waitFor()
   assert.equal(await page.getByRole('dialog', { name: /Optional Runtime Environments|可选运行环境/ }).count(), 0)
@@ -185,7 +190,7 @@ async function smoke() {
     const installed = await page.evaluate(() => window.deepseekDesktop.runtimes.getState())
     assert.equal(installed.node.phase, 'installed'); assert.equal(installed.python.phase, 'installed')
     await page.getByRole('button', { name: /Close|关闭|Configure later|稍后配置/, exact: true }).click({ timeout: 60_000 })
-    await page.getByRole('button', { name: /Settings|设置/, exact: true }).click()
+    await openSettings(page)
     await page.getByText(/Network & Runtimes|网络与运行环境/, { exact: true }).first().click()
     await page.getByRole('article', { name: 'Node.js', exact: true }).getByRole('button', { name: /Remove|移除/, exact: true }).click()
     await page.getByRole('button', { name: /Confirm removal|确认移除/, exact: true }).click()
