@@ -18,7 +18,7 @@ const MODES = ['default', 'direct', 'system', 'manual'] as const
 type EndpointDraft = Pick<NetworkDraft, 'internet204Url' | 'githubUrl' | 'providerId' | 'healthUrl'>
 
 const KINDS = ['proxy', 'internet', 'github', 'llm'] as const
-const HELP_URL = 'https://github.com/cherrchen/deepseek-harness-electron/blob/develop/docs/electron/network-settings.md'
+const HELP_URL = 'https://github.com/cherrchen/Rivetdeck/blob/develop/docs/electron/network-settings.md'
 const MODE_HINT = {
   default: 'defaultHint', direct: 'directHint', system: 'systemHint', manual: 'manualHint',
 } as const satisfies Record<typeof MODES[number], NetworkLocaleKey>

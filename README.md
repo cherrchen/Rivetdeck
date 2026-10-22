@@ -18,7 +18,7 @@ The standalone plugin repositories may continue to receive occasional updates; v
 
 ## Install
 
-Download the installer for your platform from the [latest release](https://github.com/cherrchen/deepseek-harness-electron/releases/latest):
+Download the installer for your platform from the [latest release](https://github.com/cherrchen/Rivetdeck/releases/latest):
 
 - macOS: DMG or ZIP for Apple Silicon and Intel Macs
 - Windows: NSIS installer for x64 and ARM64
@@ -33,8 +33,8 @@ Open the installed application and complete the provider setup in the Harness UI
 Install a supported Node.js version (`^22.19.0` or `>=24`) and pnpm, then build the Harness runtime and start Electron:
 
 ```sh
-git clone https://github.com/cherrchen/deepseek-harness-electron.git
-cd deepseek-harness-electron
+git clone https://github.com/cherrchen/Rivetdeck.git
+cd Rivetdeck
 pnpm install
 pnpm run build
 pnpm --filter @dsh-electron/dsh-electron start

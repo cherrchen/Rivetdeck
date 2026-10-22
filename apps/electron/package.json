@@ -7,7 +7,7 @@
   "homepage": "https://cherrchen.github.io/rivetdeck-website",
   "repository": {
     "type": "git",
-    "url": "https://github.com/cherrchen/deepseek-harness-electron.git"
+    "url": "https://github.com/cherrchen/Rivetdeck.git"
   },
   "type": "module",
   "main": "lib/main.js",
@@ -209,7 +209,7 @@
     "publish": {
       "provider": "github",
       "owner": "cherrchen",
-      "repo": "deepseek-harness-electron",
+      "repo": "Rivetdeck",
       "releaseType": "release"
     },
     "electronUpdaterCompatibility": ">=2.16",
