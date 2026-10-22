@@ -2,7 +2,7 @@
   "name": "@dsh-electron/dsh-electron",
   "productName": "Rivetdeck",
   "description": "Electron desktop shell built on DeepSeek Harness",
-  "version": "0.2.1-rc.2",
+  "version": "0.2.1-beta.1",
   "private": true,
   "homepage": "https://cherrchen.github.io/rivetdeck-website",
   "repository": {
