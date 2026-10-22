@@ -32,7 +32,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.allow_master_sync
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: develop
           fetch-depth: 0
