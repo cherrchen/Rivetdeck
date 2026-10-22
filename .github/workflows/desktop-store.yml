@@ -187,7 +187,7 @@ jobs:
           $package = Get-Item "dist/electron-store/*-${{ matrix.arch }}.appx"
           ./apps/electron/scripts/smoke-windows-store.ps1 -PackagePath $package.FullName -Architecture '${{ matrix.arch }}' -ReportDirectory "$env:RUNNER_TEMP/store-qualification/certification" -RunCertificationKit -CertificationOnly
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always() && steps.contents.outcome == 'success'
         with:
           name: rivetdeck-store-${{ matrix.arch }}
@@ -197,7 +197,7 @@ jobs:
 
       - name: Upload Store qualification evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: rivetdeck-store-qualification-${{ matrix.arch }}
           path: ${{ runner.temp }}/store-qualification/
