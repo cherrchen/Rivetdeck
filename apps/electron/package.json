@@ -4,7 +4,7 @@
   "description": "Electron desktop shell built on DeepSeek Harness",
   "version": "0.2.1-rc.2",
   "private": true,
-  "homepage": "https://rivetdeck.hometown123.top",
+  "homepage": "https://cherrchen.github.io/rivetdeck-website",
   "repository": {
     "type": "git",
     "url": "https://github.com/cherrchen/deepseek-harness-electron.git"
