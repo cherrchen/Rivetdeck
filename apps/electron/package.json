@@ -16,6 +16,7 @@
     "runtimePlugins": [],
     "ecosystemPlugins": [
       "@dsh-electron/dsh-plugin-git",
+      "@dsh-electron/dsh-plugin-multi-root-workspace",
       "@dsh-electron/dsh-theme-studio"
     ]
   },
@@ -147,6 +148,7 @@
     "@deepseek-ai/dsh-workspace": "workspace:^",
     "@deepseek-ai/schemastery": "workspace:^",
     "@dsh-electron/dsh-plugin-git": "0.2.8",
+    "@dsh-electron/dsh-plugin-multi-root-workspace": "0.1.10",
     "@dsh-electron/dsh-theme-studio": "0.1.6",
     "electron-updater": "^6.8.9",
     "extract-zip": "^2.0.1",

@@ -13,6 +13,7 @@ vi.mock('@deepseek-ai/dsh-plugin-manager/operations', () => ({ runPluginCommand:
 
 const appPath = fileURLToPath(new URL('..', import.meta.url))
 const GIT = '@dsh-electron/dsh-plugin-git'
+const MRW = '@dsh-electron/dsh-plugin-multi-root-workspace'
 const THEME = '@dsh-electron/dsh-theme-studio'
 const manager = { command: '/bundled/node', args: ['/bundled/pnpm.cjs'], env: { PATH: '/bundled' } }
 const packageResult = { exitCode: 0, output: '', truncated: false, logPath: '/tmp/pnpm.log' }
@@ -32,11 +33,14 @@ function profileWithGit(dir: string, version: string, enabled: boolean): void {
   const manifest = readProfileManifest('dsh', dir)
   writeProfileManifest(dir, {
     ...manifest,
-    dependencies: { ...manifest.dependencies, [GIT]: version, [THEME]: '0.1.6' },
+    dependencies: { ...manifest.dependencies, [GIT]: version, [MRW]: '0.1.10', [THEME]: '0.1.6' },
     dsh: { ...manifest.dsh, profile: { ...manifest.dsh?.profile, bundles: [
       ...(manifest.dsh?.profile?.bundles ?? []), ...enabled ? [GIT] : [],
     ] } },
   })
+  const multiRoot = join(dir, 'node_modules', ...MRW.split('/'))
+  mkdirSync(multiRoot, { recursive: true })
+  writeFileSync(join(multiRoot, 'package.json'), JSON.stringify({ name: MRW, version: '0.1.10' }))
   const theme = join(dir, 'node_modules', ...THEME.split('/'))
   mkdirSync(theme, { recursive: true })
   writeFileSync(join(theme, 'package.json'), JSON.stringify({ name: THEME, version: '0.1.6' }))
@@ -71,7 +75,7 @@ describe('ecosystem profile ownership', () => {
       })
       await prepareEcosystemProfile(appPath, home, manager)
       expect(operation).toHaveBeenCalledWith(expect.objectContaining({ profile: WEB_PROFILE_NAME, home }), [
-        'add', `${GIT}@0.2.8`, `${THEME}@0.1.6`,
+        'add', `${GIT}@0.2.8`, `${MRW}@0.1.10`, `${THEME}@0.1.6`,
       ], expect.objectContaining({ ...manager, execution: 'service' }))
       expect(readProfileManifest('dsh', dir).dependencies?.[GIT]).toBe('0.2.8')
       expect(existsSync(join(home, 'electron', 'ecosystem-preinstalled'))).toBe(true)

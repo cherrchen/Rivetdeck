@@ -51,6 +51,7 @@ const OVERLAY_INSERT_NAMES = [
 
 const appPath = fileURLToPath(new URL('..', import.meta.url))
 const GIT = '@dsh-electron/dsh-plugin-git'
+const MRW = '@dsh-electron/dsh-plugin-multi-root-workspace'
 const THEME = '@dsh-electron/dsh-theme-studio'
 
 it('refreshes Host links without deleting their target directories', () => {
@@ -159,7 +160,7 @@ describe('ownership-aware Electron overlay', () => {
       try {
         const manager = new DesktopPluginManager(ctx, { fallbackRegistries: [] })
         const bundles = await manager.listBundles()
-        expect(bundles.map(pkg => pkg.name)).toEqual([GIT, THEME])
+        expect(bundles.map(pkg => pkg.name)).toEqual([GIT, MRW, THEME])
         const git = bundles.find(pkg => pkg.name === GIT)
         expect(git?.version).toBe('0.2.8')
         expect(git?.description).not.toBe('stale profile copy')
@@ -224,7 +225,7 @@ describe('ownership-aware Electron overlay', () => {
           ...manifest.dsh,
           profile: {
             ...manifest.dsh?.profile,
-            bundles: (manifest.dsh?.profile?.bundles ?? []).filter(name => name !== GIT && name !== THEME),
+            bundles: (manifest.dsh?.profile?.bundles ?? []).filter(name => name !== GIT && name !== MRW && name !== THEME),
           },
         },
       })
@@ -232,12 +233,15 @@ describe('ownership-aware Electron overlay', () => {
 - insert:
     - id: home-git-dup
       name: '${GIT}'
+    - id: home-multi-root-dup
+      name: '${MRW}'
     - id: home-theme-dup
       name: '${THEME}'
 `)
       prepareHostProfileProjection(appPath, home)
       const composed = composeWithOverlay(appPath, home)
       expect(active(named(composed, GIT))).toEqual([])
+      expect(active(named(composed, MRW))).toEqual([])
       expect(active(named(composed, THEME))).toEqual([])
     } finally {
       rmSync(home, { recursive: true, force: true })

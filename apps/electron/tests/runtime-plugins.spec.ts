@@ -62,7 +62,7 @@ describe('bundled Desktop plugin startup', () => {
       const appManifest = JSON.parse(readFileSync(join(appPath, 'package.json'), 'utf8')) as { version: string }
       for (const plugin of runtime) expect(plugin.version).toBe(appManifest.version)
       expect(npmRuntime).toEqual([])
-      expect(ecosystem.map(plugin => plugin.name)).toEqual([GIT, '@dsh-electron/dsh-theme-studio'])
+      expect(ecosystem.map(plugin => plugin.name)).toEqual([GIT, '@dsh-electron/dsh-plugin-multi-root-workspace', '@dsh-electron/dsh-theme-studio'])
       ensureRuntimePluginsLinked(appPath, harnessHome)
       for (const plugin of [...runtime, ...npmRuntime]) {
         expect(readlinkSync(profileModuleLinkPath(harnessHome, plugin.name))).toBe(plugin.rootPath)
@@ -75,6 +75,7 @@ describe('bundled Desktop plugin startup', () => {
       const patch = readFileSync(join(appPath, 'runtime', 'host.patch.yml'), 'utf8')
       expect(patch).not.toContain('desktop-git')
       expect(patch).not.toContain("name: '@dsh-electron/dsh-plugin-git'")
+      expect(patch).not.toContain("name: '@dsh-electron/dsh-plugin-multi-root-workspace'")
       expect(patch).toContain("name: '@dsh-electron/dsh-electron-desktop-capabilities'")
     } finally {
       rmSync(harnessHome, { recursive: true, force: true })

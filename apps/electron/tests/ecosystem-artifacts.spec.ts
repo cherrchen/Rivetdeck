@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { expect, it, onTestFinished, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import * as cordis from '@deepseek-ai/cordis'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import { GitService } from '@dsh-electron/dsh-plugin-git'
 import * as react from 'react'
@@ -16,14 +17,17 @@ import * as primitives from '@deepseek-ai/dsh-client-ui-primitives'
 import * as clientStore from '@deepseek-ai/dsh-client-store'
 import type * as GitClient from '@dsh-electron/dsh-plugin-git/client'
 import type * as ThemeClient from '@dsh-electron/dsh-theme-studio/client'
+import type * as MultiRootClient from '@dsh-electron/dsh-plugin-multi-root-workspace/client'
 
 function clientArtifact(name: '@dsh-electron/dsh-plugin-git'): typeof GitClient
+function clientArtifact(name: '@dsh-electron/dsh-plugin-multi-root-workspace'): typeof MultiRootClient
 function clientArtifact(name: '@dsh-electron/dsh-theme-studio'): typeof ThemeClient
-function clientArtifact(name: string): typeof GitClient | typeof ThemeClient {
-  const captured: { factory?: (require: (id: string) => object) => typeof GitClient | typeof ThemeClient } = {}
+type ClientModule = typeof GitClient | typeof MultiRootClient | typeof ThemeClient
+function clientArtifact(name: string): ClientModule {
+  const captured: { factory?: (require: (id: string) => object) => ClientModule } = {}
   const path = fileURLToPath(new URL(`../node_modules/${name}/lib/client.js`, import.meta.url))
   runInNewContext(readFileSync(path, 'utf8'), { window: { __ModuleLoader__: {
-    load(registration: { id: string; factory: (require: (id: string) => object) => typeof GitClient | typeof ThemeClient }) {
+    load(registration: { id: string; factory: (require: (id: string) => object) => ClientModule }) {
       expect(registration.id).toBe(name)
       captured.factory = registration.factory
     },
@@ -32,6 +36,7 @@ function clientArtifact(name: string): typeof GitClient | typeof ThemeClient {
   return captured.factory((id) => {
     if (id === 'react') return react
     if (id === 'react-dom') return reactDom
+    if (id === '@deepseek-ai/cordis') return cordis
     if (id === 'react/jsx-runtime') return jsx
     if (id === '@deepseek-ai/dsh-client-ui-primitives') return primitives
     if (id === '@deepseek-ai/dsh-client-store') return clientStore
@@ -78,6 +83,13 @@ it('loads the portable Git Client artifact with the current right-sidebar servic
   for (const component of [client.GitChangesSurface, client.GitDiffSurface, client.GitGraphSurface]) {
     expect(typeof component).toBe('function')
   }
+})
+
+it('loads the multi-root workspace Client artifact without claiming a Desktop capability', () => {
+  const client = clientArtifact('@dsh-electron/dsh-plugin-multi-root-workspace')
+  expect(client.inject).not.toContain('desktop')
+  expect(client.inject).not.toContain('@dsh-electron/dsh-electron-desktop-capabilities')
+  expect(typeof client.apply).toBe('function')
 })
 
 it('previews Theme Studio without persistence and persists applied themes from the published Client artifact', async () => {
