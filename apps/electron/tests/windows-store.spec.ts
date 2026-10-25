@@ -80,7 +80,7 @@ describe('Microsoft Store distribution', () => {
       const manifest = await readFile(config.appx.customManifestPath, 'utf8')
       expect(manifest).toContain('Name="CherrchenSoftware.Rivetdeck"')
       expect(manifest).toContain('Version="2.3.4.0"')
-      expect(manifest).toContain("Publisher='CN=927251ED-C4FA-409B-8A38-C2D78ECAA60A'")
+      expect(manifest).toMatch(/\bPublisher=(["'])CN=927251ED-C4FA-409B-8A38-C2D78ECAA60A\1/)
       expect(manifest).toContain('Cherrchen &amp; Software')
       expect(manifest).toContain('ProcessorArchitecture="${arch}"')
       for (const [file, width, height] of [['StoreLogo.png', 50, 50], ['Square44x44Logo.png', 44, 44], ['Square150x150Logo.png', 150, 150], ['Wide310x150Logo.png', 310, 150]] as const) {

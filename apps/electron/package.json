@@ -2,7 +2,7 @@
   "name": "@dsh-electron/dsh-electron",
   "productName": "Rivetdeck",
   "description": "Electron desktop shell built on DeepSeek Harness",
-  "version": "0.2.1-rc.3",
+  "version": "0.2.1-beta.2",
   "private": true,
   "homepage": "https://cherrchen.github.io/rivetdeck-website",
   "repository": {
@@ -150,13 +150,13 @@
     "@dsh-electron/dsh-plugin-git": "0.2.8",
     "@dsh-electron/dsh-plugin-multi-root-workspace": "0.1.10",
     "@dsh-electron/dsh-theme-studio": "0.1.6",
-    "electron-updater": "^6.8.9",
+    "electron-updater": "^6.8.11",
     "extract-zip": "^2.0.1",
     "js-yaml": "^4.2.0",
     "pnpm": "11.28.5",
     "tar": "^7.5.22",
-    "ws": "^8.21.0",
-    "yaml": "^2.8.1"
+    "ws": "^8.22.0",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-api-session-controller": "workspace:^",
@@ -171,19 +171,18 @@
     "@deepseek-ai/dsh-client-ui-slots": "workspace:^",
     "@deepseek-ai/dsh-client-ui-theme": "workspace:^",
     "@deepseek-ai/dsh-client-ui-workspace": "workspace:^",
-    "@types/node": "^22.20.0",
-    "@types/react": "~18.3.1",
-    "@types/react-dom": "~18.3.0",
-    "@types/ws": "^8.18.1",
+    "@types/node": "^22.20.5",
+    "@types/ws": "^8.18.2",
     "@vitejs/plugin-react": "^4.0.0",
-    "electron": "43.0.0",
-    "electron-builder": "26.15.3",
+    "@vitest/coverage-v8": "^4.1.12",
+    "electron": "44.7.0",
+    "electron-builder": "26.18.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "sharp": "^0.35.3",
     "typescript": "^6.0.3",
-    "vite": "^6.0.0",
-    "vitest": "^4.1.8"
+    "vite": "^6.4.5",
+    "vitest": "^4.1.12"
   },
   "build": {
     "appId": "app.rivetdeck.desktop",
