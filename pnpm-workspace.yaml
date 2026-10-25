@@ -104,8 +104,8 @@ minimumReleaseAgeExclude:
   - '@trycua/cua-driver-win32-x64-msvc@0.28.0'
   - '@trycua/cua-driver@0.28.0'
   # Desktop bundles these exact ecosystem plugin releases.
-  - '@dsh-electron/dsh-plugin-git@0.2.7'
-  - '@dsh-electron/dsh-theme-studio@0.1.5'
+  - '@dsh-electron/dsh-plugin-git@0.2.8'
+  - '@dsh-electron/dsh-theme-studio@0.1.6'
   # The package manager is a workspace devDependency, so its own exact pin
   # must be exempt from the release-age window that guards other packages.
   - pnpm@11.28.5
