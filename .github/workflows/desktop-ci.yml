@@ -297,8 +297,11 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           node apps/electron/scripts/smoke-runtime-setup.mjs "dist/electron/win-unpacked/Rivetdeck.exe" --offline
+          if ($LASTEXITCODE -ne 0) { throw 'Offline runtime smoke failed.' }
           node apps/electron/scripts/smoke-runtime-setup.mjs "dist/electron/win-unpacked/Rivetdeck.exe" --install
+          if ($LASTEXITCODE -ne 0) { throw 'Runtime installation smoke failed.' }
           node apps/electron/scripts/smoke-core-plugins.mjs "dist/electron/win-unpacked/resources/core-runtime/node.exe" "dist/electron/win-unpacked/resources/app"
+          if ($LASTEXITCODE -ne 0) { throw 'Core plugin smoke failed.' }
       - name: Smoke-test runtime lifecycle and Core plugins (macOS)
         if: runner.os == 'macOS'
         run: |

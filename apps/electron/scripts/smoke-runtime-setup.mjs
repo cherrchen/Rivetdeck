@@ -78,10 +78,25 @@ async function close() {
   await application.close()
   application = undefined
 }
-/** Settings lives inside the sidebar account menu. */
+/** Open Settings through the account menu, dismissing optional credential onboarding if it blocks navigation. */
 async function openSettings(page) {
-  await page.getByRole('button', { name: /Account menu|账号菜单/, exact: true }).click()
-  await page.getByRole('menuitem', { name: /Settings|设置/, exact: true }).click()
+  const account = page.getByRole('button', { name: /Account menu|账号菜单/, exact: true })
+  const settings = page.getByRole('menuitem', { name: /Settings|设置/, exact: true })
+  const dismiss = page.getByRole('dialog').getByRole('button', { name: /Close|关闭|Configure later|稍后配置/, exact: true })
+  let selectingSettings = false
+  await page.addLocatorHandler(dismiss, async button => {
+    await button.click()
+    // Dismissing onboarding can also close the account menu underneath it.
+    if (selectingSettings && !await settings.isVisible()) await account.click()
+  })
+  try {
+    await account.click({ timeout: 60_000 })
+    selectingSettings = true
+    await settings.click({ timeout: 60_000 })
+  } finally {
+    // Settings has its own Close button; only onboarding may be dismissed automatically.
+    await page.removeLocatorHandler(dismiss)
+  }
 }
 async function smoke() {
   let page = await launch()
@@ -151,8 +166,7 @@ async function smoke() {
   await close()
   page = await launch()
   assert.equal((await page.evaluate(() => window.deepseekDesktop.runtimes.getState())).onboardingCompleted, true)
-  await page.getByRole('button', { name: /Close|关闭|Configure later|稍后配置/, exact: true }).click({ timeout: 60_000 })
-  await page.screenshot({ path: join(scratch, 'home.png') })
+  await page.screenshot({ path: join(scratch, 'restart.png') })
   await openSettings(page)
   await page.getByText(/Network & Runtimes|网络与运行环境/, { exact: true }).first().click()
   await page.getByRole('heading', { name: /Network & Runtimes|网络与运行环境/, exact: true }).waitFor()
@@ -189,7 +203,6 @@ async function smoke() {
     page = await launch()
     const installed = await page.evaluate(() => window.deepseekDesktop.runtimes.getState())
     assert.equal(installed.node.phase, 'installed'); assert.equal(installed.python.phase, 'installed')
-    await page.getByRole('button', { name: /Close|关闭|Configure later|稍后配置/, exact: true }).click({ timeout: 60_000 })
     await openSettings(page)
     await page.getByText(/Network & Runtimes|网络与运行环境/, { exact: true }).first().click()
     await page.getByRole('article', { name: 'Node.js', exact: true }).getByRole('button', { name: /Remove|移除/, exact: true }).click()
