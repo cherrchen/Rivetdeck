@@ -64,9 +64,12 @@ export class LocalFileReferenceService extends FileReferenceService {
     }
     validateConfig(this.config)
 
-    const installPrompt = (agent: Agent): ReturnType<Context['inject']> => {
+    const installPrompt = (agent: Agent): ReturnType<Context['inject']> | undefined => {
       const existing = this.promptFibers.get(agent)
       if (existing !== undefined) return existing
+      // The owning loop fiber unloads an Agent's registration and its scope fiber concurrently, so
+      // agents.list() can briefly yield an Agent whose scope is already gone.
+      if (agent.ctx.fiber.uid === null) return undefined
       const fiber = agent.ctx.inject(['systemPrompt', 'tools'], (scope) => {
         scope.systemPrompt.section({
           name: 'context:file-reference',

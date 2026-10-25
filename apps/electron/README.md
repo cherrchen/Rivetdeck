@@ -30,7 +30,7 @@ Governing rules for contributors:
 
 - Desktop-only work stays under `apps/electron/**`; do not customize Desktop UI through `apps/web`.
 - Keep `src/renderer` a thin bootstrap/carrier; do not grow a second product frontend there.
-- Portable and Desktop-aware product features belong in independently published DSH/Cordis packages; `runtime/plugins/` holds the Desktop Capabilities composition package and Host-only providers. Desktop-required Host composition is listed in `runtime/host.patch.yml`; bundled Git and Theme Studio are seeded into the web profile ([plugin lifecycle](../../docs/electron/plugin-lifecycle.md)). The same reference owns the Desktop configuration writer policy and the retained shared UI contribution.
+- Portable and Desktop-aware product features belong in independently published DSH/Cordis packages; `runtime/plugins/` holds the Desktop Capabilities composition package and Host-only providers. Desktop-required Host composition is listed in `runtime/host.patch.yml`; bundled Git, Multi-root Workspace, and Theme Studio are seeded into the web profile ([plugin lifecycle](../../docs/electron/plugin-lifecycle.md)). The same reference owns the Desktop configuration writer policy and the retained shared UI contribution.
 - A Desktop-aware feature keeps its core fiber portable and installs native enhancements through an optional `ctx.inject(['desktop'], ...)` child fiber. It consumes the `ctx.desktop` capability service, never `window.deepseekDesktop` directly.
 - Loopback Host transport is an internal compatibility mechanism, not a defect to remove without evidence.
 
@@ -51,6 +51,8 @@ pnpm --filter @dsh-electron/dsh-electron build
 pnpm --filter @dsh-electron/dsh-electron test
 pnpm --filter @dsh-electron/dsh-electron test:ownership
 ```
+
+Packaged runtime smokes open Settings through the account menu after restart. Credential onboarding may appear or complete without a dialog; the probe dismisses it only when it appears during navigation and verifies that the runtime Settings section opens. Windows CI checks each smoke command's exit code before running the next command.
 
 Git artifact acceptance compares native filesystem paths so Windows short names and Git path separators identify the same directory. Runtime verification fixtures link the installed Node executable on POSIX and copy it on Windows; the verification case and cleanup each allow 30 seconds to cover the verifier's 15-second child deadline. Managed runtime checks execute at the final generation path before activation ([lifecycle](../../docs/electron/runtime-environments.md)).
 

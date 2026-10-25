@@ -30,7 +30,7 @@ Electron Main
 
 - Desktop 专属改动留在 `apps/electron/**`；不要通过改 `apps/web` 做 Desktop-only UI。
 - 保持 `src/renderer` 为薄 bootstrap/carrier；不要在此长出第二套产品前端。
-- Portable 与 Desktop-aware 产品功能归属独立发布的 DSH/Cordis package；`runtime/plugins/` 容纳 Desktop Capabilities composition 包与 Host-only provider。Desktop 必需的 Host 组合列在 `runtime/host.patch.yml` 中；随包 Git 与 Theme Studio 被 seed 进 web profile（[插件生命周期](../../docs/electron/plugin-lifecycle.zh.md)）。同一参考文档负责 Desktop 配置写入策略与保留的共享 UI 修改贡献。
+- Portable 与 Desktop-aware 产品功能归属独立发布的 DSH/Cordis package；`runtime/plugins/` 容纳 Desktop Capabilities composition 包与 Host-only provider。Desktop 必需的 Host 组合列在 `runtime/host.patch.yml` 中；随包 Git、Multi-root Workspace 与 Theme Studio 被 seed 进 web profile（[插件生命周期](../../docs/electron/plugin-lifecycle.zh.md)）。同一参考文档负责 Desktop 配置写入策略与保留的共享 UI 修改贡献。
 - Desktop-aware feature 保持 core fiber portable，并通过 optional `ctx.inject(['desktop'], ...)` child fiber 安装原生增强。它通过 `ctx.desktop` 能力服务消费原生能力，不得直接访问 `window.deepseekDesktop`。
 - 环回 Host 传输是内部兼容机制，无证据时不要为架构纯粹性替换它。
 
@@ -51,6 +51,8 @@ pnpm --filter @dsh-electron/dsh-electron build
 pnpm --filter @dsh-electron/dsh-electron test
 pnpm --filter @dsh-electron/dsh-electron test:ownership
 ```
+
+打包应用的运行环境 smoke 在重启后通过账号菜单打开设置。凭据引导可能显示弹窗，也可能直接完成；探针仅在导航过程中出现引导时将其关闭，并验证运行环境设置页面能够打开。Windows CI 在执行下一条 smoke 命令前检查当前命令的退出码。
 
 Git 产物验收比较原生文件系统路径，使 Windows 短路径名与 Git 路径分隔符指向同一目录。运行时验证 fixture 在 POSIX 上链接已安装的 Node 可执行文件，在 Windows 上复制该文件；验证用例与清理各允许 30 秒，以覆盖验证器的 15 秒子进程期限。托管运行环境的检查在激活前于最终 generation 路径执行（[生命周期](../../docs/electron/runtime-environments.zh.md)）。
 

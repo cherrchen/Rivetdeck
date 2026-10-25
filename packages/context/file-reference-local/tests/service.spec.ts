@@ -37,6 +37,7 @@ async function stubAgent(
   ctx: Context,
   id = 'file-reference-agent',
   includeCwd = true,
+  agentCtx: Context = ctx,
 ): Promise<{ agent: Agent; dispose: () => Promise<void> }> {
   const root = await mkdtemp(join(tmpdir(), 'dsh-file-reference-service-'))
   roots.push(root)
@@ -48,7 +49,7 @@ async function stubAgent(
     session,
     status: 'idle',
     acceptsNextStep: false,
-    ctx,
+    ctx: agentCtx,
     followup() {},
     steer() {},
     inject() {},
@@ -204,5 +205,22 @@ describe('LocalFileReferenceService', () => {
       expect(warn).toHaveBeenCalledWith('file-reference-local: prompt cleanup failed: string cleanup')
     })
     await expect(fiber.dispose()).resolves.toBeUndefined()
+  })
+
+  it('activates when agents.list() yields an Agent whose scope fiber is already disposed', async () => {
+    const ctx = await harness()
+    const scope = ctx.plugin(() => {})
+    const { agent: dead } = await stubAgent(ctx, 'dead-scope-agent', true, scope.ctx)
+    await scope.dispose()
+    expect(dead.ctx.fiber?.uid).toBeNull()
+    const fiber = ctx.plugin(LocalFileReferenceService)
+    await fiber
+    const { agent: live } = await stubAgent(ctx)
+    expect(ctx.agents.get(live.id)).toBe(live)
+    expect(renderPrompt(await ctx.systemPrompt.assemble())).not.toContain(FILE_REFERENCE_PROMPT)
+    ctx.tools.register(defineContentToolFixture({
+      name: 'read', description: 'read a file', parameters: {}, execute: () => Promise.resolve([]),
+    }))
+    expect(renderPrompt(await ctx.systemPrompt.assemble())).toContain(FILE_REFERENCE_PROMPT)
   })
 })

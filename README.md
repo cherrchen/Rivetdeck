@@ -48,12 +48,13 @@ Harness profiles and state live in the platform-specific application-data direct
 
 ## Bundled plugins
 
-Rivetdeck preinstalls two portable DSH ecosystem bundles published from standalone repositories. Both appear in the web profile's Installed plugins and can be enabled or disabled there.
+Rivetdeck preinstalls three portable DSH ecosystem bundles published from standalone repositories. All appear in the web profile's Installed plugins and can be enabled or disabled there.
 
 | Plugin | Desktop role | Summary |
 |---|---|---|
 | [dsh-theme-studio](https://github.com/cherrchen/dsh-theme-studio) | Preinstalled ecosystem plugin | Color themes under **Settings → General → Themes**, alongside official Light / Dark / System Appearance. Listed in `dshElectron.ecosystemPlugins`. |
 | [dsh-plugin-git](https://github.com/cherrchen/dsh-plugin-git) | Preinstalled ecosystem plugin | Local Git status, diffs, staging, commits, and branch controls in the right sidebar. Listed in `dshElectron.ecosystemPlugins`. |
+| [dsh-plugin-multi-root-workspace](https://github.com/cherrchen/dsh-plugin-multi-root-workspace) | Preinstalled ecosystem plugin | Additional workspace roots in the sandbox scope, managed from the Workspace Folders panel. Listed in `dshElectron.ecosystemPlugins`. |
 
 Canonical development happens in those repositories; this monorepo installs their published npm packages and keeps no copy of their source.
 

@@ -48,12 +48,13 @@ Harness profile 和状态存储在对应平台的应用数据目录。智能体 
 
 ## 内置插件
 
-Rivetdeck 预装两个由独立仓库发布的可移植 DSH 生态 bundle。它们都显示在 web profile 的 Installed 插件中，用户可在此启用或禁用。
+Rivetdeck 预装三个由独立仓库发布的可移植 DSH 生态 bundle。它们都显示在 web profile 的 Installed 插件中，用户可在此启用或禁用。
 
 | 插件 | 桌面角色 | 简介 |
 |---|---|---|
 | [dsh-theme-studio](https://github.com/cherrchen/dsh-theme-studio) | 预装生态插件 | 在**设置 → 通用 → 主题**提供配色主题，与官方浅色 / 深色 / 跟随系统外观并列。列入 `dshElectron.ecosystemPlugins`。 |
 | [dsh-plugin-git](https://github.com/cherrchen/dsh-plugin-git) | 预装生态插件 | 在右侧边栏提供本地 Git 状态、diff、stage、commit 与 branch 操作。列入 `dshElectron.ecosystemPlugins`。 |
+| [dsh-plugin-multi-root-workspace](https://github.com/cherrchen/dsh-plugin-multi-root-workspace) | 预装生态插件 | 通过 Workspace Folders 面板管理额外的 workspace 根目录并纳入 sandbox 范围。列入 `dshElectron.ecosystemPlugins`。 |
 
 Canonical 开发在各自仓库进行；本 monorepo 安装它们发布的 npm package，不保留其源码副本。
 

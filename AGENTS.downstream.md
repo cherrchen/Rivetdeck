@@ -6,7 +6,7 @@ This repository is the **Rivetdeck** downstream fork of [deepseek-ai/deepseek-ha
 
 | Area | Owner | Notes |
 |------|-------|-------|
-| `packages/**` | Upstream | Merged from `upstream/master` on `develop`; retain the scoped [UI contribution](docs/electron/plugin-lifecycle.md#downstream-ui-contribution) |
+| `packages/**` | Upstream | Merged from `upstream/master` on `develop`; retain the scoped [UI contribution](docs/electron/plugin-lifecycle.md#downstream-ui-contribution) and the temporary `file-reference-local` guard ([Desktop architecture constraints](#desktop-architecture-constraints)) |
 | `vendor/`, `apps/cli`, `apps/web` | Upstream | Merged from `upstream/master` on `develop` |
 | `docs/**` (except `docs/electron/**`) | Upstream | Core harness documentation spine |
 | `docs/electron/` | Downstream | Desktop architecture and other downstream-owned docs — [architecture](docs/electron/architecture.md) |
@@ -51,7 +51,7 @@ Prefixes `codex/*`, `dev/*`, `cursor/*`, and `agent/*` are development branches 
 
 ## Upstream synchronization
 
-[`sync-upstream.yml`](.github/workflows/sync-upstream.yml) is pinned to **`dsh-v0.2.1-rc.2`**: the six-hour master schedule is disabled, and `workflow_dispatch` must set `allow_master_sync` before it may merge `upstream/master`. The target branch is **`develop`** — never `main`. Re-enable the schedule only after an explicit decision to leave that pin.
+[`sync-upstream.yml`](.github/workflows/sync-upstream.yml) is pinned to **`dsh-v0.2.1-rc.3`**: the six-hour master schedule is disabled, and `workflow_dispatch` must set `allow_master_sync` before it may merge `upstream/master`. The target branch is **`develop`** — never `main`. Re-enable the schedule only after an explicit decision to leave that pin.
 
 ```
 upstream/master  →  develop  →  v{a.b.c}-beta.{x}
@@ -112,7 +112,7 @@ Before architecture-sensitive Desktop work, read that guide, then classify the c
 
 Standing rules (do not duplicate the full architecture doc here):
 
-- Desktop-only changes stay under `apps/electron/**` and `docs/electron/**`. Public ecosystem plugins are independently published npm packages; do not mirror their source into this repository. Do not modify `apps/web`, upstream `docs/**` (outside `docs/electron/**`), or `packages/**` for Desktop-only UI unless the change is intentionally upstream-compatible and meant for upstream contribution. The existing `packages/client/ui-plugin-manager/` removal-permission contribution remains a maintained downstream exception until equivalent upstream behavior is verified; follow its [maintenance policy](docs/electron/plugin-lifecycle.md#downstream-ui-contribution).
+- Desktop-only changes stay under `apps/electron/**` and `docs/electron/**`. Public ecosystem plugins are independently published npm packages; do not mirror their source into this repository. Do not modify `apps/web`, upstream `docs/**` (outside `docs/electron/**`), or `packages/**` for Desktop-only UI unless the change is intentionally upstream-compatible and meant for upstream contribution. The existing `packages/client/ui-plugin-manager/` removal-permission contribution remains a maintained downstream exception until equivalent upstream behavior is verified; follow its [maintenance policy](docs/electron/plugin-lifecycle.md#downstream-ui-contribution). The `packages/context/file-reference-local/` guard that skips Agents whose scope fiber is already unloading is a temporary downstream exception introduced with the preinstalled Multi-root Workspace plugin: that plugin's `fs`/`sandbox` provider replacement restarts `agent-loop`, exposing an upstream unload race that leaves `file-reference-local` permanently inactive. Keep the change limited to that guard and its regression test, and remove it during the first upstream synchronization that fixes the race upstream or once a Multi-root Workspace release avoids triggering it; future mitigation belongs in the Multi-root Workspace plugin, not in further `packages/**` changes.
 - Electron remains the stable desktop platform; DSH/Cordis plugins are the extensible product feature layer. Do not make the Electron app itself a Cordis plugin, and do not rebuild a second product frontend in `apps/electron/src/renderer`.
 - Keep Renderer bootstrap thin (`bootstrap.ts` / `renderer/main.ts`). Portable and Desktop-aware product features belong in independently published DSH packages; `apps/electron/runtime/plugins/` holds Desktop adapters, Electron carrier plugins, and Desktop-only integration; Electron-required portable DSH UI infrastructure ships as a published npm package declared in `dshElectron.runtimePlugins`. Host composition stays explicit in `runtime/host.patch.yml`.
 - Feature plugins MUST NOT import Electron, `ipcRenderer`, or Node. Native OS operations cross the Desktop Capability Provider (`ctx.desktop`); only renderer infrastructure and the provider may read `window.deepseekDesktop` directly. Do not add a generic IPC escape hatch.

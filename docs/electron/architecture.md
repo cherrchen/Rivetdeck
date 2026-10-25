@@ -357,9 +357,11 @@ The upstream Web bundle provides the Plugins UI and agent tool. Electron’s `De
 
 The [Network Settings page](network-settings.md) is an internal Desktop Client feature. It contributes a top-level `settings.section` entry and uses `ctx.desktop.network` for configuration, sanitized diagnostics, and connection tests; Main owns the policy, secrets, and restart. The native failure dialog can open this section without changing the selected route.
 
-Git (`@dsh-electron/dsh-plugin-git@0.2.7`) is a bundled ecosystem plugin installed only from npm. Its client occupies `ctx.sidebarRight` / `sidebarRightTabs` and is listed in `dshElectron.ecosystemPlugins`. Desktop seeds a CLI copy into the shared web profile once. Electron Installed reports its resolved bundled version and source; Enable and Disable persist in the shared profile.
+Git (`@dsh-electron/dsh-plugin-git@0.2.8`) is a bundled ecosystem plugin installed only from npm. Its client occupies `ctx.sidebarRight` / `sidebarRightTabs` and is listed in `dshElectron.ecosystemPlugins`. Desktop seeds a CLI copy into the shared web profile once. Electron Installed reports its resolved bundled version and source; Enable and Disable persist in the shared profile.
 
-Theme Studio (`@dsh-electron/dsh-theme-studio@0.1.5`) is a preinstalled ecosystem bundle listed in `dshElectron.ecosystemPlugins`. Its canonical source is `cherrchen/dsh-theme-studio`; this repository keeps no copy of it. The package registers **Settings → General → Themes** and calls `ctx.theme.overrideTokens()`; Electron Installed lists its actual bundled runtime package. Its published peer declarations include `0.1.7-rc.2`.
+Theme Studio (`@dsh-electron/dsh-theme-studio@0.1.6`) is a preinstalled ecosystem bundle listed in `dshElectron.ecosystemPlugins`. Its canonical source is `cherrchen/dsh-theme-studio`; this repository keeps no copy of it. The package registers **Settings → General → Themes** and calls `ctx.theme.overrideTokens()`; Electron Installed lists its actual bundled runtime package. Its published peer declarations include `0.2.1-rc.3`.
+
+Multi-root Workspace (`@dsh-electron/dsh-plugin-multi-root-workspace@0.1.10`) is a preinstalled ecosystem bundle listed in `dshElectron.ecosystemPlugins`; its canonical source is `cherrchen/dsh-plugin-multi-root-workspace`. Its bundle patch replaces the single-root fs and sandbox providers with multi-root subclasses, and its client contributes the Workspace Folders panel through the sidebar. Its published peer declarations include `0.2.1-rc.3`.
 
 ```text
 Feature Plugin
@@ -627,8 +629,9 @@ apps/electron/runtime/plugins/
 └─ desktop-network-subprocess/      independent Host provider
 
 npm registry
-├─ @dsh-electron/dsh-theme-studio  ecosystem plugin (dshElectron.ecosystemPlugins)
-└─ @dsh-electron/dsh-plugin-*      ecosystem plugin (dshElectron.ecosystemPlugins)
+├─ @dsh-electron/dsh-theme-studio                  ecosystem plugin (dshElectron.ecosystemPlugins)
+├─ @dsh-electron/dsh-plugin-multi-root-workspace   ecosystem plugin (dshElectron.ecosystemPlugins)
+└─ @dsh-electron/dsh-plugin-*                      ecosystem plugin (dshElectron.ecosystemPlugins)
 ```
 
 The architectural rules:
@@ -676,7 +679,7 @@ A Desktop-required Client adapter is an internal Cordis feature of `@dsh-electro
 
 ### Preinstalled portable ecosystem plugins
 
-A portable `platform: web` public package can ship as a preinstalled ecosystem bundle when users own its enablement. It uses upstream DSH services and its published npm artifact is installed, packaged, and linked without rebuilding. Theme Studio and Git are declared in `dshElectron.ecosystemPlugins`; users can disable either in the shared web profile.
+A portable `platform: web` public package can ship as a preinstalled ecosystem bundle when users own its enablement. It uses upstream DSH services and its published npm artifact is installed, packaged, and linked without rebuilding. Theme Studio, Git, and Multi-root Workspace are declared in `dshElectron.ecosystemPlugins`; users can disable any of them in the shared web profile.
 
 ## 20. Native implementation versus feature ownership
 

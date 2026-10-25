@@ -161,6 +161,7 @@ describe('Electron host runtime overlay', () => {
       expect(body).not.toContain('desktop-ui-plugins')
       expect(body).not.toContain('desktop-git')
       expect(body).not.toContain('@dsh-electron/dsh-plugin-git')
+      expect(body).not.toContain('@dsh-electron/dsh-plugin-multi-root-workspace')
       expect(body).not.toContain('plugins.cordis.yml')
       expect(body).not.toContain('directory-picker-browse-client')
     } finally {

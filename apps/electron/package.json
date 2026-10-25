@@ -2,7 +2,7 @@
   "name": "@dsh-electron/dsh-electron",
   "productName": "Rivetdeck",
   "description": "Electron desktop shell built on DeepSeek Harness",
-  "version": "0.2.1-beta.1",
+  "version": "0.2.1-rc.3",
   "private": true,
   "homepage": "https://cherrchen.github.io/rivetdeck-website",
   "repository": {
@@ -16,6 +16,7 @@
     "runtimePlugins": [],
     "ecosystemPlugins": [
       "@dsh-electron/dsh-plugin-git",
+      "@dsh-electron/dsh-plugin-multi-root-workspace",
       "@dsh-electron/dsh-theme-studio"
     ]
   },
@@ -146,8 +147,9 @@
     "@deepseek-ai/dsh-working-directory": "workspace:^",
     "@deepseek-ai/dsh-workspace": "workspace:^",
     "@deepseek-ai/schemastery": "workspace:^",
-    "@dsh-electron/dsh-plugin-git": "0.2.7",
-    "@dsh-electron/dsh-theme-studio": "0.1.5",
+    "@dsh-electron/dsh-plugin-git": "0.2.8",
+    "@dsh-electron/dsh-plugin-multi-root-workspace": "0.1.10",
+    "@dsh-electron/dsh-theme-studio": "0.1.6",
     "electron-updater": "^6.8.9",
     "extract-zip": "^2.0.1",
     "js-yaml": "^4.2.0",

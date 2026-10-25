@@ -409,6 +409,20 @@ describe('Desktop synchronization and release workflows', () => {
     expect(smoke.run).toContain('smoke-windows-installer.ps1')
   })
 
+  it('stops Windows runtime qualification when any smoke command fails', () => {
+    const ci = loadWorkflow('.github/workflows/desktop-ci.yml')
+    const lifecycle = workflowJob(ci, 'managed-runtime-lifecycle')
+    if (!Array.isArray(lifecycle.steps)) throw new TypeError('Runtime lifecycle must define steps')
+    const smoke = lifecycle.steps.filter(isRecord).find(step => step.name === 'Smoke-test runtime lifecycle and Core plugins (Windows)')
+    if (typeof smoke?.run !== 'string') throw new TypeError('Windows runtime smoke must define commands')
+    const lines = smoke.run.trim().split('\n')
+    expect(lines).toHaveLength(6)
+    for (const [index, argument] of ['--offline', '--install', 'smoke-core-plugins.mjs'].entries()) {
+      expect(lines[index * 2]).toContain(argument)
+      expect(lines[index * 2 + 1]).toMatch(/^if \(\$LASTEXITCODE -ne 0\) \{ throw '.+' \}$/)
+    }
+  })
+
   it('runs Linux packaged smokes against the Rivetdeck executable name', () => {
     const ci = loadWorkflow('.github/workflows/desktop-ci.yml')
     const release = loadWorkflow('.github/workflows/desktop-release.yml')

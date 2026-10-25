@@ -357,9 +357,11 @@ Desktop Capabilities 包（`@dsh-electron/dsh-electron-desktop-capabilities`）�
 
 [网络设置页面](network-settings.zh.md) 是内部 Desktop Client feature。它贡献顶层 `settings.section` 条目，并通过 `ctx.desktop.network` 配置网络、读取脱敏诊断及运行连接测试；Main 持有策略、密码和重启操作。原生故障对话框可以打开此分区，而不改变已选择的路由。
 
-Git（`@dsh-electron/dsh-plugin-git@0.2.7`）是仅从 npm 安装的 bundled ecosystem 插件。其 Client 占用 `ctx.sidebarRight` / `sidebarRightTabs`，并列入 `dshElectron.ecosystemPlugins`。Desktop 首次将 CLI 副本 seed 进共享 web profile。Electron Installed 报告其实际解析的随包版本与来源；Enable 与 Disable 持久保存在共享 profile。
+Git（`@dsh-electron/dsh-plugin-git@0.2.8`）是仅从 npm 安装的 bundled ecosystem 插件。其 Client 占用 `ctx.sidebarRight` / `sidebarRightTabs`，并列入 `dshElectron.ecosystemPlugins`。Desktop 首次将 CLI 副本 seed 进共享 web profile。Electron Installed 报告其实际解析的随包版本与来源；Enable 与 Disable 持久保存在共享 profile。
 
-Theme Studio（`@dsh-electron/dsh-theme-studio@0.1.5`）是列入 `dshElectron.ecosystemPlugins` 的预装 ecosystem bundle。其源码真源是 `cherrchen/dsh-theme-studio`；本仓库不保留其任何副本。该包注册**设置 → 通用 → 主题**，并调用 `ctx.theme.overrideTokens()`；Electron Installed 列出其实际随包运行时 package。已发布的 peer 声明包含 `0.1.7-rc.2`。
+Theme Studio（`@dsh-electron/dsh-theme-studio@0.1.6`）是列入 `dshElectron.ecosystemPlugins` 的预装 ecosystem bundle。其源码真源是 `cherrchen/dsh-theme-studio`；本仓库不保留其任何副本。该包注册**设置 → 通用 → 主题**，并调用 `ctx.theme.overrideTokens()`；Electron Installed 列出其实际随包运行时 package。已发布的 peer 声明包含 `0.2.1-rc.3`。
+
+Multi-root Workspace（`@dsh-electron/dsh-plugin-multi-root-workspace@0.1.10`）是列入 `dshElectron.ecosystemPlugins` 的预装 ecosystem bundle；其源码真源是 `cherrchen/dsh-plugin-multi-root-workspace`。其 bundle patch 将单根 fs 与 sandbox provider 替换为多根子类，其 Client 通过侧边栏提供 Workspace Folders 面板。已发布的 peer 声明包含 `0.2.1-rc.3`。
 
 ```text
 Feature Plugin
@@ -627,8 +629,9 @@ apps/electron/runtime/plugins/
 └─ desktop-network-subprocess/      independent Host provider
 
 npm registry
-├─ @dsh-electron/dsh-theme-studio  ecosystem plugin (dshElectron.ecosystemPlugins)
-└─ @dsh-electron/dsh-plugin-*      ecosystem plugin (dshElectron.ecosystemPlugins)
+├─ @dsh-electron/dsh-theme-studio                  ecosystem plugin (dshElectron.ecosystemPlugins)
+├─ @dsh-electron/dsh-plugin-multi-root-workspace   ecosystem plugin (dshElectron.ecosystemPlugins)
+└─ @dsh-electron/dsh-plugin-*                      ecosystem plugin (dshElectron.ecosystemPlugins)
 ```
 
 架构规则：
@@ -676,7 +679,7 @@ Desktop-required Client adapter 是 `@dsh-electron/dsh-electron-desktop-capabili
 
 ### 预装的 portable ecosystem 插件
 
-用户拥有启用权的 portable `platform: web` 公共包可作为预装 ecosystem bundle。它只使用上游 DSH 服务，Desktop 安装、打包并链接其已发布 npm artifact，不重新构建。Theme Studio 与 Git 都声明在 `dshElectron.ecosystemPlugins` 中，用户可在共享 web profile 中禁用它们。
+用户拥有启用权的 portable `platform: web` 公共包可作为预装 ecosystem bundle。它只使用上游 DSH 服务，Desktop 安装、打包并链接其已发布 npm artifact，不重新构建。Theme Studio、Git 与 Multi-root Workspace 都声明在 `dshElectron.ecosystemPlugins` 中，用户可在共享 web profile 中禁用它们。
 
 ## 20. 原生实现与功能所有权
 
