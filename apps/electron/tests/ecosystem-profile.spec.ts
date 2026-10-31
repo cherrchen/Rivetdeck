@@ -33,17 +33,17 @@ function profileWithGit(dir: string, version: string, enabled: boolean): void {
   const manifest = readProfileManifest('dsh', dir)
   writeProfileManifest(dir, {
     ...manifest,
-    dependencies: { ...manifest.dependencies, [GIT]: version, [MRW]: '0.1.10', [THEME]: '0.1.6' },
+    dependencies: { ...manifest.dependencies, [GIT]: version, [MRW]: '0.1.12', [THEME]: '0.1.7' },
     dsh: { ...manifest.dsh, profile: { ...manifest.dsh?.profile, bundles: [
       ...(manifest.dsh?.profile?.bundles ?? []), ...enabled ? [GIT] : [],
     ] } },
   })
   const multiRoot = join(dir, 'node_modules', ...MRW.split('/'))
   mkdirSync(multiRoot, { recursive: true })
-  writeFileSync(join(multiRoot, 'package.json'), JSON.stringify({ name: MRW, version: '0.1.10' }))
+  writeFileSync(join(multiRoot, 'package.json'), JSON.stringify({ name: MRW, version: '0.1.12' }))
   const theme = join(dir, 'node_modules', ...THEME.split('/'))
   mkdirSync(theme, { recursive: true })
-  writeFileSync(join(theme, 'package.json'), JSON.stringify({ name: THEME, version: '0.1.6' }))
+  writeFileSync(join(theme, 'package.json'), JSON.stringify({ name: THEME, version: '0.1.7' }))
 }
 
 describe('ecosystem profile ownership', () => {
@@ -67,17 +67,17 @@ describe('ecosystem profile ownership', () => {
     const { home, dir } = fixture()
     try {
       operation.mockImplementation(async () => {
-        profileWithGit(dir, '0.2.8', true)
+        profileWithGit(dir, '0.2.9', true)
         const git = join(dir, 'node_modules', ...GIT.split('/'))
         mkdirSync(git, { recursive: true })
-        writeFileSync(join(git, 'package.json'), JSON.stringify({ name: GIT, version: '0.2.8' }))
+        writeFileSync(join(git, 'package.json'), JSON.stringify({ name: GIT, version: '0.2.9' }))
         return packageResult
       })
       await prepareEcosystemProfile(appPath, home, manager)
       expect(operation).toHaveBeenCalledWith(expect.objectContaining({ profile: WEB_PROFILE_NAME, home }), [
-        'add', `${GIT}@0.2.8`, `${MRW}@0.1.10`, `${THEME}@0.1.6`,
+        'add', `${GIT}@0.2.9`, `${MRW}@0.1.12`, `${THEME}@0.1.7`,
       ], expect.objectContaining({ ...manager, execution: 'service' }))
-      expect(readProfileManifest('dsh', dir).dependencies?.[GIT]).toBe('0.2.8')
+      expect(readProfileManifest('dsh', dir).dependencies?.[GIT]).toBe('0.2.9')
       expect(existsSync(join(home, 'electron', 'ecosystem-preinstalled'))).toBe(true)
       operation.mockClear()
       await prepareEcosystemProfile(appPath, home, manager)

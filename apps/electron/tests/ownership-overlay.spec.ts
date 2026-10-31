@@ -162,7 +162,7 @@ describe('ownership-aware Electron overlay', () => {
         const bundles = await manager.listBundles()
         expect(bundles.map(pkg => pkg.name)).toEqual([GIT, MRW, THEME])
         const git = bundles.find(pkg => pkg.name === GIT)
-        expect(git?.version).toBe('0.2.8')
+        expect(git?.version).toBe('0.2.9')
         expect(git?.description).not.toBe('stale profile copy')
         const description = git?.meta?.description
         if (description === undefined || typeof description === 'string') throw new Error('Localized source label missing')
