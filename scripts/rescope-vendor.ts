@@ -98,6 +98,29 @@ const GENERIC_SKIPS: readonly GenericSkip[] = [
   { file: 'apps/cli/tests/profiles/web/tests/fixtures/creator-plugin-manager.mjs', upstream: ['cordis'] },
   { file: 'apps/web/tests/agent-preset-authoring.e2e.ts', upstream: ['cordis'] },
   { file: 'packages/preset/agent-preset-registry/tests/session.spec.ts', upstream: ['cordis'] },
+  { file: 'apps/cli/tests/optional-bundle-transitions.e2e.ts', upstream: ['cordis'] },
+  { file: 'apps/web/tests/agent-preset-selection.e2e.ts', upstream: ['cordis'] },
+  { file: 'apps/web/tests/developer-tools-settings.e2e.ts', upstream: ['cordis'] },
+  { file: 'docs/subsystems/schedule.md', upstream: ['cordis'] },
+  { file: 'docs/subsystems/schedule.zh.md', upstream: ['cordis'] },
+  { file: 'docs/upgrade-guide/v0.2.0-rc.2/schedule-bundle-retired/guide.md', upstream: ['cordis'] },
+  { file: 'docs/upgrade-guide/v0.2.0-rc.2/schedule-bundle-retired/guide.zh.md', upstream: ['cordis'] },
+  { file: 'docs/upgrade-guide/v0.2.1-alpha.1/subagent-preset-composition/guide.md', upstream: ['cordis'] },
+  { file: 'docs/upgrade-guide/v0.2.1-alpha.1/subagent-preset-composition/guide.zh.md', upstream: ['cordis'] },
+  { file: 'docs/user/guide/schedule.md', upstream: ['cordis'] },
+  { file: 'docs/user/guide/schedule.zh.md', upstream: ['cordis'] },
+  { file: 'packages/bundle/web-app/cordis.patch.yml', upstream: ['cordis'] },
+  { file: 'packages/client/ui-agent-preset/src/client/CreatePluginMenuItem.tsx', upstream: ['cordis'] },
+  { file: 'packages/client/ui-agent-preset/src/client/analytics.ts', upstream: ['cordis'] },
+  { file: 'packages/client/ui-agent-preset/tests/analytics.client.spec.ts', upstream: ['cordis'] },
+  { file: 'packages/client/ui-agent-preset/tests/components.client.spec.tsx', upstream: ['cordis'] },
+  { file: 'packages/client/ui-agent-preset/tests/create-plugin-menu-item.client.spec.tsx', upstream: ['cordis'] },
+  { file: 'packages/client/ui-agent-preset/tests/section-store.client.spec.ts', upstream: ['cordis'] },
+  { file: 'packages/client/ui-conversation/src/client/input/submission-analytics.ts', upstream: ['cordis'] },
+  { file: 'packages/client/ui-conversation/tests/service-orchestration.client.spec.ts', upstream: ['cordis'] },
+  { file: 'packages/client/ui-entry-customization/src/client/index.ts', upstream: ['cordis'] },
+  { file: 'packages/client/ui-entry-customization/tests/menu.client.spec.tsx', upstream: ['cordis'] },
+  { file: 'packages/client/ui-workspace/tests/workspaces-service.client.spec.ts', upstream: ['cordis'] },
   // The preset-roster loop names the `cordis` preset id, not a package.
   { file: 'apps/cli/tests/windows-shell.spec.ts', upstream: ['cordis'] },
   // GROUP_ORDER holds `packages/<group>/` directory names, not package names.
@@ -173,6 +196,48 @@ const POSTCONDITIONS: readonly PostCondition[] = [
  * quote a neighbouring line the generic pass would rewrite.
  */
 const EXACT_EDITS: readonly ExactEdit[] = [
+  {
+    id: 'optional-bundle-transitions-framework-import',
+    file: 'apps/cli/tests/optional-bundle-transitions.e2e.ts',
+    find: "import type { Context } from 'cordis'",
+    replace: "import type { Context } from '@deepseek-ai/cordis'",
+    expect: 1,
+  },
+  {
+    id: 'submission-analytics-framework-import',
+    file: 'packages/client/ui-conversation/src/client/input/submission-analytics.ts',
+    find: "import type { Context } from 'cordis'",
+    replace: "import type { Context } from '@deepseek-ai/cordis'",
+    expect: 1,
+  },
+  {
+    id: 'service-orchestration-framework-import',
+    file: 'packages/client/ui-conversation/tests/service-orchestration.client.spec.ts',
+    find: "import { Context } from 'cordis'",
+    replace: "import { Context } from '@deepseek-ai/cordis'",
+    expect: 1,
+  },
+  {
+    id: 'entry-customization-framework-import',
+    file: 'packages/client/ui-entry-customization/src/client/index.ts',
+    find: "import type { Context } from 'cordis'",
+    replace: "import type { Context } from '@deepseek-ai/cordis'",
+    expect: 1,
+  },
+  {
+    id: 'entry-customization-menu-framework-import',
+    file: 'packages/client/ui-entry-customization/tests/menu.client.spec.tsx',
+    find: "import type { Context } from 'cordis'",
+    replace: "import type { Context } from '@deepseek-ai/cordis'",
+    expect: 1,
+  },
+  {
+    id: 'workspaces-service-framework-import',
+    file: 'packages/client/ui-workspace/tests/workspaces-service.client.spec.ts',
+    find: "import { Context } from 'cordis'",
+    replace: "import { Context } from '@deepseek-ai/cordis'",
+    expect: 1,
+  },
   {
     id: 'inspect-registry-test-imports',
     file: 'packages/extensions/cordis-host-runner/tests/inspect-registry.spec.ts',
@@ -455,7 +520,8 @@ const VENDORED_LIBRARY = /^@deepseek-ai\\/(cosmokit|schemastery)(\\/|$)/
  * @returns Whether the codemod must preserve the file without scanning its tokens.
  */
 export function isRescopeExcluded(file: string): boolean {
-  if (file === 'scripts/rescope-vendor.ts') return true // the mapping itself
+  // The mapping and its regression fixtures intentionally contain both names.
+  if (file === 'scripts/rescope-vendor.ts' || file === 'scripts/rescope-vendor.spec.ts') return true
   if (file.startsWith('.agents/notes/')) return true // notes record what was true when written
   // Recorded model payloads quote documentation verbatim, so they must mirror the
   // sources on disk — including the notes this rescope leaves alone.
@@ -513,7 +579,7 @@ function rewriteLine(line: string, file: string, all: readonly Pattern[]): strin
 }
 
 /**
- * Rewrite a file's eligible lines.
+ * Rewrite a file's eligible package-name tokens, preserving its registered runtime identifiers.
  *
  * Markdown splits in two. Every fence is code a reader copies or a
  * configuration they mount, so every fence follows the rename regardless of its
@@ -522,8 +588,14 @@ function rewriteLine(line: string, file: string, all: readonly Pattern[]): strin
  * prose is a record of what was true when it was written, and the same spelling
  * can mean something else entirely — the Python SDK's `cordis` option, or the
  * unvendored `@cordisjs/plugin-http`.
+ *
+ * @param text - Complete file contents.
+ * @param file - Repository-relative path with forward slash separators.
+ * @param reverse - Restore upstream package names instead of applying the scope.
+ * @returns Rewritten contents and the number of changed lines.
  */
-function rewrite(text: string, file: string, all: readonly Pattern[]): { text: string; lines: number } {
+export function rewriteRescope(text: string, file: string, reverse = false): { text: string; lines: number } {
+  const all = patterns(reverse)
   const markdown = file.endsWith('.md')
   const prose = markdown && file.startsWith('docs/')
   let insideFence = false
@@ -591,7 +663,6 @@ function main(): void {
   const args = process.argv.slice(2)
   const mode = args.includes('--apply') ? 'apply' : args.includes('--check') ? 'check' : 'dry'
   const reverse = args.includes('--reverse')
-  const all = patterns(reverse)
   const files = execFileSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' })
     .split('\0')
     .filter(file => file !== '' && !isRescopeExcluded(file))
@@ -637,7 +708,7 @@ function main(): void {
   for (const file of files) {
     const path = resolve(root, file)
     const before = readFileSync(path, 'utf8')
-    const { text: after, lines } = rewrite(before, file, all)
+    const { text: after, lines } = rewriteRescope(before, file, reverse)
     if (after === before) continue
     outstanding.push(file)
     const kind = classify(file)
