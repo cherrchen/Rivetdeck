@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for upstream-sync-patches.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/electron/upstream-sync-patches.md
+/temporary-upstream-sync-patches:
+  en: cff11a72fe58b371
+  zh: 5d535322d920871a
+/temporary-upstream-sync-patches/summary:
+  en: e1f525d2ca05ae6d
+  zh: 33dedfae79d9ad07
+/temporary-upstream-sync-patches/table-of-contents:
+  en: ab16c67a9e5a52fc
+  zh: bae9f042cb1675a2
+/temporary-upstream-sync-patches/temporary-patches:
+  en: 8f938a5a9e26355f
+  zh: 2d3a39def3ab7af9
+/temporary-upstream-sync-patches/retirement-during-synchronization:
+  en: 7b319d9c557d875d
+  zh: 7bd0a787bec0a295
+/temporary-upstream-sync-patches/dev-note:
+  en: b75c8458928b72b9
+  zh: 003ba4e17b4b5269

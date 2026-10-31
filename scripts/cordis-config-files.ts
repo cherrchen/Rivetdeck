@@ -8,6 +8,7 @@ import { dirname, isAbsolute, relative, resolve } from 'node:path'
  * Return repository-relative Cordis Loader YAML paths under `root`.
  *
  * Translation consistency records are YAML sidecars, never Loader inputs.
+ * Root `dist/` contains packaged application copies, not source configurations.
  *
  * @param root Repository root to scan.
  * @returns Sorted repository-relative Loader configuration paths.
@@ -15,7 +16,7 @@ import { dirname, isAbsolute, relative, resolve } from 'node:path'
 export function cordisConfigFiles(root: string): string[] {
   return globSync(['**/*cordis*.yml', '**/*cordis*.yaml'], {
     cwd: root,
-    exclude: ['.claude/**', 'node_modules/**', 'vendor/**', '**/*.i18n.yaml'],
+    exclude: ['.claude/**', 'dist/**', 'node_modules/**', 'vendor/**', '**/*.i18n.yaml'],
   }).sort()
 }
 

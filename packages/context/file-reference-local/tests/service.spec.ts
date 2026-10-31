@@ -43,21 +43,24 @@ async function stubAgent(
   roots.push(root)
   await writeFile(join(root, 'README.md'), 'readme')
   const session = ctx.sessions.create(SessionId(id), { meta: includeCwd ? { cwd: root } : {} })
-  const agent = {
+  const agent: Agent = {
     id: session.id,
     options: {},
     session,
     status: 'idle',
-    acceptsNextStep: false,
     ctx: agentCtx,
+    inbox: {
+      nextTurn: [], nextStep: [], clear() {}, append() {}, prepend() {},
+      replace() { return false }, remove() { return false }, splice() { return [] },
+    },
     followup() {},
     steer() {},
     inject() {},
     send() {},
-    updateInbox() { return 'not-found' as const },
     cancel() {},
     whenIdle: () => Promise.resolve(),
-  } as unknown as Agent
+    runMaintenance() { throw new Error('Maintenance is not available in this fixture') },
+  }
   return { agent, dispose: await ctx.agents.register(agent) }
 }
 

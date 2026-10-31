@@ -51,7 +51,9 @@ Prefixes `codex/*`, `dev/*`, `cursor/*`, and `agent/*` are development branches 
 
 ## Upstream synchronization
 
-[`sync-upstream.yml`](.github/workflows/sync-upstream.yml) is pinned to **`dsh-v0.2.1-rc.3`**: the six-hour master schedule is disabled, and `workflow_dispatch` must set `allow_master_sync` before it may merge `upstream/master`. The target branch is **`develop`** — never `main`. Re-enable the schedule only after an explicit decision to leave that pin.
+[`sync-upstream.yml`](.github/workflows/sync-upstream.yml) is pinned to **`dsh-v0.2.1-rc.5`**: the six-hour master schedule is disabled, and `workflow_dispatch` must set `allow_master_sync` before it may merge `upstream/master`. The target branch is **`develop`** — never `main`. Re-enable the schedule only after an explicit decision to leave that pin.
+
+At every upstream sync, review the [temporary hygiene patches](docs/electron/upstream-sync-patches.md). If the incoming upstream version fixes a listed issue and passes its retirement checks, remove that downstream patch in the same sync. Retire patches individually and preserve unrelated downstream changes in shared files.
 
 ```
 upstream/master  →  develop  →  v{a.b.c}-beta.{x}

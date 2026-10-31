@@ -56,9 +56,25 @@ describe('Electron packaging', () => {
       expect(manifest.dependencies?.[name]).not.toMatch(/^workspace:/)
       expect(existsSync(join(electronRoot, 'node_modules', ...name.split('/'), 'package.json'))).toBe(true)
     }
-    expect(manifest.dependencies?.['@dsh-electron/dsh-plugin-git']).toBe('0.2.8')
-    expect(manifest.dependencies?.['@dsh-electron/dsh-plugin-multi-root-workspace']).toBe('0.1.10')
-    expect(manifest.dependencies?.['@dsh-electron/dsh-theme-studio']).toBe('0.1.6')
+    expect(manifest.dependencies?.['@dsh-electron/dsh-plugin-git']).toBe('0.2.9')
+    expect(manifest.dependencies?.['@dsh-electron/dsh-plugin-multi-root-workspace']).toBe('0.1.12')
+    expect(manifest.dependencies?.['@dsh-electron/dsh-theme-studio']).toBe('0.1.7')
+  })
+
+  it('installs ecosystem artifacts whose DSH peer ranges include the bundled release', async () => {
+    const electronRoot = join(import.meta.dirname, '..')
+    const app = JSON.parse(await readFile(join(electronRoot, 'package.json'), 'utf8')) as ElectronManifest
+    const dsh = JSON.parse(await readFile(join(electronRoot, '..', 'cli', 'package.json'), 'utf8')) as { version: string }
+    for (const name of app.dshElectron?.ecosystemPlugins ?? []) {
+      const plugin = JSON.parse(await readFile(join(electronRoot, 'node_modules', ...name.split('/'), 'package.json'), 'utf8')) as {
+        version: string
+        peerDependencies?: Record<string, string>
+      }
+      expect(plugin.version).toBe(app.dependencies?.[name])
+      const peers = Object.entries(plugin.peerDependencies ?? {}).filter(([peer]) => peer.startsWith('@deepseek-ai/dsh-'))
+      expect(peers.length).toBeGreaterThan(0)
+      for (const [, range] of peers) expect(range.split(' || ')).toContain(dsh.version)
+    }
   })
 })
 

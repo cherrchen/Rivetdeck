@@ -23,7 +23,7 @@ describe('runtime plugin architecture baselines', () => {
 
   it('does not modify upstream CLI or boot packages', () => {
     const root = join(electronRoot, '..', '..')
-    const diff = spawnSync('git', ['diff', 'dsh-v0.2.1-rc.3', '--', 'apps/cli', 'packages/boot'], {
+    const diff = spawnSync('git', ['diff', 'dsh-v0.2.1-rc.5', '--', 'apps/cli', 'packages/boot'], {
       cwd: root,
       encoding: 'utf8',
     })

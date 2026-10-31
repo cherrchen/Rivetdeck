@@ -90,10 +90,10 @@ describe('theme studio published runtime plugin regression', () => {
       dsh?: { client?: { platform?: string; inject?: string[] } }
     }
     expect(manifest.name).toBe('@dsh-electron/dsh-theme-studio')
-    expect(manifest.version).toBe('0.1.6')
+    expect(manifest.version).toBe('0.1.7')
     const dshPeers = Object.entries(manifest.peerDependencies ?? {}).filter(([name]) => name.startsWith('@deepseek-ai/dsh-'))
     expect(dshPeers.length).toBeGreaterThan(0)
-    for (const [, versions] of dshPeers) expect(versions.split(' || ')).toContain('0.2.1-rc.3')
+    for (const [, versions] of dshPeers) expect(versions.split(' || ')).toContain('0.2.1-rc.5')
     expect(manifest.dsh?.client?.platform).toBe('web')
     expect(manifest.dsh?.client?.inject ?? []).not.toContain('@dsh-electron/dsh-electron-desktop-capabilities')
     expect(Object.keys(manifest.dependencies ?? {})).not.toContain('electron')
@@ -157,7 +157,7 @@ describe('desktop plugins roster', () => {
     expect(OFFICIAL_ROOT_ITEMS.map(item => item.id)).toEqual(['desktop-capabilities'])
     expect(OFFICIAL_ROOT_ITEMS.find(item => item.id === 'desktop-capabilities')?.version).toBe(DESKTOP_CAPABILITIES_VERSION)
     expect(manifest.version).toBe(DESKTOP_CAPABILITIES_VERSION)
-    expect(themeManifest.version).toBe('0.1.6')
+    expect(themeManifest.version).toBe('0.1.7')
     expect(source).toContain("name: 'plugins.item'")
     expect(source).toContain("name: 'plugins.detail.badge'")
     expect(source).toContain("name: 'plugins.detail.section'")

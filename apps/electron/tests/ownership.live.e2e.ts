@@ -12,6 +12,8 @@ import { spawnHarnessChild } from '../src/runtime.ts'
 
 const app = fileURLToPath(new URL('..', import.meta.url))
 const git = '@dsh-electron/dsh-plugin-git'
+const multiRoot = '@dsh-electron/dsh-plugin-multi-root-workspace'
+const theme = '@dsh-electron/dsh-theme-studio'
 const ordinary = '@dsh-test/ownership-plugin'
 
 interface InventoryPackage {
@@ -20,15 +22,17 @@ interface InventoryPackage {
   resolvedPath: string
   source: string
   enabled: boolean
-  loaderEntries: Array<{ fiberPhase: number | null }>
+  loaderEntries: Array<{ id: string; enabled: boolean; fiberPhase: number | null }>
 }
 
-it('retains bundled Git, disposes profile packages, and preserves removal through HMR and restart', async () => {
+it('retains bundled plugins, disposes profile packages, and preserves removal through HMR and restart', async () => {
   const home = mkdtempSync(join(tmpdir(), 'electron-live-ownership-'))
   const packageManager = preparePluginPackageManager(home, process.execPath, resolveBundledPnpmBin(app))
   const env = { ...process.env, DSH_HOME: home, DSH_AGENTS_HOME: join(home, 'agents'), DSH_TELEMETRY_DISABLED: '1' }
   const packageEnv = { ...env, PATH: packageManager.envPath }
   const bundledGit = realpathSync(join(app, 'node_modules', git))
+  const bundledMultiRoot = realpathSync(join(app, 'node_modules', multiRoot))
+  const bundledTheme = realpathSync(join(app, 'node_modules', theme))
   let host: ChildProcess | undefined
   let exited: Promise<unknown> | undefined
   let output = ''
@@ -73,12 +77,18 @@ it('retains bundled Git, disposes profile packages, and preserves removal throug
   }
   try {
     ensureRuntimePluginsLinked(app, home)
-    // link: uses the installed published artifact, with no registry or peer installation.
-    await cli('add', `link:${bundledGit}`)
+    // link: uses the installed published artifacts, with no registry or peer installation.
+    await cli('add', ...[bundledGit, bundledMultiRoot, bundledTheme].map(path => `link:${path}`))
     start()
     await settled(() => {
       expect(output).toContain('dsh web:')
       expect(inventory().find(pkg => pkg.packageName === git)?.resolvedPath).toBe(bundledGit)
+      expect(inventory().find(pkg => pkg.packageName === theme)?.resolvedPath).toBe(bundledTheme)
+      const workspace = inventory().find(pkg => pkg.packageName === multiRoot)
+      expect(workspace).toMatchObject({ resolvedPath: bundledMultiRoot, enabled: true })
+      for (const id of ['multi-root-compat', 'multi-root-fs', 'multi-root-sandbox']) {
+        expect(workspace?.loaderEntries.some(entry => entry.id.endsWith(id) && entry.enabled && entry.fiberPhase === 2)).toBe(true)
+      }
     })
     const fixture = join(home, 'plugin-source')
     cpSync(join(app, 'tests/fixtures/ownership-plugin'), fixture, { recursive: true })
@@ -133,6 +143,8 @@ it('retains bundled Git, disposes profile packages, and preserves removal throug
     await settled(() => {
       expect(output).toContain('dsh web:')
       expect(inventory().find(pkg => pkg.packageName === git)?.resolvedPath).toBe(bundledGit)
+      expect(inventory().find(pkg => pkg.packageName === multiRoot)?.resolvedPath).toBe(bundledMultiRoot)
+      expect(inventory().find(pkg => pkg.packageName === theme)?.resolvedPath).toBe(bundledTheme)
       expect(inventory().some(pkg => pkg.packageName === ordinary)).toBe(false)
     })
   } finally {

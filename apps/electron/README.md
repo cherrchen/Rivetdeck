@@ -52,7 +52,7 @@ pnpm --filter @dsh-electron/dsh-electron test
 pnpm --filter @dsh-electron/dsh-electron test:ownership
 ```
 
-Packaged runtime smokes open Settings through the account menu after restart. Credential onboarding may appear or complete without a dialog; the probe dismisses it only when it appears during navigation and verifies that the runtime Settings section opens. Windows CI checks each smoke command's exit code before running the next command.
+Packaged runtime smokes open Settings through the account menu after restart. Credential onboarding may appear or complete without a dialog; the probe dismisses credential dialogs whenever they appear, including beneath the open Settings dialog, and verifies that the runtime Settings section opens. Windows CI checks each smoke command's exit code before running the next command.
 
 Git artifact acceptance compares native filesystem paths so Windows short names and Git path separators identify the same directory. Runtime verification fixtures link the installed Node executable on POSIX and copy it on Windows; the verification case and cleanup each allow 30 seconds to cover the verifier's 15-second child deadline. Managed runtime checks execute at the final generation path before activation ([lifecycle](../../docs/electron/runtime-environments.md)).
 
