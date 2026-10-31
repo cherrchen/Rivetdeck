@@ -78,11 +78,12 @@ async function close() {
   await application.close()
   application = undefined
 }
-/** Open Settings through the account menu, dismissing optional credential onboarding if it blocks navigation. */
-async function openSettings(page) {
+/** Open runtime Settings, dismissing credential onboarding until the section is ready. */
+async function openRuntimeSettings(page) {
   const account = page.getByRole('button', { name: /Account menu|账号菜单/, exact: true })
   const settings = page.getByRole('menuitem', { name: /Settings|设置/, exact: true })
-  const dismiss = page.getByRole('dialog').getByRole('button', { name: /Close|关闭|Configure later|稍后配置/, exact: true })
+  const dismiss = page.getByRole('dialog', { name: /^(Get started|开始使用|Add an API key to get started|添加一个 API Key 开始使用)$/ })
+    .getByRole('button', { name: /Close|关闭|Configure later|稍后配置/, exact: true })
   let selectingSettings = false
   await page.addLocatorHandler(dismiss, async button => {
     await button.click()
@@ -93,8 +94,10 @@ async function openSettings(page) {
     await account.click({ timeout: 60_000 })
     selectingSettings = true
     await settings.click({ timeout: 60_000 })
+    selectingSettings = false
+    await page.getByText(/Network & Runtimes|网络与运行环境/, { exact: true }).first().click()
+    await page.getByRole('heading', { name: /Network & Runtimes|网络与运行环境/, exact: true }).waitFor()
   } finally {
-    // Settings has its own Close button; only onboarding may be dismissed automatically.
     await page.removeLocatorHandler(dismiss)
   }
 }
@@ -167,9 +170,7 @@ async function smoke() {
   page = await launch()
   assert.equal((await page.evaluate(() => window.deepseekDesktop.runtimes.getState())).onboardingCompleted, true)
   await page.screenshot({ path: join(scratch, 'restart.png') })
-  await openSettings(page)
-  await page.getByText(/Network & Runtimes|网络与运行环境/, { exact: true }).first().click()
-  await page.getByRole('heading', { name: /Network & Runtimes|网络与运行环境/, exact: true }).waitFor()
+  await openRuntimeSettings(page)
   assert.equal(await page.getByRole('dialog', { name: /Optional Runtime Environments|可选运行环境/ }).count(), 0)
   await page.screenshot({ path: join(scratch, 'settings.png') })
   events.push('Restart keeps Skip; Settings runtime section opens')
@@ -203,8 +204,7 @@ async function smoke() {
     page = await launch()
     const installed = await page.evaluate(() => window.deepseekDesktop.runtimes.getState())
     assert.equal(installed.node.phase, 'installed'); assert.equal(installed.python.phase, 'installed')
-    await openSettings(page)
-    await page.getByText(/Network & Runtimes|网络与运行环境/, { exact: true }).first().click()
+    await openRuntimeSettings(page)
     await page.getByRole('article', { name: 'Node.js', exact: true }).getByRole('button', { name: /Remove|移除/, exact: true }).click()
     await page.getByRole('button', { name: /Confirm removal|确认移除/, exact: true }).click()
     assert.equal((await page.evaluate(() => window.deepseekDesktop.runtimes.getState())).node.phase, 'removing')
