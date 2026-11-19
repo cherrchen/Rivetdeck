@@ -1,13 +1,11 @@
 /** Real built Host watches external CLI package mutations without restarting. */
 import { spawn, type ChildProcess } from 'node:child_process'
 import { once } from 'node:events'
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, it } from 'vitest'
-import { resolveProfileDir } from '@deepseek-ai/dsh-app-boot'
-import { grantCompatibilityWaivers, readCompatibilityWaivers } from '../src/ecosystem-compatibility.ts'
 import { ensureRuntimePluginsLinked } from '../src/runtime-plugins.ts'
 import { preparePluginPackageManager, resolveBundledPnpmBin } from '../src/plugin-package-manager.ts'
 import { spawnHarnessChild } from '../src/runtime.ts'
@@ -79,10 +77,6 @@ it('retains bundled plugins, disposes profile packages, and preserves removal th
   }
   try {
     ensureRuntimePluginsLinked(app, home)
-    // Desktop startup grants the manifest-declared exact-version waivers before any package operation.
-    const profileDir = resolveProfileDir('web', home)
-    mkdirSync(profileDir, { recursive: true })
-    await grantCompatibilityWaivers(app, profileDir, readCompatibilityWaivers(app))
     // link: uses the installed published artifacts, with no registry or peer installation.
     await cli('add', ...[bundledGit, bundledMultiRoot, bundledTheme].map(path => `link:${path}`))
     start()

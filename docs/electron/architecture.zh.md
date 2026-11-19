@@ -359,7 +359,7 @@ Desktop Capabilities 包（`@dsh-electron/dsh-electron-desktop-capabilities`）�
 
 Git（`@dsh-electron/dsh-plugin-git@0.2.14`）是仅从 npm 安装的 bundled ecosystem 插件。其 Client 占用 `ctx.sidebarRight` / `sidebarRightTabs`，并列入 `dshElectron.ecosystemPlugins`。Desktop 首次将 CLI 副本 seed 进共享 web profile。Electron Installed 报告其实际解析的随包版本与来源；Enable 与 Disable 持久保存在共享 profile。
 
-Theme Studio（`@dsh-electron/dsh-theme-studio@0.1.7`）是列入 `dshElectron.ecosystemPlugins` 的预装 ecosystem bundle。其源码真源是 `cherrchen/dsh-theme-studio`；本仓库不保留其任何副本。该包注册**设置 → 通用 → 主题**，并调用 `ctx.theme.overrideTokens()`；Electron Installed 列出其实际随包运行时 package。已发布的 peer 声明覆盖到 `0.2.2-alpha.2`，尚未包含随包的 `0.2.2-rc.5`，因此由 `dshElectron.compatibilityWaivers` 为该确切版本授予豁免，使其仍能加载；Theme Studio 发布声明随包运行时的版本后删除该条目。
+Theme Studio（`@dsh-electron/dsh-theme-studio@0.1.11`）是列入 `dshElectron.ecosystemPlugins` 的预装 ecosystem bundle。其源码真源是 `cherrchen/dsh-theme-studio`；本仓库不保留其任何副本。该包注册**设置 → 通用 → 主题**，并调用 `ctx.theme.overrideTokens()`；Electron Installed 列出其实际随包运行时 package。已发布的 peer 声明包含 `0.2.2-rc.5`。
 
 Multi-root Workspace（`@dsh-electron/dsh-plugin-multi-root-workspace@0.1.23`）是列入 `dshElectron.ecosystemPlugins` 的预装 ecosystem bundle；其源码真源是 `cherrchen/dsh-plugin-multi-root-workspace`。其 bundle patch 将单根 fs 与 sandbox provider 替换为多根子类，其 Client 通过侧边栏提供 Workspace Folders 面板。已发布的 peer 声明包含 `0.2.2-rc.5`。
 

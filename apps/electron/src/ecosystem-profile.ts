@@ -5,7 +5,6 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { runPluginCommand, type PackageOperationOptions } from '@deepseek-ai/dsh-plugin-manager/operations'
 import { readProfileManifest, resolveProfileDir } from '@deepseek-ai/dsh-app-boot'
-import { grantCompatibilityWaivers, readCompatibilityWaivers } from './ecosystem-compatibility.ts'
 import { discoverEcosystemPluginPackages, ensureRuntimePluginsLinked, type RuntimePluginManifest } from './runtime-plugins.ts'
 import { resolveDshInstallAnchor } from './runtime.ts'
 
@@ -33,8 +32,6 @@ export async function prepareCoreProfile(appPath: string, harnessHome: string, p
  * Preinstall ecosystem packages once and repair links left by older Desktop releases.
  * Ecosystem installation files are changed only by the shared `dsh plugin` operation.
  * Existing dependency versions and disabled bundle selections are retained.
- * Manifest-declared compatibility waivers are granted before seeding so a bundled release that
- * predates the runtime is still admitted; the package operation itself would refuse it.
  * @param appPath - Electron application root holding ecosystem packages.
  * @param harnessHome - Active `$DSH_HOME`.
  * @param packageManager - Bundled package-manager invocation.
@@ -48,16 +45,15 @@ export async function prepareEcosystemProfile(
   mkdirSync(dir, { recursive: true })
   ensureRuntimePluginsLinked(appPath, harnessHome)
   const ecosystem = discoverEcosystemPluginPackages(appPath)
-  await grantCompatibilityWaivers(appPath, dir, readCompatibilityWaivers(appPath))
   const marker = join(harnessHome, SEED_MARKER)
   const manifestPath = join(dir, 'package.json')
-  const appManifest = JSON.parse(readFileSync(join(appPath, 'package.json'), 'utf8')) as {
-    dependencies?: Record<string, string>
-  }
   if (!existsSync(marker)) {
     const dependencies = existsSync(manifestPath)
       ? readProfileManifest('dsh', dir).dependencies ?? {}
       : {}
+    const appManifest = JSON.parse(readFileSync(join(appPath, 'package.json'), 'utf8')) as {
+      dependencies?: Record<string, string>
+    }
     const missing = ecosystem.filter(plugin => !Object.hasOwn(dependencies, plugin.name)).map((plugin) => {
       const pin = appManifest.dependencies?.[plugin.name]
       if (pin !== plugin.version) throw new Error(`ecosystem profile: ${plugin.name} has no matching exact pin`)

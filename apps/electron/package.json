@@ -18,9 +18,6 @@
       "@dsh-electron/dsh-plugin-git",
       "@dsh-electron/dsh-plugin-multi-root-workspace",
       "@dsh-electron/dsh-theme-studio"
-    ],
-    "compatibilityWaivers": [
-      "@dsh-electron/dsh-theme-studio@0.1.7"
     ]
   },
   "scripts": {
@@ -159,7 +156,7 @@
     "@deepseek-ai/schemastery": "workspace:^",
     "@dsh-electron/dsh-plugin-git": "0.2.14",
     "@dsh-electron/dsh-plugin-multi-root-workspace": "0.1.23",
-    "@dsh-electron/dsh-theme-studio": "0.1.7",
+    "@dsh-electron/dsh-theme-studio": "0.1.11",
     "electron-updater": "^6.8.11",
     "extract-zip": "^2.0.1",
     "js-yaml": "^4.2.0",

@@ -6,7 +6,6 @@ import { describe, expect, it, vi } from 'vitest'
 import { PluginManager } from '@deepseek-ai/dsh-plugin-manager'
 import { PROFILE_TEMPLATES } from '@deepseek-ai/dsh-official-bundles'
 import { DesktopPluginManager } from '../src/desktop-plugin-manager.ts'
-import { grantCompatibilityWaivers, readCompatibilityWaivers } from '../src/ecosystem-compatibility.ts'
 import { load } from 'js-yaml'
 import { Context } from '@deepseek-ai/cordis'
 import {
@@ -374,7 +373,6 @@ async function seededHome(): Promise<string> {
     cpSync(realpathSync(plugin.rootPath), dest, { recursive: true })
   }
   ensureRuntimePluginsLinked(appPath, home)
-  await grantCompatibilityWaivers(appPath, dir, readCompatibilityWaivers(appPath))
   return home
 }
 
