@@ -52,7 +52,7 @@ pnpm --filter @dsh-electron/dsh-electron test
 pnpm --filter @dsh-electron/dsh-electron test:ownership
 ```
 
-打包应用的运行环境 smoke 在重启后通过账号菜单打开设置。凭据引导出现时，探针会关闭它，并在设置页面被引导关闭时恢复所请求的页面。Windows CI 在执行下一条 smoke 命令前检查当前命令的退出码。
+打包应用的运行环境 smoke 在重启后通过账号菜单打开设置。探针会关闭凭据引导，并恢复被打断的运行环境页面导航或待确认的移除弹窗。Windows CI 在执行下一条 smoke 命令前检查当前命令的退出码。
 
 Git 产物验收比较原生文件系统路径，使 Windows 短路径名与 Git 路径分隔符指向同一目录。运行时验证 fixture 在 POSIX 上链接已安装的 Node 可执行文件，在 Windows 上复制该文件；验证用例与清理各允许 30 秒，以覆盖验证器的 15 秒子进程期限。托管运行环境的检查在激活前于最终 generation 路径执行（[生命周期](../../docs/electron/runtime-environments.zh.md)）。
 
