@@ -43,10 +43,11 @@ async function recordProfileLock(stage, state) {
 }
 let lockPoll
 let profileSetup
-let selectingSettings = false
+let settingsStep
 async function launch() {
   const setup = createProfileSetupObserver()
   profileSetup = setup
+  settingsStep = undefined
   application = await _electron.launch({ executablePath, args: [`--user-data-dir=${userData}`], env, timeout: 120_000 })
   application.process().stderr.on('data', bytes => process.stderr.write(bytes))
   application.process().stdout.on('data', bytes => {
@@ -73,14 +74,20 @@ async function launch() {
   await page.waitForFunction(() => window.deepseekDesktop !== undefined)
   const account = page.getByRole('button', { name: /Account menu|账号菜单/, exact: true })
   await account.waitFor({ timeout: 120_000 })
-  const settings = page.getByRole('menuitem', { name: /Settings|设置/, exact: true })
   const dismiss = page.getByRole('dialog', { name: /^(Get started|开始使用|Add an API key to get started|添加一个 API Key 开始使用)$/ })
     .getByRole('button', { name: /Close|关闭|Configure later|稍后配置/, exact: true })
-  // Credential onboarding mounts after an asynchronous Models load, so it can land above or beneath Settings.
   await page.addLocatorHandler(dismiss, async button => {
     await button.dispatchEvent('click')
-    // Dismissing onboarding can also close the account menu underneath it.
-    if (selectingSettings && !await settings.isVisible()) await account.click()
+    await button.waitFor({ state: 'hidden' })
+    // Onboarding can close Settings after the probe has navigated to the runtime section.
+    if (settingsStep === 'menu' && !await settingsMenuItem(page).isVisible()) await account.click()
+    if (settingsStep === 'section' || settingsStep === 'runtime') {
+      if (!await page.locator('[data-shortcut-modal="settings"]').isVisible()) {
+        await account.click()
+        await settingsMenuItem(page).click()
+      }
+      if (settingsStep === 'runtime' && !await runtimeHeading(page).isVisible()) await selectRuntimeSection(page)
+    }
   })
   return page
 }
@@ -89,14 +96,24 @@ async function close() {
   await application.close()
   application = undefined
 }
-/** Open the runtime section of Settings. */
+function settingsMenuItem(page) {
+  return page.getByRole('menuitem', { name: /Settings|设置/, exact: true })
+}
+function runtimeHeading(page) {
+  return page.getByRole('heading', { name: /Network & Runtimes|网络与运行环境/, exact: true })
+}
+async function selectRuntimeSection(page) {
+  await page.getByRole('button', { name: /Network & Runtimes|网络与运行环境/, exact: true }).click()
+  await runtimeHeading(page).waitFor()
+}
+/** Open the runtime section and keep it available if credential onboarding interrupts navigation. */
 async function openRuntimeSettings(page) {
   await page.getByRole('button', { name: /Account menu|账号菜单/, exact: true }).click({ timeout: 60_000 })
-  selectingSettings = true
-  try { await page.getByRole('menuitem', { name: /Settings|设置/, exact: true }).click({ timeout: 60_000 }) }
-  finally { selectingSettings = false }
-  await page.getByText(/Network & Runtimes|网络与运行环境/, { exact: true }).first().click()
-  await page.getByRole('heading', { name: /Network & Runtimes|网络与运行环境/, exact: true }).waitFor()
+  settingsStep = 'menu'
+  await settingsMenuItem(page).click({ timeout: 60_000 })
+  settingsStep = 'section'
+  await selectRuntimeSection(page)
+  settingsStep = 'runtime'
 }
 async function smoke() {
   let page = await launch()
