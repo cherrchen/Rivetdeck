@@ -52,6 +52,7 @@ async function stubAgent(
     session,
     status: 'idle',
     ctx: agentCtx,
+    model: { current: () => undefined, select: () => {} },
     inbox: {
       nextTurn: [], nextStep: [], clear() {}, append() {}, prepend() {},
       replace() { return false }, remove() { return false }, splice() { return [] },
