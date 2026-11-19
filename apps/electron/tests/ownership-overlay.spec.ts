@@ -47,6 +47,7 @@ const OVERLAY_INSERT_NAMES = [
   '@dsh-electron/dsh-electron-network-subprocess',
   '@deepseek-ai/dsh-host-directory-picker-browse',
   '@dsh-electron/dsh-electron-desktop-capabilities',
+  'cordis:desktop-config-editor',
   'cordis:desktop-plugin-manager',
 ] as const
 
@@ -85,7 +86,10 @@ describe('Desktop overlay insert names', () => {
       load(yaml) as PatchOptions[]])
     expect(rows.find(row => row.id === 'plugin-manager')?.disabled).toBe(true)
     expect(rows.find(row => row.id === 'desktop-plugin-manager')?.name).toBe('cordis:desktop-plugin-manager')
-    expect(load(yaml)).toContainEqual({ id: 'config-editor', name: 'cordis:desktop-config-editor' })
+    const withEditor = composeEntries([[{ insert: [{ id: 'config-editor', name: '@deepseek-ai/dsh-config-editor' }] }],
+      load(yaml) as PatchOptions[]])
+    expect(withEditor.find(row => row.id === 'config-editor')?.disabled).toBe(true)
+    expect(withEditor.find(row => row.id === 'desktop-config-editor')?.name).toBe('cordis:desktop-config-editor')
   })
 })
 

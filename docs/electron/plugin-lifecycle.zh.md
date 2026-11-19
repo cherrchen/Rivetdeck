@@ -52,7 +52,7 @@ Theme Studio 作为 `@dsh-electron/dsh-theme-studio@0.1.11` 从 npm 安装，并
 
 ## Desktop 配置写入者
 
-Host overlay 将上游 `config-editor` 行替换为 `cordis:desktop-config-editor` builtin。相同行保留原有配置与 settings namespace。`config.lockWaitMs` 是非负整数，默认 `120000` 毫秒，限制获取共享 profile 写入锁的等待时间。超时不改变 profile patch。获取锁后，写入者重新读取已提交配置，校验编辑，并在应用失败时回滚 patch。Desktop 提供者负责写入事务，继承上游读取；上游升级需要复核事务实现。普通 CLI 与 Web 宿主保留上游 ConfigEditor 行为。
+Host overlay 禁用上游 `config-editor` 行，并以 `desktop-config-editor` 插入 `cordis:desktop-config-editor` builtin。非 insert patch 的 `name` 只是期望名称校验，无法原地重命名该行；为上游 `config-editor` id 编写的 profile patch 行不再作用于替代行。替代行保留其提供的 settings namespace。`config.lockWaitMs` 是非负整数，默认 `120000` 毫秒，限制获取共享 profile 写入锁的等待时间。超时不改变 profile patch。获取锁后，写入者重新读取已提交配置，校验编辑，并在应用失败时回滚 patch。Desktop 提供者负责写入事务，继承上游读取；上游升级需要复核事务实现。普通 CLI 与 Web 宿主保留上游 ConfigEditor 行为。
 
 <a id="downstream-ui-contribution"></a>
 

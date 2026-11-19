@@ -52,7 +52,7 @@ The upstream Web bundle mounts its own Plugin Manager UI and agent tool. Main pl
 
 ## Desktop configuration writer
 
-The Host overlay replaces the upstream `config-editor` row with the `cordis:desktop-config-editor` builtin. The same row retains its config and settings namespace. `config.lockWaitMs` is a nonnegative integer with default `120000` milliseconds; it limits acquisition of the shared profile writer lock. Timeout leaves the profile patch unchanged. After acquiring the lock, the writer re-reads committed configuration, validates the edit, and rolls back the patch if application fails. The Desktop provider owns the write transaction while inheriting upstream reads; upstream upgrades require transaction review. Generic CLI and Web hosts retain upstream ConfigEditor behavior.
+The Host overlay disables the upstream `config-editor` row and inserts the `cordis:desktop-config-editor` builtin as `desktop-config-editor`. A non-insert patch `name` is only an expected-name guard, so the overlay cannot rename a row in place; profile patch rows written for the upstream `config-editor` id no longer configure the replacement. The replacement keeps the settings namespace it serves. `config.lockWaitMs` is a nonnegative integer with default `120000` milliseconds; it limits acquisition of the shared profile writer lock. Timeout leaves the profile patch unchanged. After acquiring the lock, the writer re-reads committed configuration, validates the edit, and rolls back the patch if application fails. The Desktop provider owns the write transaction while inheriting upstream reads; upstream upgrades require transaction review. Generic CLI and Web hosts retain upstream ConfigEditor behavior.
 
 <a id="downstream-ui-contribution"></a>
 
