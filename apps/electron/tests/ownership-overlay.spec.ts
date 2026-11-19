@@ -15,6 +15,7 @@ import {
   loadProfileDirectory,
   PROFILE_PATCH_FILENAME,
   readProfileManifest,
+  readProfilePatches,
   resolveProfileDir,
   writeProfileManifest,
   type ProfileContext,
@@ -122,6 +123,33 @@ describe('ownership-aware Electron overlay', () => {
       expect(theme.filter(row => row.id === 'user-theme-studio' || row.id === 'home-theme-studio')
         .every(row => row.disabled === true)).toBe(true)
       expect(active(theme)).toEqual(['theme-studio'])
+    } finally {
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
+  it('composes configuration writes from the Host projection when the shared profile has no ecosystem bundles', () => {
+    const home = mkdtempSync(join(tmpdir(), 'dsh-electron-projection-only-'))
+    try {
+      const dir = resolveProfileDir(WEB_PROFILE_NAME, home)
+      const template = PROFILE_TEMPLATES[WEB_PROFILE_NAME]
+      if (template === undefined) throw new Error('web template missing')
+      initProfile(dir, template.bundles)
+      prepareHostProfileProjection(appPath, home)
+      const profile: ProfileContext = {
+        name: WEB_PROFILE_NAME, dir, patchPath: join(dir, PROFILE_PATCH_FILENAME),
+        installAnchor: resolveDshInstallAnchor(appPath), cwd: appPath, home,
+        startedBundles: [], overlays: [], telemetryDisabledEnv: undefined,
+      }
+      const runtime = new DesktopRuntime(appPath, profile)
+      const projected = flattenEntries(composeEntries([runtime.hostProfilePatches()]))
+      expect(projected.find(row => row.id === 'multi-root-fs')?.disabled).not.toBe(true)
+      expect(projected.find(row => row.id === 'fs-sandbox')?.disabled).toBe(true)
+      expect(projected.find(row => row.id === 'sandbox')?.disabled).toBe(true)
+      // The shared profile alone resolves no ecosystem bundle, which is the composition that
+      // re-enabled the core sandbox rows and collided with the running providers.
+      const sharedOnly = flattenEntries(composeEntries([readProfilePatches('dsh', profile)]))
+      expect(sharedOnly.some(row => row.id === 'multi-root-fs')).toBe(false)
     } finally {
       rmSync(home, { recursive: true, force: true })
     }

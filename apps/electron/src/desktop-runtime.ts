@@ -62,6 +62,23 @@ export class DesktopRuntime {
   /** Read the last applied composition. @returns Detached patches for the Loader. */
   patches(): PatchOptions[] { return structuredClone(this.current.patches) }
 
+  /**
+   * Compose patches for a configuration write from the Host projection.
+   * The shared profile patch file stays authoritative, but bundle layers resolve through the
+   * projection: packages linked only by Electron (a profile whose registry install failed)
+   * otherwise drop their rows from the replacement composition and re-enable the rows they disable.
+   * @param initialPatches - Parsed replacement for the profile patch file; omitted reads the file.
+   * @returns Detached ordered patches for Loader reconciliation.
+   */
+  hostProfilePatches(initialPatches?: PatchOptions[]): PatchOptions[] {
+    const hostDir = prepareHostProfileProjection(this.appPath, this.profile.home)
+    if (hostDir === undefined) throw new Error('Electron runtime requires the shared web profile')
+    const context: ProfileContext = { ...this.profile, dir: hostDir }
+    if (initialPatches === undefined) return readProfilePatches('dsh', context)
+    const loaded = loadProfileDirectory('dsh', hostDir, this.profile.installAnchor)
+    return readProfilePatches('dsh', context, { ...loaded, patches: initialPatches })
+  }
+
   /** Read package identities from the applied generation. @returns Effective runtime packages. */
   packages(): readonly DesktopRuntimePackage[] { return this.current.packages }
 
@@ -155,7 +172,9 @@ export class DesktopRuntime {
       }
       this.current = next
       if (this.resolution === undefined) throw new Error('Electron runtime resolution is not initialized')
-      ctx.pluginPackages.replace(this.resolution)
+      const packages = ctx.get('pluginPackages')
+      if (packages === undefined) throw new Error('Electron runtime requires the plugin package registry')
+      packages.replace(this.resolution)
       try {
         // An unchanged Include patch list does not reapply options mutated for disposal.
         // Restore surviving rows from the next composition after publishing the resolver.
@@ -178,8 +197,10 @@ export class DesktopRuntime {
   writeDiagnostics(ctx: Context): void {
     const parent = pathToFileURL(join(this.hostDir, 'cordis.yml')).href
     const entries = [...ctx.loader.entries()]
+    const pluginPackages = ctx.get('pluginPackages')
+    if (pluginPackages === undefined) throw new Error('Electron runtime requires the plugin package registry')
     const packages = this.current.packages.map((pkg) => {
-      const resolved = ctx.pluginPackages.packageOf(pkg.name, parent)
+      const resolved = pluginPackages.packageOf(pkg.name, parent)
       if (resolved === undefined || realpathSync(resolved.dir) !== pkg.dir || resolved.version !== pkg.manifest.version) {
         throw new Error(`Electron runtime inventory differs from package resolution: ${pkg.name}`)
       }

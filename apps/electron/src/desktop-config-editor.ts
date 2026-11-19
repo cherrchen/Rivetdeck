@@ -12,6 +12,7 @@ import { composeEntries, loadProfileDirectory, readProfilePatches, reconcileProf
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { isMap, isSeq, parseDocument, Scalar, visit } from 'yaml'
 import ConfigEditor from '@deepseek-ai/dsh-config-editor'
+import type {} from './desktop-runtime.ts'
 
 function flatten(rows: EntryOptions[]): EntryOptions[] {
   return rows.flatMap(row => [row, ...row.group && Array.isArray(row.config) ? flatten(row.config as EntryOptions[]) : []])
@@ -44,6 +45,21 @@ export class DesktopConfigEditor extends ConfigEditor {
     super(desktopContext)
   }
 
+  /** Compose patches for this write, keeping Electron-linked bundle layers when the Host runtime exists.
+   * @param initialPatches - Parsed replacement for the profile patch file; omitted reads the file.
+   * @returns Detached ordered patches for Loader reconciliation.
+   */
+  private profilePatches(initialPatches?: PatchOptions[]): PatchOptions[] {
+    const profile = this.desktopContext.profileContext
+    const runtime = this.desktopContext.get('desktopRuntime')
+    if (runtime !== undefined) return runtime.hostProfilePatches(initialPatches)
+    if (initialPatches === undefined) return readProfilePatches('dsh', profile)
+    return readProfilePatches('dsh', profile, {
+      ...loadProfileDirectory('dsh', profile.dir, profile.installAnchor),
+      patches: initialPatches,
+    })
+  }
+
   /** Validate, persist, and reconcile an edit after acquiring the shared profile writer lock.
    * @param entry Active profile entry; replacement during acquisition or reconciliation rejects the edit.
    * @param change Derive configuration from the values re-read after acquisition.
@@ -57,7 +73,7 @@ export class DesktopConfigEditor extends ConfigEditor {
       const path = this.documentPath
       await withFileLock(join(this.desktopContext.profileContext.dir, 'package.json'), async () => {
         if (!this.entries().includes(entry) || entry.fiber === undefined) throw new Error('Configuration entry is no longer available')
-        const beforePatches = readProfilePatches('dsh', this.desktopContext.profileContext)
+        const beforePatches = this.profilePatches()
         await reconcileProfilePatches(this.desktopContext.root, beforePatches, 'dsh')
         if (!this.entries().includes(entry)) throw new Error('Configuration entry changed during reload')
         const current = structuredClone((entry.options.config ?? {}) as Record<string, unknown>)
@@ -96,9 +112,7 @@ export class DesktopConfigEditor extends ConfigEditor {
           expression.tag = 'tag:yaml.org,2002:js'
           return expression
         } })
-        const profile = this.desktopContext.profileContext
-        const loaded = loadProfileDirectory('dsh', profile.dir, profile.installAnchor)
-        const patches = readProfilePatches('dsh', profile, { ...loaded, patches: yaml.load(String(document), { schema: entryListSchema }) as PatchOptions[] })
+        const patches = this.profilePatches(yaml.load(String(document), { schema: entryListSchema }) as PatchOptions[])
         const effective = flatten(composeEntries([patches])).find(row => row.id === entry.options.id)
         if (!isDeepStrictEqual(effective?.config ?? {}, next)) {
           throw new Error(`Configuration for "${entry.options.id}" is overridden by a home patch or command-line overlay`)
