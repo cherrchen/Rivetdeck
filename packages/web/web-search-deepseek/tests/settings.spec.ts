@@ -64,4 +64,15 @@ describe('web-search-deepseek settings section', () => {
     await bench.ctx.fiber.dispose()
   })
 
+  it('lists the provider with its description for the Search menu', async () => {
+    const bench = await boot()
+    const [listed] = bench.ctx.web.listProviders().search
+    expect(listed).toMatchObject({ id: 'deepseek-official' })
+    expect(listed).not.toHaveProperty('title')
+    expect(listed?.description).toMatchObject({
+      en: 'No per-search charge, but every search uses extra model tokens. Requires a DeepSeek account or API key.',
+      zh: '搜索不按次收费，每次搜索都会额外消耗模型 token。需要 DeepSeek 账号或 API Key。',
+    })
+    await bench.ctx.fiber.dispose()
+  })
 })
