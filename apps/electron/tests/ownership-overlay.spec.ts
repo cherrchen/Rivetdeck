@@ -4,7 +4,9 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { PluginManager } from '@deepseek-ai/dsh-plugin-manager'
+import { PROFILE_TEMPLATES } from '@deepseek-ai/dsh-official-bundles'
 import { DesktopPluginManager } from '../src/desktop-plugin-manager.ts'
+import { grantCompatibilityWaivers, readCompatibilityWaivers } from '../src/ecosystem-compatibility.ts'
 import { load } from 'js-yaml'
 import { Context } from '@deepseek-ai/cordis'
 import {
@@ -12,7 +14,6 @@ import {
   createRuntimeResolution,
   initProfile,
   loadProfileDirectory,
-  PROFILE_TEMPLATES,
   PROFILE_PATCH_FILENAME,
   readProfileManifest,
   resolveProfileDir,
@@ -162,7 +163,7 @@ describe('ownership-aware Electron overlay', () => {
         const bundles = await manager.listBundles()
         expect(bundles.map(pkg => pkg.name)).toEqual([GIT, MRW, THEME])
         const git = bundles.find(pkg => pkg.name === GIT)
-        expect(git?.version).toBe('0.2.9')
+        expect(git?.version).toBe('0.2.14')
         expect(git?.description).not.toBe('stale profile copy')
         const description = git?.meta?.description
         if (description === undefined || typeof description === 'string') throw new Error('Localized source label missing')
@@ -373,6 +374,7 @@ async function seededHome(): Promise<string> {
     cpSync(realpathSync(plugin.rootPath), dest, { recursive: true })
   }
   ensureRuntimePluginsLinked(appPath, home)
+  await grantCompatibilityWaivers(appPath, dir, readCompatibilityWaivers(appPath))
   return home
 }
 

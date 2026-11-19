@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 interface ElectronManifest {
   dependencies?: Record<string, string>
-  dshElectron?: { runtimePlugins?: string[]; ecosystemPlugins?: string[] }
+  dshElectron?: { runtimePlugins?: string[]; ecosystemPlugins?: string[]; compatibilityWaivers?: string[] }
   build: {
     extraMetadata: { name: string }
     files: string[]
@@ -56,8 +56,8 @@ describe('Electron packaging', () => {
       expect(manifest.dependencies?.[name]).not.toMatch(/^workspace:/)
       expect(existsSync(join(electronRoot, 'node_modules', ...name.split('/'), 'package.json'))).toBe(true)
     }
-    expect(manifest.dependencies?.['@dsh-electron/dsh-plugin-git']).toBe('0.2.9')
-    expect(manifest.dependencies?.['@dsh-electron/dsh-plugin-multi-root-workspace']).toBe('0.1.12')
+    expect(manifest.dependencies?.['@dsh-electron/dsh-plugin-git']).toBe('0.2.14')
+    expect(manifest.dependencies?.['@dsh-electron/dsh-plugin-multi-root-workspace']).toBe('0.1.23')
     expect(manifest.dependencies?.['@dsh-electron/dsh-theme-studio']).toBe('0.1.7')
   })
 
@@ -65,6 +65,7 @@ describe('Electron packaging', () => {
     const electronRoot = join(import.meta.dirname, '..')
     const app = JSON.parse(await readFile(join(electronRoot, 'package.json'), 'utf8')) as ElectronManifest
     const dsh = JSON.parse(await readFile(join(electronRoot, '..', 'cli', 'package.json'), 'utf8')) as { version: string }
+    const waivers = app.dshElectron?.compatibilityWaivers ?? []
     for (const name of app.dshElectron?.ecosystemPlugins ?? []) {
       const plugin = JSON.parse(await readFile(join(electronRoot, 'node_modules', ...name.split('/'), 'package.json'), 'utf8')) as {
         version: string
@@ -73,7 +74,18 @@ describe('Electron packaging', () => {
       expect(plugin.version).toBe(app.dependencies?.[name])
       const peers = Object.entries(plugin.peerDependencies ?? {}).filter(([peer]) => peer.startsWith('@deepseek-ai/dsh-'))
       expect(peers.length).toBeGreaterThan(0)
-      for (const [, range] of peers) expect(range.split(' || ')).toContain(dsh.version)
+      const incompatible = peers.filter(([, range]) => !range.split(' || ').includes(dsh.version))
+      const waiver = `${name}@${plugin.version}`
+      if (waivers.includes(waiver)) {
+        // A waived release is admitted through the profile exemption until its publisher adds
+        // the bundled runtime; drop the waiver once the peer ranges accept it.
+        expect(incompatible.length).toBeGreaterThan(0)
+        continue
+      }
+      expect(incompatible).toEqual([])
+    }
+    for (const waiver of waivers) {
+      expect(app.dshElectron?.ecosystemPlugins ?? []).toContain(waiver.slice(0, waiver.lastIndexOf('@')))
     }
   })
 })
