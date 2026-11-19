@@ -42,7 +42,7 @@ Plugins 页仅由 composition package 为 Desktop Capabilities 注册 Official `
 
 `DesktopRuntime` 拥有启动与后续组合代次。Desktop Capabilities 在现有 HMR 队列上注册共享 profile manifest、lockfile、启停 patch、兼容性文件与 home patch 的 watcher。协调在 CLI/包操作释放 profile 写入锁后获取该锁，刷新私有投影，卸载已删除或替换的包条目，使包查询缓存失效，并等待 Loader 稳定。上游 HMR profile reader 被隔离，避免从持久化目录重新组合。私有目录只包含可丢弃的投影文件，没有另一份包数据库或 lockfile。对每个 required 包，overlay 之前的每一行都被禁用，再由静态 overlay 插入 Desktop 行。对已启用的 ecosystem 包，保留已应用 bundle 层自身的行，禁用额外同名行。对已禁用的 ecosystem 包，额外同名行仍会被禁用。overlay 不插入 Git、Multi-root Workspace 或 Theme Studio。找不到的 id 走 include 已有警告，Main 不失败。
 
-Theme Studio 作为 `@dsh-electron/dsh-theme-studio@0.1.7` 从 npm 安装，并声明在 `dshElectron.ecosystemPlugins` 中；其已发布的 peer 声明包含 `0.2.1-rc.5`。缺失随包产物会使启动报错。
+Theme Studio 作为 `@dsh-electron/dsh-theme-studio@0.1.11` 从 npm 安装，并声明在 `dshElectron.ecosystemPlugins` 中；其已发布的 peer 声明包含 `0.2.2-rc.5`。缺失随包产物会使启动报错。
 
 上游 Web bundle 挂载自己的插件管理 UI 和 agent tool。Main 将随包 pnpm 加入受监督 Host 的 `PATH`，使上游 profile manager 无需全局安装 pnpm 即可执行 package 命令。升级后首次启动时，Main 将旧版 `$DSH_HOME/electron/plugin-state.json` 的 `profileManaged` 条目迁入 `$DSH_HOME/profiles/web/cordis.patch.yml`，并保留各条目的禁用状态。旧文件留作恢复依据；迁移标记防止用户后来移除的插件再次被加入。如果已安装包缺失，迁移会在 Host 启动前停止，旧文件和 patch 保留以供修复。
 
@@ -52,7 +52,7 @@ Theme Studio 作为 `@dsh-electron/dsh-theme-studio@0.1.7` 从 npm 安装，并�
 
 ## Desktop 配置写入者
 
-Host overlay 将上游 `config-editor` 行替换为 `cordis:desktop-config-editor` builtin。相同行保留原有配置与 settings namespace。`config.lockWaitMs` 是非负整数，默认 `120000` 毫秒，限制获取共享 profile 写入锁的等待时间。超时不改变 profile patch。获取锁后，写入者重新读取已提交配置，校验编辑，并在应用失败时回滚 patch。Desktop 提供者负责写入事务，继承上游读取；上游升级需要复核事务实现。普通 CLI 与 Web 宿主保留上游 ConfigEditor 行为。
+Host overlay 禁用上游 `config-editor` 行，并以 `desktop-config-editor` 插入 `cordis:desktop-config-editor` builtin。非 insert patch 的 `name` 只是期望名称校验，无法原地重命名该行；为上游 `config-editor` id 编写的 profile patch 行不再作用于替代行。替代行保留其提供的 settings namespace。`config.lockWaitMs` 是非负整数，默认 `120000` 毫秒，限制获取共享 profile 写入锁的等待时间。超时不改变 profile patch。获取锁后，写入者重新读取已提交配置，校验编辑，并在应用失败时回滚 patch。Desktop 提供者负责写入事务，继承上游读取；上游升级需要复核事务实现。普通 CLI 与 Web 宿主保留上游 ConfigEditor 行为。
 
 <a id="downstream-ui-contribution"></a>
 

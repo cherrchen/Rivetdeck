@@ -4,7 +4,9 @@ English | [中文](upstream-sync-patches.zh.md)
 
 ## Summary
 
-Rivetdeck temporarily patches two upstream hygiene checks against the pinned `dsh-v0.2.1-rc.5` release. Review each patch at every upstream synchronization and remove it in the first sync whose incoming upstream implementation passes the checks below. These are temporary maintenance fixes, not permanent downstream behavior.
+Rivetdeck temporarily patches two upstream hygiene checks against the pinned `dsh-v0.2.2-rc.5` release. Review each patch at every upstream synchronization and remove it in the first sync whose incoming upstream implementation passes the checks below. These are temporary maintenance fixes, not permanent downstream behavior.
+
+The previous synchronization retired the vendor-rescoping patch: the incoming checker rescopes only module imports and keeps the documented preset identifiers, so the local exceptions and the two documentation bullets that described them were removed. Upstream fixed three files that the tag still missed after it shipped; this repository carries that fix ahead of the pin as the patch below.
 
 ## Table of Contents
 
@@ -20,7 +22,7 @@ The two issues belong to upstream checking code; packaged Desktop artifacts expo
 
 | Patch | Local changes | Required upstream behavior before retirement |
 | --- | --- | --- |
-| Preserve Creator preset identifiers during vendor rescoping | [Rescope checker](../../scripts/rescope-vendor.ts) and [tests](../../scripts/rescope-vendor.spec.ts): exceptions for 23 additional files, exact checks for six framework imports in those files, and a testable rewrite helper; [rescope documentation](../rescope.md) and its bilingual record | The checker preserves the preset identifiers in code, configuration comments, and documentation, while rejecting actual unscoped framework imports. The check passes without these local additions. |
+| Preserve Creator preset identifiers the tag's rescope mapping missed | [Rescope checker](../../scripts/rescope-vendor.ts) and [tests](../../scripts/rescope-vendor.spec.ts): `GENERIC_SKIPS` entries for `apps/web/tests/creator-persona.e2e.ts` and the two `subagent-interrupt-default` upgrade-guide files, ported from the upstream fix that shipped after the tag | The checker covers every file whose `cordis` spelling is a preset identifier while still rescoping framework imports, and `pnpm run rescope-vendor:check` passes on the pristine upstream tree. |
 | Exclude packaged applications from source configuration discovery | [Configuration discovery](../../scripts/cordis-config-files.ts) and [tests](../../scripts/cordis-config-files.spec.ts): exclude root `dist/` and cover a packaged configuration | Packaged configuration copies under root `dist/` are excluded, while source Loader configurations remain checked. Old packaged copies must not cause source-resolution failures. |
 
 <a id="retirement-during-synchronization"></a>

@@ -12,7 +12,9 @@ import type { DesktopRuntimePackage } from './desktop-runtime.ts'
 
 /** Reuse package persistence while reporting the Electron Host's applied packages. */
 export class DesktopPluginManager extends PluginManager {
-  static override inject = [...PluginManager.inject, 'desktopRuntime', 'pluginPackages', 'hmr']
+  // Electron-owned services are read from the context store on demand; declaring them here
+  // would make this Include child a dependent of a root provision and deadlock teardown.
+  static override inject = [...PluginManager.inject, 'hmr']
   private readonly host: Context
 
   constructor(ctx: Context, config: Config) {

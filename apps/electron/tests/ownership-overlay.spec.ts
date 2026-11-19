@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { PluginManager } from '@deepseek-ai/dsh-plugin-manager'
+import { PROFILE_TEMPLATES } from '@deepseek-ai/dsh-official-bundles'
 import { DesktopPluginManager } from '../src/desktop-plugin-manager.ts'
 import { load } from 'js-yaml'
 import { Context } from '@deepseek-ai/cordis'
@@ -12,9 +13,9 @@ import {
   createRuntimeResolution,
   initProfile,
   loadProfileDirectory,
-  PROFILE_TEMPLATES,
   PROFILE_PATCH_FILENAME,
   readProfileManifest,
+  readProfilePatches,
   resolveProfileDir,
   writeProfileManifest,
   type ProfileContext,
@@ -46,6 +47,7 @@ const OVERLAY_INSERT_NAMES = [
   '@dsh-electron/dsh-electron-network-subprocess',
   '@deepseek-ai/dsh-host-directory-picker-browse',
   '@dsh-electron/dsh-electron-desktop-capabilities',
+  'cordis:desktop-config-editor',
   'cordis:desktop-plugin-manager',
 ] as const
 
@@ -84,7 +86,10 @@ describe('Desktop overlay insert names', () => {
       load(yaml) as PatchOptions[]])
     expect(rows.find(row => row.id === 'plugin-manager')?.disabled).toBe(true)
     expect(rows.find(row => row.id === 'desktop-plugin-manager')?.name).toBe('cordis:desktop-plugin-manager')
-    expect(load(yaml)).toContainEqual({ id: 'config-editor', name: 'cordis:desktop-config-editor' })
+    const withEditor = composeEntries([[{ insert: [{ id: 'config-editor', name: '@deepseek-ai/dsh-config-editor' }] }],
+      load(yaml) as PatchOptions[]])
+    expect(withEditor.find(row => row.id === 'config-editor')?.disabled).toBe(true)
+    expect(withEditor.find(row => row.id === 'desktop-config-editor')?.name).toBe('cordis:desktop-config-editor')
   })
 })
 
@@ -127,6 +132,33 @@ describe('ownership-aware Electron overlay', () => {
     }
   })
 
+  it('composes configuration writes from the Host projection when the shared profile has no ecosystem bundles', () => {
+    const home = mkdtempSync(join(tmpdir(), 'dsh-electron-projection-only-'))
+    try {
+      const dir = resolveProfileDir(WEB_PROFILE_NAME, home)
+      const template = PROFILE_TEMPLATES[WEB_PROFILE_NAME]
+      if (template === undefined) throw new Error('web template missing')
+      initProfile(dir, template.bundles)
+      prepareHostProfileProjection(appPath, home)
+      const profile: ProfileContext = {
+        name: WEB_PROFILE_NAME, dir, patchPath: join(dir, PROFILE_PATCH_FILENAME),
+        installAnchor: resolveDshInstallAnchor(appPath), cwd: appPath, home,
+        startedBundles: [], overlays: [], telemetryDisabledEnv: undefined,
+      }
+      const runtime = new DesktopRuntime(appPath, profile)
+      const projected = flattenEntries(composeEntries([runtime.hostProfilePatches()]))
+      expect(projected.find(row => row.id === 'multi-root-fs')?.disabled).not.toBe(true)
+      expect(projected.find(row => row.id === 'fs-sandbox')?.disabled).toBe(true)
+      expect(projected.find(row => row.id === 'sandbox')?.disabled).toBe(true)
+      // The shared profile alone resolves no ecosystem bundle, which is the composition that
+      // re-enabled the core sandbox rows and collided with the running providers.
+      const sharedOnly = flattenEntries(composeEntries([readProfilePatches('dsh', profile)]))
+      expect(sharedOnly.some(row => row.id === 'multi-root-fs')).toBe(false)
+    } finally {
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
   it('builds ownership suppressions from the runtime composition authority', async () => {
     const home = await seededHome()
     const ctx = new Context()
@@ -162,7 +194,7 @@ describe('ownership-aware Electron overlay', () => {
         const bundles = await manager.listBundles()
         expect(bundles.map(pkg => pkg.name)).toEqual([GIT, MRW, THEME])
         const git = bundles.find(pkg => pkg.name === GIT)
-        expect(git?.version).toBe('0.2.9')
+        expect(git?.version).toBe('0.2.14')
         expect(git?.description).not.toBe('stale profile copy')
         const description = git?.meta?.description
         if (description === undefined || typeof description === 'string') throw new Error('Localized source label missing')

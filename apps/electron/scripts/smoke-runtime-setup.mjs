@@ -43,10 +43,11 @@ async function recordProfileLock(stage, state) {
 }
 let lockPoll
 let profileSetup
-let selectingSettings = false
+let settingsStep
 async function launch() {
   const setup = createProfileSetupObserver()
   profileSetup = setup
+  settingsStep = undefined
   application = await _electron.launch({ executablePath, args: [`--user-data-dir=${userData}`], env, timeout: 120_000 })
   application.process().stderr.on('data', bytes => process.stderr.write(bytes))
   application.process().stdout.on('data', bytes => {
@@ -73,14 +74,22 @@ async function launch() {
   await page.waitForFunction(() => window.deepseekDesktop !== undefined)
   const account = page.getByRole('button', { name: /Account menu|账号菜单/, exact: true })
   await account.waitFor({ timeout: 120_000 })
-  const settings = page.getByRole('menuitem', { name: /Settings|设置/, exact: true })
   const dismiss = page.getByRole('dialog', { name: /^(Get started|开始使用|Add an API key to get started|添加一个 API Key 开始使用)$/ })
     .getByRole('button', { name: /Close|关闭|Configure later|稍后配置/, exact: true })
-  // Credential onboarding mounts after an asynchronous Models load, so it can land above or beneath Settings.
   await page.addLocatorHandler(dismiss, async button => {
     await button.dispatchEvent('click')
-    // Dismissing onboarding can also close the account menu underneath it.
-    if (selectingSettings && !await settings.isVisible()) await account.click()
+    await button.waitFor({ state: 'hidden' })
+    // Onboarding can close Settings after the probe has navigated to the runtime section.
+    const panel = page.locator('[data-shortcut-modal="settings"]')
+    if (settingsStep === 'menu' && !await panel.isVisible() && !await settingsMenuItem(page).isVisible()) await account.click()
+    if (settingsStep === 'runtime' || settingsStep === 'removal') {
+      if (!await panel.isVisible()) {
+        await account.click()
+        await settingsMenuItem(page).click()
+      }
+      if (!await runtimeHeading(page).isVisible()) await selectRuntimeSection(page)
+      if (settingsStep === 'removal' && !await confirmRemovalButton(page).isVisible()) await removeNodeButton(page).click()
+    }
   })
   return page
 }
@@ -89,14 +98,36 @@ async function close() {
   await application.close()
   application = undefined
 }
-/** Open the runtime section of Settings. */
+function settingsMenuItem(page) {
+  return page.getByRole('menuitem', { name: /Settings|设置/, exact: true })
+}
+function runtimeHeading(page) {
+  return page.getByRole('heading', { name: /Network & Runtimes|网络与运行环境/, exact: true })
+}
+function removeNodeButton(page) {
+  return page.getByRole('article', { name: 'Node.js', exact: true }).getByRole('button', { name: /Remove|移除/, exact: true })
+}
+function confirmRemovalButton(page) {
+  return page.getByRole('button', { name: /Confirm removal|确认移除/, exact: true })
+}
+async function selectRuntimeSection(page) {
+  await page.getByRole('button', { name: /Network & Runtimes|网络与运行环境/, exact: true }).click()
+  await runtimeHeading(page).waitFor()
+}
+/** Open the runtime section and keep it available if credential onboarding interrupts navigation. */
 async function openRuntimeSettings(page) {
   await page.getByRole('button', { name: /Account menu|账号菜单/, exact: true }).click({ timeout: 60_000 })
-  selectingSettings = true
-  try { await page.getByRole('menuitem', { name: /Settings|设置/, exact: true }).click({ timeout: 60_000 }) }
-  finally { selectingSettings = false }
-  await page.getByText(/Network & Runtimes|网络与运行环境/, { exact: true }).first().click()
-  await page.getByRole('heading', { name: /Network & Runtimes|网络与运行环境/, exact: true }).waitFor()
+  settingsStep = 'menu'
+  await settingsMenuItem(page).click({ timeout: 60_000 })
+  settingsStep = 'runtime'
+  await selectRuntimeSection(page)
+}
+/** Request deferred Node removal through the confirmation dialog. */
+async function removeNodeRuntime(page) {
+  await removeNodeButton(page).click()
+  settingsStep = 'removal'
+  await confirmRemovalButton(page).click()
+  settingsStep = 'runtime'
 }
 async function smoke() {
   let page = await launch()
@@ -202,8 +233,7 @@ async function smoke() {
     const installed = await page.evaluate(() => window.deepseekDesktop.runtimes.getState())
     assert.equal(installed.node.phase, 'installed'); assert.equal(installed.python.phase, 'installed')
     await openRuntimeSettings(page)
-    await page.getByRole('article', { name: 'Node.js', exact: true }).getByRole('button', { name: /Remove|移除/, exact: true }).click()
-    await page.getByRole('button', { name: /Confirm removal|确认移除/, exact: true }).click()
+    await removeNodeRuntime(page)
     assert.equal((await page.evaluate(() => window.deepseekDesktop.runtimes.getState())).node.phase, 'removing')
     await close()
     page = await launch()

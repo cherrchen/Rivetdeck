@@ -56,9 +56,9 @@ describe('Electron packaging', () => {
       expect(manifest.dependencies?.[name]).not.toMatch(/^workspace:/)
       expect(existsSync(join(electronRoot, 'node_modules', ...name.split('/'), 'package.json'))).toBe(true)
     }
-    expect(manifest.dependencies?.['@dsh-electron/dsh-plugin-git']).toBe('0.2.9')
-    expect(manifest.dependencies?.['@dsh-electron/dsh-plugin-multi-root-workspace']).toBe('0.1.12')
-    expect(manifest.dependencies?.['@dsh-electron/dsh-theme-studio']).toBe('0.1.7')
+    expect(manifest.dependencies?.['@dsh-electron/dsh-plugin-git']).toBe('0.2.14')
+    expect(manifest.dependencies?.['@dsh-electron/dsh-plugin-multi-root-workspace']).toBe('0.1.23')
+    expect(manifest.dependencies?.['@dsh-electron/dsh-theme-studio']).toBe('0.1.11')
   })
 
   it('installs ecosystem artifacts whose DSH peer ranges include the bundled release', async () => {

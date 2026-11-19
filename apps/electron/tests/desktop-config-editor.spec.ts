@@ -144,7 +144,7 @@ it('retains YAML comments and expressions when editing another live field', asyn
   expect(saved).toContain('!!js')
   expect(saved).toContain('expression-value')
   const entry = ctx.configEditor.entries().find(row => row.options.id === 'probe')!
-  const live = entry.fiber!.config as { count: Volatile<number>; title: Volatile<string> }
+  const live = entry.fiber!.effectiveConfig as { count: Volatile<number>; title: Volatile<string> }
   expect({ count: live.count.get(), title: live.title.get() }).toEqual({ count: 4, title: 'expression-value' })
 })
 

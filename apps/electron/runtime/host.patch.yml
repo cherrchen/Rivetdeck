@@ -15,8 +15,14 @@
     - id: desktop-capabilities
       name: '@dsh-electron/dsh-electron-desktop-capabilities'
 
+# The configuration writer is replaced, not renamed: the Loader ignores a name
+# override on an existing row, so the Desktop editor takes a row of its own.
 - id: config-editor
-  name: 'cordis:desktop-config-editor'
+  disabled: true
+
+- insert:
+    - id: desktop-config-editor
+      name: 'cordis:desktop-config-editor'
 
 - id: plugin-manager
   disabled: true
