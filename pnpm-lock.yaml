@@ -1269,7 +1269,7 @@ importers:
         version: 7.5.22
       ws:
         specifier: ^8.22.0
-        version: 8.23.0
+        version: 8.22.0
       yaml:
         specifier: ^2.9.1
         version: 2.9.1
@@ -3956,8 +3956,8 @@ importers:
         specifier: workspace:*
         version: link:../../host/webserver
       eventsource-parser:
-        specifier: ^3.1.0
-        version: 3.1.0
+        specifier: ^4.1.2
+        version: 4.1.2
 
   packages/client/locale:
     dependencies:
@@ -13857,8 +13857,8 @@ importers:
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
       eventsource-parser:
-        specifier: ^3.1.0
-        version: 3.1.0
+        specifier: ^4.1.2
+        version: 4.1.2
       semver:
         specifier: ^7.8.5
         version: 7.8.5
@@ -21582,10 +21582,12 @@ packages:
 
   '@modelcontextprotocol/server-everything@2026.8.31':
     resolution: {integrity: sha512-5U3OZh8Xq0Li4nA26l6uNvV9/1suMDuWSn+NjLZIhzinhMY6N3A4DCrxVecBGPf2PsNFKTEv5krxGPRwzxc7jQ==}
+    deprecated: 'Date-based versions are no longer published. This package has resumed semantic versioning at 1.0.0: install the latest version.'
     hasBin: true
 
   '@modelcontextprotocol/server-filesystem@2026.8.31':
     resolution: {integrity: sha512-kKaFkyAh6oipvc9+EAbJ552JafnMnOq5nzmzWkp1jJdBhTAAGpmIpWihUG1+rfNhmEFM98gUZDdCHCDD4v6a7Q==}
+    deprecated: 'Date-based versions are no longer published. This package has resumed semantic versioning at 1.0.0: install the latest version.'
     hasBin: true
 
   '@modelcontextprotocol/server@2.2.0':
@@ -22556,6 +22558,9 @@ packages:
   '@smithy/core@3.35.0':
     resolution: {integrity: sha512-zRMhfkByhT2snNdr1si24vJitU6Cr9ix2MikUfWmkAgp4jrNP0GcKSP5YvwQ+TlI8AZXER5QOGJn3JsVtSD9/A==}
     engines: {node: '>=18.0.0'}
+    deprecated: |-
+      Deprecated due to a bug in custom logger data redaction. Upgrade to the latest version. If you used a custom logger with this
+        version, review your logs and rotate any credentials or other secrets. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/credential-provider-imds@4.5.2':
     resolution: {integrity: sha512-A9uSdn72ozbRUSit0eib0TW7nXuNPlaeM0zcGkJ+nE6tFcSDbnmtwoxbTCFBukVQcszDAyvsd7+rTduPTXpygg==}
@@ -24476,6 +24481,10 @@ packages:
   eventsource-parser@3.1.0:
     resolution: {integrity: sha512-kJezFj9YFAMLeORyi7aCLxLbD5/qWMQnoMVlVPyHIll7lgRJCc3JVln9Vgl9nwQi0YkMnhdGTMNn7CkRRAptMg==}
     engines: {node: '>=18.0.0'}
+
+  eventsource-parser@4.1.2:
+    resolution: {integrity: sha512-N9b0EvATDJfZj+Szg3m8WwqseQhei/mtTd6V0rCciGbI/yG24o3yBk0YVyfOZZsLVMZHWs++Zk3Aqd2y2EztnQ==}
+    engines: {node: '>=22.12'}
 
   eventsource@3.0.7:
     resolution: {integrity: sha512-CRT1WTyuQoD771GW56XEZFQ/ZoSfWid1alKGDYMmkt2yl8UXrVR4pspqWNEcqKvVIzg6PAltWjxcSSPrboA4iA==}
@@ -27616,6 +27625,18 @@ packages:
 
   ws@8.21.3:
     resolution: {integrity: sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
+  ws@8.22.0:
+    resolution: {integrity: sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -32739,6 +32760,8 @@ snapshots:
 
   eventsource-parser@3.1.0: {}
 
+  eventsource-parser@4.1.2: {}
+
   eventsource@3.0.7:
     dependencies:
       eventsource-parser: 3.1.0
@@ -36241,7 +36264,10 @@ snapshots:
 
   ws@8.21.3: {}
 
-  ws@8.23.0: {}
+  ws@8.22.0: {}
+
+  ws@8.23.0:
+    optional: true
 
   wsl-utils@1.0.0:
     dependencies:
